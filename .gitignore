@@ -1,0 +1,171 @@
+# ============================================================================
+# .gitignore — Sistema de Inventario de Productos
+#
+# CRITERIO: se excluyen ÚNICAMENTE archivos temporales, credenciales,
+# dependencias descargables y configuración local de cada máquina.
+#
+# NO se excluye documentación académica. Los .docx, .pdf, .xlsx, .pptx y
+# diagramas que forman parte de la entrega del proyecto de título SÍ deben
+# versionarse y viven en docs/ y assets/.
+# ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# 1. CREDENCIALES Y SECRETOS  (nunca subir al repositorio)
+# ----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+*.jks
+id_rsa
+id_ed25519
+credentials.json
+secrets.json
+secrets.yml
+secrets.yaml
+config/local.*
+config/secrets.*
+appsettings.Development.json
+serviceAccountKey.json
+
+
+# ----------------------------------------------------------------------------
+# 2. DEPENDENCIAS (se reinstalan con el gestor de paquetes)
+# ----------------------------------------------------------------------------
+
+# Node.js
+node_modules/
+jspm_packages/
+bower_components/
+.pnp
+.pnp.js
+.yarn/cache
+.yarn/unplugged
+.yarn/install-state.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+ENV/
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+*.egg-info/
+.eggs/
+
+# Java / Maven / Gradle
+target/
+build/
+.gradle/
+*.class
+*.jar
+*.war
+*.ear
+!gradle/wrapper/gradle-wrapper.jar
+
+# PHP
+vendor/
+
+# .NET
+packages/
+obj/
+
+
+# ----------------------------------------------------------------------------
+# 3. ARTEFACTOS DE COMPILACIÓN Y SALIDA
+# ----------------------------------------------------------------------------
+dist/
+out/
+bin/
+*.min.js.map
+.next/
+.nuxt/
+.output/
+.parcel-cache/
+.cache/
+coverage/
+htmlcov/
+.nyc_output/
+.pytest_cache/
+.tox/
+.coverage
+.coverage.*
+
+
+# ----------------------------------------------------------------------------
+# 4. BASES DE DATOS LOCALES Y VOLCADOS TEMPORALES
+# ----------------------------------------------------------------------------
+# Nota: los scripts .sql versionados de database/ NO se excluyen.
+*.sqlite
+*.sqlite3
+*.db-journal
+*.mdf
+*.ldf
+dump.rdb
+
+
+# ----------------------------------------------------------------------------
+# 5. LOGS Y TEMPORALES
+# ----------------------------------------------------------------------------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+
+# ----------------------------------------------------------------------------
+# 6. CONFIGURACIÓN LOCAL DE EDITORES E IDEs
+# ----------------------------------------------------------------------------
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.shared.json
+.idea/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+nbproject/private/
+*.sublime-workspace
+
+
+# ----------------------------------------------------------------------------
+# 7. ARCHIVOS DEL SISTEMA OPERATIVO
+# ----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+
+# ----------------------------------------------------------------------------
+# 8. TEMPORALES DE OFIMÁTICA
+# ----------------------------------------------------------------------------
+# Solo los bloqueos/autoguardados que genera Office, NO los documentos.
+~$*.doc*
+~$*.xls*
+~$*.ppt*
+.~lock.*#
