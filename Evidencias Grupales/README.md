@@ -12,4 +12,4 @@ Evidencias que el equipo entrega **en conjunto**.
 
 > Las carpetas de las Fases 2 y 3 se crearán cuando corresponda. Por ahora el repositorio solo trabaja la **Fase 1**.
 >
-> Las planillas de evaluación las envía la profesora por correo y no se suben al repositorio.
+> Las planillas de evaluación las envía la profesora por AVA y no se suben al repositorio.
