@@ -1,443 +1,549 @@
-# Proyecto de Título – Actualización del Sistema de Inventario de Productos
+# Sistema de Punto de Venta e Inventario — Emporio NaturalSur
 
-## Emporio NaturalSur
+**Proyecto de Título · Capstone (PTY4614) · Duoc UC**
 
-## 📌 Descripción del proyecto
+**Repositorio público:** https://github.com/vroaseitz/sistema-inventario-productos
 
-Este proyecto corresponde al **Proyecto de Título de Ingeniería en Informática de Duoc UC**, desarrollado para **Emporio NaturalSur**, minimarket dedicado a la comercialización de productos naturales y gourmet.
-
-El objetivo principal del proyecto es **analizar, actualizar y mejorar el sistema de gestión e inventario de productos utilizado actualmente por el negocio**, debido a que presenta errores, limitaciones y problemas relacionados con la administración y consistencia de la información.
-
-El proyecto busca modernizar el sistema existente y mejorar la forma en que se gestionan los productos, sus características, precios, categorías, unidades de venta, stock y estados.
-
-Como parte del proyecto, también se considera la **posible integración con la página web de Emporio NaturalSur**, actualmente en proceso de desarrollo y que ya cuenta con un avance considerable. Esta integración se evaluará según las necesidades y alcance definido para el Proyecto de Título.
-
-> **Importante:** el objetivo principal del proyecto es la **actualización y mejora del sistema de inventario y gestión de productos**. La página web constituye un componente complementario que podría integrarse al sistema, pero no representa el objetivo principal del proyecto.
+![Estado](https://img.shields.io/badge/estado-Fase%201%20·%20Definición-yellow)
+![Metodología](https://img.shields.io/badge/metodología-Ágil%20·%20Sprints%20de%202%20semanas-blue)
+![Base de datos](https://img.shields.io/badge/datos-Supabase%20·%20PostgreSQL-3ecf8e)
+![Origen](https://img.shields.io/badge/origen-Firebird%20·%20PDVDATA.FDB-orange)
 
 ---
 
 ## 📑 Contenido
 
-- [🎯 Objetivo general](#-objetivo-general)
-- [🔎 Problemática actual](#-problemática-actual)
-- [💡 Propuesta de solución](#-propuesta-de-solución)
-- [🔄 Integración con la página web](#-integración-con-la-página-web)
-- [🗄️ Gestión de datos](#️-gestión-de-datos)
-- [🏗️ Tecnologías consideradas](#️-tecnologías-consideradas)
-- [📦 Productos](#-productos)
-- [🏷️ Estados de productos](#️-estados-de-productos)
-- [👥 Equipo](#-equipo)
-- [📋 Enfoque del Proyecto de Título](#-enfoque-del-proyecto-de-título)
-- [🔗 Trazabilidad del proyecto](#-trazabilidad-del-proyecto)
-- [🚧 Alcance inicial](#-alcance-inicial)
-- [📈 Resultados esperados](#-resultados-esperados)
-- [📚 Documentación del proyecto](#-documentación-del-proyecto)
-- [📂 Estructura del repositorio](#-estructura-del-repositorio)
-- [⚠️ Estado actual del proyecto](#️-estado-actual-del-proyecto)
-- [📝 Nota para desarrollo con IA](#-nota-para-desarrollo-con-ia)
+- [1. Descripción del proyecto](#1-descripción-del-proyecto)
+- [2. El sistema actual y su problemática](#2-el-sistema-actual-y-su-problemática)
+- [3. Objetivos](#3-objetivos)
+- [4. Alcance](#4-alcance)
+- [5. Arquitectura de la solución](#5-arquitectura-de-la-solución)
+- [6. Estrategia de migración](#6-estrategia-de-migración)
+- [7. Tecnologías utilizadas](#7-tecnologías-utilizadas)
+- [8. Instrucciones para ejecutar el proyecto localmente](#8-instrucciones-para-ejecutar-el-proyecto-localmente)
+- [9. Integrantes del equipo y roles](#9-integrantes-del-equipo-y-roles)
+- [10. Metodología de trabajo](#10-metodología-de-trabajo)
+- [11. Plan de trabajo e hitos](#11-plan-de-trabajo-e-hitos)
+- [12. Estructura del repositorio](#12-estructura-del-repositorio)
+- [13. Estado actual del proyecto](#13-estado-actual-del-proyecto)
+- [14. Decisiones pendientes](#14-decisiones-pendientes)
+- [15. Nota para desarrollo con IA](#15-nota-para-desarrollo-con-ia)
 
 ---
 
-## 🎯 Objetivo general
+## 1. Descripción del proyecto
 
-Actualizar y mejorar el sistema de gestión e inventario de productos de Emporio NaturalSur, mediante la revisión de su funcionamiento actual, corrección de errores, mejora de la estructura y calidad de los datos, y la incorporación de mecanismos que permitan una administración más eficiente y consistente de la información de productos.
+### ¿Qué hace?
+
+Desarrolla un **sistema de punto de venta e inventario completo** para reemplazar el software que Emporio NaturalSur utiliza actualmente en su local. El sistema cubre el ciclo operativo del negocio: gestión de productos e inventario, registro de ventas, formas de pago, cierre de caja, y administración de clientes y crédito.
+
+El proyecto incluye además la **migración de los datos históricos** desde la base de datos del sistema antiguo hacia la nueva base de datos del sistema.
+
+### ¿A quién va dirigido?
+
+| Destinatario | Uso del sistema |
+| --- | --- |
+| **Dueñas de Emporio NaturalSur** | Administración del negocio: productos, precios, inventario, información de ventas y clientes con crédito |
+| **Personal de caja** | Operación diaria: registro de ventas, cobro, formas de pago y cierre de caja |
+| **Personal de bodega** | Control de existencias, ingreso de mercadería y ajustes de inventario |
+
+### ¿Qué problema resuelve?
+
+El local opera sobre un software descontinuado desde 2013, sin soporte, con la base de datos alojada en el mismo equipo de la caja, respaldos de solo 10 días de retención y un módulo fiscal diseñado para otro país. El sistema no permite gestionar compras ni proveedores, y su información de rentabilidad es incompleta.
+
+El proyecto sustituye ese sistema por uno actual, respaldado en una base de datos gestionada, adaptado a la operación real del negocio y mantenible en el tiempo.
+
+### Contexto
+
+Emporio NaturalSur es un **minimarket de productos naturales y gourmet**. Además del local, cuenta con una página web en desarrollo, que constituye un proyecto separado con su propio repositorio.
 
 ---
 
-## 🔎 Problemática actual
+## 2. El sistema actual y su problemática
 
-El sistema actual presenta diferentes dificultades que afectan la gestión de los productos del negocio.
+### Identificación del software
 
-Entre los principales problemas identificados se encuentran:
+| Dato | Detalle |
+| --- | --- |
+| **Producto** | Abarrotes Punto de Venta 2.12 |
+| **Fabricante** | Bambu Code S.A. de C.V. — Chihuahua, México |
+| **Copyright** | 2010 |
+| **Situación del producto** | En 2013 fue renombrado a *eleventa*. La versión 2.12 quedó fuera de la línea de actualización |
+| **Edición en uso** | MonoCaja |
+| **Base de datos** | Firebird **embebido** (no servidor) — archivo `PDVDATA.FDB` |
+
+### Limitaciones técnicas identificadas
+
+| Limitación | Implicancia para el negocio |
+| --- | --- |
+| **Firebird embebido** | Admite una sola conexión. No es posible acceder desde otro equipo ni agregar una segunda caja |
+| **Respaldo local con 10 días de retención** | El respaldo vive en el mismo PC que la base. Una falla del equipo compromete datos y respaldo a la vez |
+| **Corrupción de base de datos** | El propio fabricante distribuye una herramienta de reparación, lo que indica que es un escenario recurrente |
+| **Módulo fiscal CFDI mexicano** | No tiene validez tributaria en Chile |
+| **Sin módulo de compras ni proveedores** | Esa funcionalidad llegó recién en la versión 4.00 (2019), fuera de la línea de este producto |
+| **Calcula margen bruto, no utilidad neta** | No registra gastos, por lo que la rentabilidad real no es visible |
+| **Producto descontinuado** | Sin soporte, sin actualizaciones y sin corrección de fallas |
+
+### Problemas en la información de productos
 
 * Errores en la información de productos.
-* Productos faltantes.
-* Productos duplicados.
-* Productos sin imágenes.
-* Productos sin descripción.
+* Productos faltantes y productos duplicados.
+* Productos sin imágenes y sin descripción.
 * Precios incorrectos o vacíos.
-* Información inconsistente.
+* Información inconsistente entre registros.
 * Dificultades para mantener actualizados los productos.
-* Diferencias entre la información del sistema interno y la información utilizada por la plataforma web.
 * Limitaciones en la administración de productos.
-* Dificultades para gestionar correctamente productos vendidos por unidad y productos vendidos a granel.
-
-Estos problemas pueden generar información incorrecta o desactualizada y dificultar la administración diaria del negocio.
+* Dificultades para gestionar productos vendidos por unidad frente a productos vendidos a granel.
 
 ---
 
-## 💡 Propuesta de solución
+## 3. Objetivos
 
-El proyecto contempla analizar el sistema actual y posteriormente diseñar e implementar mejoras orientadas principalmente a la **gestión de productos e inventario**.
+### Objetivo general
 
-La solución podrá contemplar:
+Desarrollar e implantar un sistema de punto de venta e inventario para Emporio NaturalSur que reemplace el software actualmente en uso, cubriendo la gestión de productos, el control de inventario, el registro de ventas, las formas de pago, el cierre de caja y la administración de clientes y crédito, incluyendo la migración de la información histórica desde el sistema antiguo.
 
-* Reestructuración o mejora del modelo de datos.
-* Corrección y depuración de información.
-* Gestión de productos.
-* Gestión de códigos de productos.
-* Gestión de nombres y descripciones.
-* Gestión de marcas.
-* Gestión de categorías y subcategorías.
-* Gestión de unidades de venta.
-* Gestión de productos a granel.
-* Gestión de precios.
-* Gestión de stock.
-* Control del estado de los productos.
-* Gestión de imágenes.
-* Validación de información.
-* Detección y prevención de datos duplicados.
-* Mejoras en los procesos de administración.
-* Pruebas de funcionamiento y calidad de los datos.
+### Objetivos específicos
 
-La implementación definitiva dependerá de los requerimientos levantados durante el desarrollo del proyecto.
+1. **Diagnosticar** el sistema actual, su base de datos y sus limitaciones, documentando los hallazgos que justifican el reemplazo.
+2. **Levantar los requerimientos** funcionales y no funcionales de la operación del negocio, expresados como historias de usuario priorizadas.
+3. **Diseñar la arquitectura** de la solución y el **modelo de datos** que soporte productos, inventario, ventas, pagos, caja, clientes y crédito.
+4. **Desarrollar el módulo de productos e inventario**, incluyendo productos vendidos por unidad y a granel.
+5. **Desarrollar el módulo de ventas**, con formas de pago y cierre de caja.
+6. **Desarrollar el módulo de clientes y crédito**.
+7. **Diseñar y ensayar el proceso de migración** de datos desde la base Firebird hacia la nueva base de datos, con su plan de reversa.
+8. **Verificar el sistema** mediante pruebas unitarias, de integración, de rendimiento y de seguridad.
+9. **Elaborar la documentación técnica y el manual de despliegue** que permitan instalar, operar y mantener el sistema.
 
 ---
 
-## 🔄 Integración con la página web
-
-Emporio NaturalSur cuenta con una página web que se encuentra actualmente en proceso de desarrollo y presenta un avance considerable.
-
-La página contempla funcionalidades relacionadas con:
-
-* Catálogo de productos.
-* Categorías y subcategorías.
-* Carrito de compras.
-* Usuarios y autenticación.
-* Gestión de productos.
-* Productos vendidos por unidad.
-* Productos vendidos a granel.
-* Panel administrativo.
-* Información de contacto y ayuda.
-
-Como parte del proyecto se evaluará la conexión entre el **sistema de inventario** y la **plataforma web**, con el objetivo de evitar inconsistencias y facilitar la disponibilidad de información actualizada.
-
-La arquitectura considerada inicialmente es:
-
-```text
-Sistema interno / Inventario
-          ↓
-Proceso de transformación y limpieza
-          ↓
-Base de datos central
-          ↓
-Sistema web
-```
-
-La implementación de esta integración estará sujeta a los requerimientos, factibilidad técnica y alcance definido para el Proyecto de Título.
-
----
-
-## 🗄️ Gestión de datos
-
-Uno de los componentes importantes del proyecto corresponde a mejorar la calidad y estructura de los datos de productos.
-
-Actualmente se considera trabajar con información proveniente del sistema interno del negocio y adaptarla a las necesidades del sistema actualizado.
-
-El proyecto podrá utilizar un proceso de transformación y limpieza de datos bajo un enfoque **ETL**:
-
-```text
-Extract
-  ↓
-Transform
-  ↓
-Load
-```
-
-### Extract
-
-Obtención de información desde el sistema interno del negocio.
-
-### Transform
-
-Proceso de limpieza, validación y adaptación de los datos.
-
-Entre las posibles transformaciones se encuentran:
-
-* Normalización de nombres.
-* Validación de precios.
-* Validación de códigos.
-* Eliminación o detección de duplicados.
-* Clasificación de categorías.
-* Validación de unidades.
-* Identificación de información faltante.
-* Adaptación de los datos al modelo definido para el sistema.
-
-### Load
-
-Carga de los datos procesados hacia la base de datos utilizada por el sistema actualizado.
-
----
-
-## 🏗️ Tecnologías consideradas
-
-Las tecnologías pueden modificarse durante el desarrollo dependiendo de los requerimientos y decisiones técnicas.
-
-### Base de datos
-
-* Supabase
-* PostgreSQL
-
-### Sistema web
-
-* Tecnologías web actualmente utilizadas por el proyecto existente.
-* Integración con Supabase.
-
-### Sistema interno
-
-* Firebird, como fuente de información del sistema actual del negocio.
-
-### Herramientas de desarrollo y gestión
-
-* Git
-* GitHub
-* Cursor
-* Herramientas de documentación y modelamiento.
-* Herramientas de pruebas.
-
----
-
-## 📦 Productos
-
-El sistema debe permitir diferenciar entre productos vendidos por unidad y productos vendidos a granel.
-
-Para los productos a granel se consideran actualmente atributos como:
-
-```text
-is_bulk
-bulk_unit
-bulk_min_amount
-bulk_step
-bulk_base_amount
-bulk_base_price
-bulk_quick_amounts
-```
-
-Estos campos serán revisados durante el proyecto para determinar si la estructura actual es adecuada o requiere modificaciones.
-
----
-
-## 🏷️ Estados de productos
-
-La propuesta actual contempla los siguientes estados:
-
-| Estado         | Descripción                                         |
-| -------------- | --------------------------------------------------- |
-| `draft`        | Producto importado o creado, pendiente de revisión. |
-| `active`       | Producto publicado y disponible.                    |
-| `hidden`       | Producto oculto temporalmente.                      |
-| `discontinued` | Producto que ya no se comercializa.                 |
-
-El estado **agotado** no necesariamente será almacenado como un estado independiente, ya que puede determinarse a partir de la información de stock cuando corresponda.
-
-Esta definición podrá modificarse según los requerimientos levantados y las reglas de negocio identificadas.
-
----
-
-## 👥 Equipo
-
-Proyecto desarrollado por:
-
-| Integrante | Usuario GitHub |
-| --- | --- |
-| **Victoria Roa Seitz** | [`@vroaseitz`](https://github.com/vroaseitz) |
-| **Eduardo Andrés Guzmán Manquehual** | [`@eg-andreszx`](https://github.com/eg-andreszx) |
-| **Fernando Silva** | [`@fernandosilvot`](https://github.com/fernandosilvot) |
-
-Proyecto de Título – Ingeniería en Informática
-Duoc UC · 8.º semestre · **Sección 005D** · Segundo semestre 2026
-Profesora guía: **Karla Marilyn Roco**
-
----
-
-## 📋 Enfoque del Proyecto de Título
-
-El proyecto busca abordar el problema desde una perspectiva integral y no únicamente desde el desarrollo de software.
-
-Las principales áreas de trabajo serán:
-
-* Levantamiento de requerimientos.
-* Análisis del sistema actual.
-* Identificación de problemas.
-* Modelamiento de procesos.
-* Diseño de solución.
-* Diseño y gestión de base de datos.
-* Calidad de datos.
-* Procesos ETL.
-* Gestión de productos.
-* Integración de sistemas.
-* Desarrollo de software.
-* Pruebas.
-* Documentación.
-* Gestión del proyecto.
-
-La solución deberá estar respaldada por requerimientos, criterios de aceptación, pruebas y evidencias que permitan demostrar el cumplimiento de los objetivos establecidos.
-
----
-
-## 🔗 Trazabilidad del proyecto
-
-Durante el desarrollo se buscará mantener trazabilidad entre:
-
-```text
-Problema
-   ↓
-Requerimiento
-   ↓
-Diseño
-   ↓
-Implementación
-   ↓
-Prueba
-   ↓
-Resultado
-```
-
-Esto permitirá justificar cada funcionalidad implementada y evitar incorporar elementos que no aporten directamente a los objetivos del proyecto.
-
----
-
-## 🚧 Alcance inicial
+## 4. Alcance
 
 ### Incluido
 
-* Análisis del sistema actual.
-* Levantamiento de requerimientos.
-* Análisis de problemas de gestión de productos.
-* Revisión de la estructura de datos.
-* Mejora del sistema de inventario.
-* Gestión de productos.
-* Calidad y consistencia de datos.
-* Gestión de stock.
-* Gestión de precios.
-* Gestión de categorías.
-* Gestión de productos a granel.
-* Pruebas.
-* Documentación.
-* Evaluación de integración con la página web.
+El proyecto desarrolla una **aplicación completa**, no un módulo aislado.
 
-### Fuera del alcance inicial
+| Área | Contenido |
+| --- | --- |
+| **Productos** | Códigos, nombres, descripciones, marcas, categorías y subcategorías, unidades de venta, imágenes, estados |
+| **Inventario** | Control de existencias, ajustes, productos por unidad y productos a granel |
+| **Ventas** | Registro de la venta, búsqueda de productos, cálculo de totales |
+| **Formas de pago** | Registro de los medios de pago utilizados en cada venta |
+| **Cierre de caja** | Apertura, movimientos y cierre del turno |
+| **Clientes y crédito** | Registro de clientes y administración de sus créditos |
+| **Calidad de datos** | Validación, detección de duplicados, depuración y normalización de la información |
+| **Migración** | Extracción desde Firebird, transformación y carga hacia la nueva base de datos |
+| **Pruebas** | Unitarias, de integración, de rendimiento y de seguridad |
+| **Documentación** | Diagnóstico, requerimientos, diseño, modelo de datos, diagramas, manual técnico de despliegue |
 
-Las siguientes funcionalidades no forman parte del objetivo principal y solo podrán considerarse como trabajo futuro o si los requerimientos justifican su incorporación:
+### Fuera del alcance
 
-* Implementación de medios de pago en línea.
-* Automatizaciones avanzadas de WhatsApp.
-* Inteligencia artificial.
-* Sistemas de recomendación.
-* Funcionalidades que no estén relacionadas directamente con la gestión de productos e inventario.
-* Desarrollo de una página web completamente nueva.
+| Excluido | Motivo |
+| --- | --- |
+| Integración con balanza electrónica | La balanza del local no tiene puerto de comunicación (ver sección de hardware) |
+| Facturación electrónica ante el SII | No forma parte de los objetivos del proyecto |
+| Medios de pago en línea | El sistema registra la forma de pago, no procesa transacciones |
+| Módulo contable y de remuneraciones | Fuera del ámbito del punto de venta |
+| Desarrollo de una página web nueva | La web es un proyecto separado, con su propio repositorio |
+| Automatizaciones avanzadas de mensajería | No aporta a los objetivos definidos |
+| Inteligencia artificial y sistemas de recomendación | No aporta a los objetivos definidos |
 
----
+### Hardware: balanza del local
 
-## 📈 Resultados esperados
+La balanza en uso es una **MANA de 40 kg, con graduación de 5 g**, y **no cuenta con puerto de comunicación**, por lo que no puede integrarse al sistema.
 
-Al finalizar el proyecto se espera contar con un sistema de gestión de productos e inventario más:
-
-* Organizado.
-* Consistente.
-* Confiable.
-* Mantenible.
-* Escalable.
-* Fácil de administrar.
-
-Además, se espera reducir los problemas relacionados con información duplicada, incompleta o inconsistente y mejorar la disponibilidad de información para los procesos que dependan de los productos.
-
-En caso de implementarse la integración con la plataforma web, se espera además reducir las diferencias entre la información utilizada por el sistema interno y la información disponible en la web.
+**Decisión de diseño:** el módulo de productos soporta **productos pesables desde el inicio** (venta a granel, precio por kilo) y contempla un **parser de códigos de barras con peso embebido** (prefijos 20–29), de modo que el sistema quede preparado si la tienda adquiere una balanza etiquetadora. Mientras tanto, el peso se ingresa manualmente.
 
 ---
 
-## 📚 Documentación del proyecto
+## 5. Arquitectura de la solución
 
-La documentación del Proyecto de Título deberá incluir, entre otros elementos:
+La solución es una **aplicación de escritorio sobre Windows** que opera contra una **base de datos gestionada en Supabase (PostgreSQL)**. La migración desde el sistema antiguo es un proceso independiente que se ejecuta una sola vez.
 
-* Diagnóstico del sistema actual.
-* Levantamiento de requerimientos.
-* Requerimientos funcionales y no funcionales.
-* Modelamiento de procesos.
-* Modelo de datos.
-* Diseño de arquitectura.
-* Diseño de solución.
-* Proceso ETL.
-* Planificación.
-* Pruebas.
-* Resultados.
-* Evidencias.
-* Manuales y documentación técnica.
-* Conclusiones y trabajo futuro.
+```mermaid
+flowchart TD
+    subgraph ANTIGUO["Sistema antiguo — se apaga tras la migración"]
+        A["Abarrotes Punto de Venta 2.12<br/>Firebird embebido — PDVDATA.FDB"]
+    end
+
+    subgraph MIG["Proceso de migración — ejecución única"]
+        B["Extract<br/>Lectura de la base Firebird"]
+        C["Transform<br/>Limpieza, validación y normalización"]
+        D["Load<br/>Carga hacia la nueva base de datos"]
+    end
+
+    subgraph NUEVO["Sistema nuevo"]
+        E["Aplicación de escritorio<br/>Windows"]
+        F[("Supabase — PostgreSQL<br/>Productos · Inventario · Ventas<br/>Pagos · Caja · Clientes · Crédito")]
+    end
+
+    A --> B
+    B --> C
+    C --> D
+    D --> F
+    E <--> F
+```
+
+### Componentes
+
+| Componente | Responsabilidad |
+| --- | --- |
+| **Aplicación de escritorio** | Interfaz de operación: ventas, caja, inventario, productos, clientes y crédito. Se ejecuta en el equipo del local, sobre Windows |
+| **Base de datos gestionada** | Supabase (PostgreSQL). Almacena toda la información del negocio y es la única fuente de verdad del sistema nuevo |
+| **Proceso de migración** | Componente independiente que lee la base Firebird del sistema antiguo, transforma la información y la carga en la nueva base. Se ejecuta una vez, en el corte |
+
+### Comunicación
+
+La aplicación de escritorio se comunica con Supabase a través de su API sobre HTTPS. El proceso de migración lee el archivo `PDVDATA.FDB` de forma local y escribe hacia Supabase.
+
+> El diagrama de componentes y los diagramas UML detallados se encuentran en `docs/07-diagramas-uml/`. El modelo de datos entidad-relación está en `docs/06-modelo-datos/`.
+
+### Nota sobre portabilidad y contenedores
+
+La solución **no utiliza contenedores**: se trata de una aplicación de escritorio que se instala en el equipo del local, combinada con una base de datos gestionada por un tercero. No hay componentes ejecutándose como servicio propio. Esta situación fue expuesta a la profesora guía el **21 de agosto de 2026** y se autorizó la excepción, con el compromiso de cumplir mecanismos equivalentes:
+
+| Mecanismo equivalente | Ubicación |
+| --- | --- |
+| Manual técnico de despliegue | `docs/12-despliegue/` |
+| Instalador empaquetado | Entregable del proyecto |
+| Variables de entorno separadas del código | `config/.env.example` |
+| Portabilidad como requisito no funcional | `docs/04-requisitos-no-funcionales/` |
+| Justificación técnica de la excepción | `docs/08-diseno/` |
 
 ---
 
-## 📂 Estructura del repositorio
+## 6. Estrategia de migración
+
+La migración es un **evento único**, no una sincronización permanente. Se descartó la convivencia entre ambos sistemas.
+
+```text
+1. Respaldo íntegro de la base Firebird del sistema antiguo
+2. Ensayos de migración repetidos en máquina virtual
+3. Corte: migración real de los datos
+4. Entrada en operación del sistema nuevo
+5. Apagado del sistema antiguo
+```
+
+| Aspecto | Definición |
+| --- | --- |
+| **Tipo** | Evento único en el corte de sistema |
+| **Plan de reversa** | El respaldo previo se conserva intacto. Si algo falla en los primeros días, se reinstala el sistema antiguo |
+| **Ensayos** | La migración se ensaya varias veces en máquina virtual antes del corte real. Cada ensayo queda registrado como evidencia del proyecto |
+
+### Tipos de migración documentados
+
+| Tipo | Descripción | Dónde se registra |
+| --- | --- | --- |
+| **Migración de datos** | Traspaso único de la información histórica desde Firebird | `docs/09-plan-migracion/` |
+| **Migraciones de esquema** | Cambios en la estructura de la base durante el desarrollo, versionados | `database/migraciones/` |
+| **Migraciones correctivas** | Ajustes posteriores al arranque, si se detectan inconsistencias | `database/migraciones/` |
+
+---
+
+## 7. Tecnologías utilizadas
+
+### Base de datos
+
+| Tecnología | Uso |
+| --- | --- |
+| **Supabase** | Plataforma de base de datos gestionada del sistema nuevo |
+| **PostgreSQL** | Motor sobre el que opera Supabase |
+
+### Sistema de origen
+
+| Tecnología | Uso |
+| --- | --- |
+| **Firebird (embebido)** | Motor de la base de datos del sistema antiguo. Origen de los datos de la migración. Archivo `PDVDATA.FDB` |
+
+### Plataforma de ejecución
+
+| Elemento | Definición |
+| --- | --- |
+| **Sistema operativo** | Windows — es el entorno del equipo del local |
+| **Formato de entrega** | Instalador empaquetado |
+
+### Herramientas de desarrollo y gestión
+
+| Herramienta | Uso |
+| --- | --- |
+| **Git** | Control de versiones |
+| **GitHub** | Repositorio remoto y evidencia del avance del proyecto |
+| **ClickUp** | Gestión ágil: sprints, backlog, decisiones y documentación |
+| **Cursor** | Entorno de desarrollo |
+| **Máquina virtual** | Ensayos del proceso de migración |
+
+### Pendiente de definición
+
+| Definición | Restricciones que debe cumplir |
+| --- | --- |
+| **Stack de la aplicación de escritorio** | Ejecutarse en Windows · conectarse a Supabase · ser empaquetable como instalador |
+| **Framework de pruebas** | Compatible con el stack que se elija |
+| **Operación sin conexión a internet** | Ver sección de decisiones pendientes |
+
+> Las decisiones técnicas deben justificarse por los requerimientos del proyecto y no únicamente por factibilidad o preferencia tecnológica. La justificación de cada decisión se documenta en `docs/08-diseno/`.
+
+---
+
+## 8. Instrucciones para ejecutar el proyecto localmente
+
+> **Estado:** el proyecto está en Fase 1 (definición). Esta sección se completa con los comandos concretos una vez definido el stack de la aplicación.
+
+### Requisitos previos
+
+| Requisito | Detalle |
+| --- | --- |
+| **Windows** | Sistema operativo objetivo de la aplicación |
+| **Git** | Para clonar el repositorio — https://git-scm.com |
+| **Proyecto en Supabase** | URL y llaves del proyecto utilizado como base de datos |
+| **Archivo `PDVDATA.FDB`** | Solo para ejecutar el proceso de migración. Copia del respaldo, nunca la base en producción del local |
+| **Entorno de ejecución** | Por definir junto con el stack de la aplicación |
+
+### 1. Clonar el repositorio
+
+```bash
+git clone https://github.com/vroaseitz/sistema-inventario-productos.git
+cd sistema-inventario-productos
+```
+
+### 2. Configurar las variables de entorno
+
+El repositorio incluye una plantilla **sin credenciales reales**:
+
+```bash
+cp config/.env.example .env
+```
+
+Abre el archivo `.env` y completa los valores de tu entorno.
+
+> ⚠️ El archivo `.env` está excluido por `.gitignore` y **nunca debe subirse al repositorio**.
+
+### 3. Instalar dependencias
+
+Pendiente. Se documenta al definir el stack.
+
+### 4. Ejecutar la aplicación
+
+Pendiente. Se documenta al definir el stack.
+
+### 5. Ejecutar el proceso de migración
+
+Pendiente. Se documenta al implementar el proceso. El manual completo de despliegue y migración vive en `docs/12-despliegue/`.
+
+### 6. Ejecutar las pruebas
+
+Pendiente. Se documenta al definir el framework de pruebas.
+
+---
+
+## 9. Integrantes del equipo y roles
+
+| Integrante | Usuario GitHub | Rol | Responsabilidades |
+| --- | --- | --- | --- |
+| **Victoria Roa Seitz** | [`@vroaseitz`](https://github.com/vroaseitz) | Análisis y documentación | Levantamiento de requerimientos, diagnóstico del sistema actual, documentación del proyecto, actas, informes de avance e informe final. Coordinación de entregas y del tablero en ClickUp |
+| **Eduardo Andrés Guzmán Manquehual** | [`@eg-andreszx`](https://github.com/eg-andreszx) | Desarrollo y documentación | Apoyo transversal: participa en el desarrollo del sistema y en la elaboración de la documentación. Nexo entre el diseño documentado y la implementación |
+| **Fernando Silva** | [`@fernandosilvot`](https://github.com/fernandosilvot) | Desarrollo | Desarrollo de la aplicación, modelo de datos, proceso de migración e integración de componentes |
+
+Los roles indican el **foco principal** de cada integrante. El equipo acordó que **todos participan y revisan todas las áreas**, de modo que ningún avance dependa de una sola persona y los tres puedan explicar y defender cualquier parte del proyecto. La distribución de tareas por sprint se registra en ClickUp y en las actas (`docs/actas/`).
+
+### Contexto académico
+
+| | |
+| --- | --- |
+| **Institución** | Duoc UC |
+| **Carrera** | Ingeniería en Informática |
+| **Asignatura** | Capstone — sigla **PTY4614** |
+| **Nivel** | 8.º semestre |
+| **Sección** | 005D |
+| **Período** | Segundo semestre 2026 |
+| **Profesora guía** | Karla Marilyn Roco |
+| **Contraparte** | Emporio NaturalSur |
+
+---
+
+## 10. Metodología de trabajo
+
+El equipo trabaja con una **metodología ágil**, en **sprints de 2 semanas**.
+
+### Gestión: ClickUp
+
+La planificación y el seguimiento se gestionan en un **workspace propio de Duoc en ClickUp**, separado del workspace de la práctica.
+
+| Estructura en ClickUp | Contenido |
+| --- | --- |
+| **Folder: Sprints** | Un espacio por sprint, con las tareas comprometidas |
+| **Lista: Backlog de producto** | Historias de usuario priorizadas, pendientes de asignar a un sprint |
+| **Lista: Decisiones pendientes** | Definiciones técnicas y de alcance aún por resolver |
+| **Lista: Preguntas para las dueñas** | Consultas acumuladas para las reuniones con la contraparte |
+| **Lista: Documentación Duoc** | Entregas y evidencias exigidas por la asignatura |
+
+### Ceremonias
+
+| Ceremonia | Frecuencia | Propósito |
+| --- | --- | --- |
+| **Planificación de sprint** | Cada 2 semanas | Definir el compromiso del sprint a partir del backlog priorizado |
+| **Seguimiento** | Semanal | Revisar avances y levantar impedimentos |
+| **Revisión de sprint** | Al cierre de cada sprint | Mostrar el incremento logrado |
+| **Retrospectiva** | Al cierre de cada sprint | Identificar mejoras. Queda registrada en `docs/10-sprints/` |
+| **Validación con la contraparte** | Según disponibilidad | Confirmar que lo construido responde a la operación real del negocio |
+
+### Artefactos del marco ágil
+
+| Artefacto | Ubicación en el repositorio |
+| --- | --- |
+| Product Vision | `docs/02-vision-producto/` |
+| Product Backlog priorizado con historias de usuario | `docs/03-backlog/` |
+| Definition of Done | `docs/03-backlog/` |
+| Sprint Backlog por sprint | `docs/10-sprints/` |
+| Evidencia de retrospectivas | `docs/10-sprints/` |
+| Documento de diseño | `docs/08-diseno/` |
+| Plan de pruebas por sprint | `docs/11-pruebas/` |
+| Manual técnico de despliegue | `docs/12-despliegue/` |
+
+### Trazabilidad
+
+```text
+Problema → Requerimiento → Diseño → Implementación → Prueba → Resultado
+```
+
+Cada funcionalidad debe poder rastrearse hasta el problema que resuelve. No se incorporan elementos que no aporten directamente a los objetivos del proyecto.
+
+### Flujo de trabajo en Git
+
+```text
+main          ← rama estable; solo recibe cambios revisados
+ └── develop  ← rama de integración del equipo
+      ├── feature/<nombre-funcionalidad>
+      ├── fix/<nombre-correccion>
+      └── docs/<nombre-documento>
+```
+
+**Reglas acordadas:**
+
+1. No se hace *commit* directo sobre `main`.
+2. Toda incorporación a `main` se realiza mediante *Pull Request* con al menos una revisión de otro integrante.
+3. Mensajes de commit según [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.
+4. **Cada integrante realiza sus propios commits.** El repositorio es la evidencia del aporte individual de cada uno.
+5. **No se suben credenciales al repositorio**: ni llaves de Supabase, ni datos de conexión, ni la base de datos del local.
+
+---
+
+## 11. Plan de trabajo e hitos
+
+| Hito | Cuándo | Entregable |
+| --- | --- | --- |
+| **Evaluación formativa Fase 1** | Semana 2 · 0% | Definición del Proyecto APT — retroalimentación |
+| **Evaluación sumativa Fase 1** | Semana 4 · **20%** | Informe de Definición del Proyecto APT + presentación de 15 minutos |
+| **Diseño y modelo de datos** | Durante los primeros sprints | Documento de diseño, arquitectura, modelo ER y diagramas UML |
+| **Desarrollo por sprints** | Sprints de 2 semanas | Incrementos funcionales: productos e inventario, ventas y caja, clientes y crédito |
+| **Ensayos de migración** | Previo al corte | Registro de cada ensayo en máquina virtual |
+| **Sistema completo y demostrable** | **Semana 14 — segunda semana de noviembre 2026** | Sistema funcionando para la presentación. Se grabará un video del sistema en operación como respaldo |
+| **Extracción final del repositorio** | Semana 18 | El repositorio debe permanecer público y activo hasta esta fecha |
+
+> No es obligatorio haber realizado la migración en el local para la semana 14, pero sí contar con el sistema completo y demostrable.
+
+---
+
+## 12. Estructura del repositorio
 
 ```text
 sistema-inventario-productos/
 │
-├── docs/                    Documentación del Proyecto de Título
-│   ├── diagnostico/         Diagnóstico del sistema actual
-│   ├── requerimientos/      Levantamiento y requerimientos funcionales y no funcionales
-│   ├── modelamiento/        Modelamiento de procesos y diseño de solución
-│   ├── diagramas/           Diagramas y modelo de datos
-│   ├── actas/               Actas de reunión del equipo y con la contraparte
-│   ├── avances/             Informes de avance
-│   └── informe-final/       Informe final y material de defensa
+├── Evidencias Individuales/         Evidencias individuales de la asignatura
+│   └── Fase 1/
 │
-├── src/                     Código fuente
-│   ├── etl/                 Proceso Extract · Transform · Load
-│   └── shared/              Utilidades y modelos compartidos
+├── Evidencias Grupales/             Evidencias grupales de la asignatura
+│   └── Fase 1/
 │
-├── database/                Capa de datos
-│   ├── modelo/              Modelo de datos y diccionario de datos
-│   ├── migraciones/         Scripts de versionado del esquema
-│   └── scripts/             Consultas de apoyo y depuración de información
+├── docs/                            Documentación del proyecto
+│   ├── 01-diagnostico/              Diagnóstico del sistema actual
+│   ├── 02-vision-producto/          Product Vision y documento de inicio
+│   ├── 03-backlog/                  Product Backlog, historias de usuario, Definition of Done
+│   ├── 04-requisitos-no-funcionales/  Seguridad, rendimiento, disponibilidad, portabilidad
+│   ├── 05-arquitectura/             Diagrama de arquitectura y componentes
+│   ├── 06-modelo-datos/             Modelo entidad-relación y diccionario de datos
+│   ├── 07-diagramas-uml/            Casos de uso, clases, secuencia, componentes
+│   ├── 08-diseno/                   Documento de diseño y justificación de decisiones técnicas
+│   ├── 09-plan-migracion/           Estrategia de migración, ensayos y plan de reversa
+│   ├── 10-sprints/                  Sprint Backlog y retrospectivas
+│   ├── 11-pruebas/                  Planes y resultados de pruebas por sprint
+│   ├── 12-despliegue/               Manual técnico de despliegue e instalación
+│   ├── 13-innovacion/               Sección de innovación del proyecto
+│   ├── actas/                       Actas de reunión
+│   └── informes/                    Informes de avance e informe final
 │
-├── tests/                   Pruebas
+├── src/                             Código fuente
+│   ├── app/                         Aplicación de escritorio
+│   ├── migracion/                   Proceso de migración desde Firebird
+│   └── shared/                      Código compartido
+│
+├── database/                        Capa de datos
+│   ├── modelo/                      Definición del esquema
+│   ├── migraciones/                 Migraciones de esquema versionadas
+│   └── scripts/                     Consultas de apoyo y depuración
+│
+├── tests/                           Pruebas
 │   ├── unitarias/
-│   └── integracion/
+│   ├── integracion/
+│   ├── rendimiento/
+│   └── seguridad/
 │
-├── scripts/                 Utilidades de apoyo
-├── assets/                  Recursos gráficos
-│   ├── imagenes/
-│   └── capturas/
-│
-├── config/                  Plantillas de configuración (sin credenciales)
+├── scripts/                         Utilidades de apoyo
+├── assets/                          Recursos gráficos
+├── config/                          Plantillas de configuración (sin credenciales)
 ├── .gitignore
 └── README.md
 ```
 
-### Convenciones de trabajo
+---
 
-* Rama `main`: estable, solo recibe cambios revisados.
-* Rama `develop`: integración del trabajo del equipo.
-* Ramas de trabajo: `feature/<nombre>`, `fix/<nombre>`, `docs/<nombre>`.
-* Mensajes de commit según [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.
-* **No se suben credenciales al repositorio.** Esto incluye las credenciales de conexión al sistema interno y las llaves de Supabase.
+## 13. Estado actual del proyecto
+
+**Fase 1 — Definición del Proyecto APT.**
+
+### Resuelto
+
+- ✅ Identificación del software actual: Abarrotes Punto de Venta 2.12 de Bambu Code, con Firebird embebido.
+- ✅ Diagnóstico de sus limitaciones técnicas y funcionales.
+- ✅ Definición del alcance: punto de venta completo, no solo gestión de productos.
+- ✅ Estrategia de migración: evento único con plan de reversa, ensayada en máquina virtual.
+- ✅ Excepción de contenedores autorizada por la profesora guía, con mecanismos equivalentes comprometidos.
+- ✅ Decisión sobre la balanza: productos pesables soportados desde el inicio, integración descartada.
+- ✅ Metodología y herramienta de gestión: ágil con sprints de 2 semanas en ClickUp.
+- ✅ Repositorio público con estructura definida.
+
+### En curso
+
+- 🟡 Levantamiento de requerimientos con la contraparte.
+- 🟡 Definición del stack tecnológico de la aplicación de escritorio.
+- 🟡 Elaboración del informe de Definición del Proyecto APT.
 
 ---
 
-## ⚠️ Estado actual del proyecto
+## 14. Decisiones pendientes
 
-**Estado:** En etapa de definición y levantamiento de requerimientos.
+| Decisión | Restricciones y consideraciones | Prioridad |
+| --- | --- | --- |
+| **Stack de la aplicación de escritorio** | Windows · conexión a Supabase · empaquetable como instalador | **Alta** |
+| **Operación sin conexión a internet** | Si hoy se cae la conexión, no se podría vender. Frente al sistema local actual esto es una regresión, y necesita una respuesta de diseño | **Alta** |
+| **Framework de pruebas** | Compatible con el stack elegido | Media |
 
-El alcance, arquitectura definitiva, modelo de datos y funcionalidades finales aún pueden modificarse a medida que avance el levantamiento de información y se validen las necesidades reales del negocio.
-
-Las decisiones técnicas deberán estar justificadas por los requerimientos del proyecto y no únicamente por factibilidad o preferencia tecnológica.
+Estas decisiones se registran en la lista *Decisiones pendientes* de ClickUp y su resolución se documenta en `docs/08-diseno/`.
 
 ---
 
-## 📝 Nota para desarrollo con IA
+## 15. Nota para desarrollo con IA
 
 Este repositorio corresponde a un **Proyecto de Título académico**.
 
 Antes de implementar nuevas funcionalidades:
 
 1. Identificar el problema que se busca solucionar.
-2. Verificar si existe un requerimiento asociado.
+2. Verificar si existe un requerimiento asociado en el backlog.
 3. Evaluar si la funcionalidad pertenece al alcance.
-4. Analizar impacto en la arquitectura y base de datos.
-5. Considerar compatibilidad con el sistema existente.
-6. Definir cómo será probada.
-7. Documentar los cambios realizados.
+4. Analizar el impacto en la arquitectura y en la base de datos.
+5. Definir cómo será probada.
+6. Documentar los cambios realizados.
 
 No implementar funcionalidades únicamente porque sean técnicamente posibles o visualmente atractivas.
 
-La prioridad debe ser **resolver los problemas reales del sistema de inventario y gestión de productos de Emporio NaturalSur**.
+La prioridad es **resolver los problemas reales de la operación de Emporio NaturalSur**.

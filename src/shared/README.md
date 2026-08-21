@@ -1,2 +1,2 @@
-# Codigo compartido
-Utilidades, constantes y modelos usados tanto por el backend como por el frontend.
+# Código compartido
+Modelos, utilidades y constantes usados tanto por la aplicación de escritorio como por el proceso de migración.
