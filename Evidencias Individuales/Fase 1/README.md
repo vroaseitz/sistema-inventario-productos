@@ -20,8 +20,8 @@ Apellido_Nombre_N.N_APT122_NombreDelDocumento.docx
 
 ### Victoria Roa Seitz
 
-- [ ] `Roa_Victoria_1.1_APT122_AutoevaluacionCompetenciasFase1.docx`
-- [ ] `Roa_Victoria_1.2_APT122_DiarioReflexionFase1.docx`
+- [x] `Roa_Victoria_1.1_APT122_AutoevaluacionCompetenciasFase1.docx`
+- [x] `Roa_Victoria_1.2_APT122_DiarioReflexionFase1.docx`
 - [ ] `Roa_Victoria_1.3_APT122_AutoevaluacionFase1.docx`
 
 ### Eduardo Andrés Guzmán Manquehual
