@@ -1,0 +1,5 @@
+# Dependencias de ejecucion. Target de despliegue: Python 3.11 (64-bit) sobre Windows 8.1.
+# psycopg2-binary trae su propio libpq + OpenSSL: el TLS 1.2 hacia Supabase NO depende
+# del SChannel del sistema operativo (clave para Windows 8.1). Ver docs/08-diseno/adr/0001.
+python-dotenv>=1.0
+psycopg2-binary>=2.9

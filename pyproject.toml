@@ -1,0 +1,29 @@
+[project]
+name = "pos-naturalsur"
+version = "0.1.0"
+description = "Sistema de punto de venta e inventario para Emporio NaturalSur (Capstone PTY4614, Duoc UC)"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "python-dotenv>=1.0",
+    "psycopg2-binary>=2.9",
+]
+
+[project.optional-dependencies]
+gui = []            # Tkinter viene incluido en CPython; no requiere paquete externo
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"
