@@ -10,12 +10,15 @@ Notas de conexion (ver docs/08-diseno/adr/0001):
   Session mode: 5432 ; Transaction mode: 6543.
 - psycopg2-binary trae su propio libpq + OpenSSL, por lo que el TLS 1.2 NO depende del
   SChannel de Windows 8.1 (ventaja del stack Python para el equipo viejo del local).
-- La idempotencia se garantiza en el destino con `ON CONFLICT (id_cliente) DO NOTHING`.
+- La operacion se aplica a las TABLAS DE NEGOCIO (productos, existencias) con sentencias
+  idempotentes (ON CONFLICT sobre la clave de negocio); el mapeo vive en `traductor.py`.
 """
 
 from __future__ import annotations
 
 from typing import Any
+
+from pos.infraestructura.supabase.traductor import traducir_operacion
 
 
 class AdaptadorSupabase:
@@ -41,21 +44,12 @@ class AdaptadorSupabase:
         return psycopg2.connect(self._db_url, sslmode="require")
 
     def publicar(self, operacion: dict) -> None:  # pragma: no cover - requiere credenciales
+        # El mapeo entidad -> sentencia (testeado en test_traductor_supabase) se resuelve
+        # antes de abrir la conexion, para fallar rapido ante una entidad no soportada.
+        sql, params = traducir_operacion(operacion)
         conexion = self._conectar()
         try:
             with conexion, conexion.cursor() as cur:
-                cur.execute(
-                    """
-                    INSERT INTO cola_sincronizacion (id_cliente, entidad, operacion, datos)
-                    VALUES (%s, %s, %s, %s)
-                    ON CONFLICT (id_cliente) DO NOTHING
-                    """,
-                    (
-                        operacion["id_cliente"],
-                        operacion["entidad"],
-                        operacion["operacion"],
-                        str(operacion["datos"]),
-                    ),
-                )
+                cur.execute(sql, params)
         finally:
             conexion.close()
