@@ -27,8 +27,10 @@ class ColaSincronizacionSQLite:
         )
 
     def pendientes(self) -> list[dict]:
+        # Orden por rowid = orden de insercion estricto. Se prefiere a creado_en, que
+        # solo tiene resolucion de segundos y no desempata operaciones del mismo segundo.
         filas = self._con.execute(
-            "SELECT * FROM cola_sincronizacion WHERE estado = 'pending' ORDER BY creado_en"
+            "SELECT * FROM cola_sincronizacion WHERE estado = 'pending' ORDER BY rowid"
         ).fetchall()
         return [
             {
