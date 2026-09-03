@@ -12,7 +12,7 @@ Apellido_Nombre_N.N_APT122_NombreDelDocumento.docx
 
 - [x] `Roa_Victoria_1.1_APT122_AutoevaluacionCompetenciasFase1`
 - [x] `Roa_Victoria_1.2_APT122_DiarioReflexionFase1`
-- [ ] `Roa_Victoria_1.3_APT122_AutoevaluacionFase1`
+- [x] `Roa_Victoria_1.3_APT122_AutoevaluacionFase1`
 
 ### Eduardo Andrés Guzmán Manquehual
 
