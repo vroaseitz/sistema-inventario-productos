@@ -1,18 +1,56 @@
-# 09 · Plan de migración
+# 09 · Plan de migración de datos (Firebird → Supabase)
 
-Estrategia, ensayos y plan de reversa de la migración de datos.
+## Principio: la migración está DESACOPLADA de la aplicación
 
-## Qué va aquí
+La app de escritorio **no** incluye ningún driver de Firebird. La migración es un
+**proceso único**, separado, que se ejecuta una sola vez en el corte del sistema. No hay
+convivencia entre ambos sistemas: el respaldo previo se conserva intacto como garantía
+de reversa.
 
-- Plan de migración desde `PDVDATA.FDB` hacia Supabase
-- Mapeo de tablas y campos entre ambos sistemas
-- Reglas de limpieza, validación y normalización
-- **Registro de cada ensayo** realizado en máquina virtual: fecha, resultado, incidencias, correcciones
-- **Plan de reversa**: procedimiento para reinstalar el sistema antiguo desde el respaldo
-- Checklist del día del corte
+## Por qué desacoplada (hallazgo del premortem)
 
-## Principio
+El sistema antiguo (**Abarrotes PDV 2.12**) usa **Firebird 2.x embebido** (archivo
+`PDVDATA.FDB`), edición MonoCaja. Ese motor y su `fbclient.dll`/`fbembed.dll` son casi
+con seguridad de **32 bits**. Un Python de 64 bits **no puede cargar una DLL de 32
+bits** (`WindowsError [193]: %1 is not a valid Win32 application`). Si la app llevara el
+driver, ataría todo el sistema a ese problema de arquitectura.
 
-La migración es un **evento único**. No hay convivencia entre ambos sistemas. El respaldo previo se conserva intacto como garantía de reversa.
+## Procedimiento recomendado (menor riesgo)
 
-> Los ensayos son evidencia del proyecto: cada uno debe quedar documentado.
+1. **Respaldar primero.** Copiar el `PDVDATA.FDB` y trabajar SIEMPRE sobre la copia,
+   nunca sobre el archivo del local en producción.
+2. **Exportar con herramientas nativas de Firebird 2.5** (no con un driver Python):
+   - `gbak` para un respaldo íntegro, o
+   - `isql` con `OUTPUT archivo.csv;` + `SELECT ...` para volcar cada tabla a CSV.
+   Esto se hace con las herramientas de Firebird 2.5 de **32 bits**, que sí abren el
+   `.FDB` embebido.
+3. **Depurar** el catálogo: de ~4.100 registros, solo ~600 están activos; el resto es
+   basura histórica del dueño anterior. La limpieza se documenta y se versiona.
+4. **Cargar** los datos limpios a Supabase (y/o al espejo SQLite) con un importador
+   CSV → base. Ese importador sí es Python y es testeable con CSV de ejemplo.
+
+## Alternativa (si se requiere leer el FDB desde Python)
+
+Usar un **Python 3.11 de 32 bits** + el paquete `fdb` + `fbclient.dll` de **Firebird
+2.5 de 32 bits**, en un entorno aislado dedicado solo a la migración. `firebird-driver`
+NO sirve: es para Firebird 3+.
+
+## Plan de reversa
+
+El respaldo previo (`gbak`) se conserva intacto. Si en los primeros días algo falla,
+se reinstala el sistema antiguo desde ese respaldo. **El plan de reversa se prueba
+(restore real), no solo se declara.**
+
+## Registro de ensayos
+
+Los ensayos son evidencia del proyecto: cada uno realizado en máquina virtual debe
+quedar documentado aquí con fecha, resultado, incidencias y correcciones aplicadas.
+
+## Pendiente (requiere entorno real / acción de Fernando)
+
+- [ ] Conseguir copia del `PDVDATA.FDB` del local.
+- [ ] Instalar herramientas Firebird 2.5 (32-bit) y exportar las tablas a CSV.
+- [ ] Escribir el importador CSV → SQLite/Supabase con sus pruebas.
+- [ ] Ensayar la migración completa en máquina virtual y registrar la evidencia (checklist del día del corte incluido).
+
+> **Responde al instructivo:** plan de migración, mapeo Firebird → nuevo modelo, registro de ensayos y plan de reversa (obligatorio transversal).

@@ -169,3 +169,23 @@ $RECYCLE.BIN/
 ~$*.xls*
 ~$*.ppt*
 .~lock.*#
+
+# --- Python / POS NaturalSur ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/*/
+dist/
+*.spec.bak
+# Base local y respaldos de datos (nunca versionar datos del local)
+*.db
+*.sqlite
+*.sqlite3
+*.FDB
+*.fdb
+# Variables de entorno con credenciales
+.env
