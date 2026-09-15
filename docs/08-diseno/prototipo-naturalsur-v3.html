@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototipo navegable v2 — Punto de Venta e Inventario · Emporio NaturalSur</title>
+<style>
+:root{
+  --ink:#1b2220; --ink2:#5a6560; --ink3:#8c958f;
+  --line:#c8cecb; --line2:#e4e8e6; --fill:#f3f5f4; --paper:#fff;
+  --brand:#2f6b45;
+  --mc:#1D4E6F; --mcl:#E8F0F5;      /* color del módulo activo */
+  --danger:#9d3b2f;
+  --ui:"Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --num:"Consolas","SF Mono","DejaVu Sans Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:#cfd4d2;font-family:var(--ui);color:var(--ink);font-size:14px;line-height:1.45;padding:16px}
+
+.win{max-width:1240px;margin:0 auto;background:var(--paper);border:1px solid #9aa29e;box-shadow:0 4px 0 rgba(0,0,0,.09)}
+
+/* ---- barra de marca ---- */
+.brand{display:flex;align-items:center;gap:10px;background:#20282a;color:#fff;padding:8px 14px}
+.brand .mark{width:26px;height:26px;border-radius:5px;background:var(--brand);display:grid;place-items:center;font-size:15px}
+.brand .nm{font-weight:600;letter-spacing:-.01em}
+.brand .nm small{display:block;font-weight:400;font-size:10.5px;color:#9fb0a6;letter-spacing:.04em}
+.brand .sp{flex:1}
+.brand .chip{background:#2c3537;border:1px solid #3d474a;padding:3px 10px;font-size:12px;display:flex;gap:7px;align-items:center}
+.brand .chip b{font-weight:600}
+
+/* ---- pestañas de módulo ---- */
+.tabs{display:flex;background:var(--fill);border-bottom:2px solid var(--mc);padding:0 6px;overflow-x:auto}
+.tabs button{flex:0 0 auto;font-family:inherit;font-size:13.5px;background:transparent;border:none;border-top:3px solid transparent;
+  padding:9px 15px 8px;cursor:pointer;color:var(--ink2);display:flex;align-items:center;gap:7px;white-space:nowrap}
+.tabs button .fk{font-family:var(--num);font-size:10.5px;background:#dfe4e2;color:var(--ink2);padding:1px 4px;border-radius:2px}
+.tabs button:hover{background:#e9edeb;color:var(--ink)}
+.tabs button.on{background:var(--mc);color:#fff;font-weight:600}
+.tabs button.on .fk{background:rgba(255,255,255,.22);color:#fff}
+.tabs button:disabled{opacity:.42;cursor:not-allowed}
+
+/* ---- franja de módulo ---- */
+.banner{background:var(--mc);color:#fff;padding:7px 15px;display:flex;align-items:center;gap:12px}
+.banner h1{margin:0;font-size:15.5px;font-weight:600;letter-spacing:.02em}
+.banner .bsub{font-size:12.5px;color:rgba(255,255,255,.78);margin-left:auto}
+
+/* ---- sub-navegación ---- */
+.subnav{display:flex;gap:6px;background:var(--mcl);border-bottom:1px solid var(--line);padding:7px 12px;flex-wrap:wrap}
+.subnav button{font-family:inherit;font-size:13px;padding:5px 13px;border:1px solid var(--line);background:#fff;cursor:pointer;border-radius:3px;color:var(--ink)}
+.subnav button:hover{border-color:var(--mc)}
+.subnav button.on{background:var(--mc);border-color:var(--mc);color:#fff;font-weight:600}
+
+/* ---- botonera de acciones ---- */
+.acts{display:flex;gap:6px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid var(--line2);background:#fafbfa}
+button.act{font-family:inherit;font-size:12.8px;padding:5px 11px;border:1px solid var(--line);background:#fff;cursor:pointer;border-radius:3px;display:inline-flex;align-items:center;gap:6px;color:var(--ink)}
+button.act:hover{background:var(--mcl);border-color:var(--mc)}
+button.act .fk{font-family:var(--num);font-size:10px;background:var(--fill);border:1px solid var(--line2);padding:0 3px;border-radius:2px;color:var(--ink2)}
+button.act.pri{background:var(--mc);border-color:var(--mc);color:#fff;font-weight:600}
+button.act.pri .fk{background:rgba(255,255,255,.2);border-color:transparent;color:#fff}
+button.act.danger{border-color:#d9bdb8;color:var(--danger)}
+button.act.danger:hover{background:#f8eceb;border-color:var(--danger)}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--mc);outline-offset:1px}
+
+.screen{padding:14px 15px 20px;min-height:430px}
+.lead{color:var(--ink2);font-size:13px;margin:0 0 14px;max-width:80ch}
+
+/* ---- campos ---- */
+.codebar{display:flex;align-items:center;gap:10px;background:var(--mcl);border:1px solid var(--line);padding:10px 12px;margin-bottom:11px}
+.codebar label{font-weight:600;font-size:13.5px;color:var(--mc);white-space:nowrap}
+.codebar .inp{flex:1;border:2px solid var(--mc);background:#fff;padding:6px 10px;font-family:var(--num);font-size:15px;min-height:34px}
+.codebar .hintk{font-size:11.5px;color:var(--ink2)}
+
+.grid{display:grid;gap:10px 15px;margin-bottom:13px}
+.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}
+.fld label{display:block;font-size:11.5px;color:var(--ink2);margin-bottom:3px}
+.fld .box{border:1px solid var(--line);padding:5px 8px;background:#fff;min-height:29px;font-size:13.2px}
+.fld .box.ro{background:var(--fill);color:var(--ink2)}
+.fld .box.calc{background:#edf5ef;border-color:#b9d4c1;font-family:var(--num);color:#1f5333}
+.fld .box.sel::after{content:"▾";float:right;color:var(--ink3)}
+.fld .hint{font-size:11px;color:var(--ink3);margin-top:3px}
+
+table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:12.8px;background:#fff}
+caption{text-align:left;font-size:11.5px;color:var(--ink2);padding-bottom:4px}
+th{text-align:left;background:var(--fill);border:1px solid var(--line);padding:5px 8px;font-weight:600;font-size:11.5px;color:var(--ink2)}
+td{border:1px solid var(--line2);padding:5px 8px}
+td.n{text-align:right;font-family:var(--num)}
+tbody tr:nth-child(even) td{background:#fbfcfb}
+tr.sel td{background:var(--mcl) !important;box-shadow:inset 3px 0 0 var(--mc)}
+tr.alert td{background:#fdf3ec !important}
+
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+.kpi{border:1px solid var(--line);border-top:3px solid var(--mc);padding:9px 11px;background:#fff}
+.kpi .l{font-size:11.5px;color:var(--ink2)}
+.kpi .v{font-size:21px;font-family:var(--num);margin:2px 0}
+.kpi .s{font-size:11.5px;color:var(--ink3)}
+
+.panel{border:1px solid var(--line);margin-bottom:13px;background:#fff}
+.panel>h3{margin:0;font-size:12.5px;padding:6px 10px;background:var(--fill);border-bottom:1px solid var(--line);font-weight:600;color:var(--ink2)}
+.panel>div{padding:10px}
+
+.note{border-left:3px solid var(--brand);background:#eef4f0;padding:8px 11px;font-size:12.5px;margin-bottom:13px;color:#24503a}
+.warn{border-left:3px solid #b07a20;background:#fbf3e3;padding:8px 11px;font-size:12.5px;margin-bottom:13px;color:#6d4a11}
+
+.hu{display:none;font-family:var(--num);font-size:10px;background:#eef4f0;border:1px solid #bfd6c8;color:#2c6244;padding:0 4px;border-radius:2px;margin-left:5px;vertical-align:1px}
+body.ann .hu{display:inline-block}
+
+/* ---- barra inferior de venta ---- */
+.paybar{display:flex;align-items:stretch;border-top:2px solid var(--mc);background:var(--mcl)}
+.paybar .cnt{padding:11px 15px;display:flex;align-items:center;gap:9px;border-right:1px solid var(--line)}
+.paybar .cnt b{font-size:22px;font-family:var(--num);color:var(--mc)}
+.paybar .figs{display:flex;gap:22px;padding:11px 15px;align-items:center;flex:1}
+.paybar .fig .l{font-size:11px;color:var(--ink2)}
+.paybar .fig .v{font-family:var(--num);font-size:15px}
+.paybar .cobrar{display:flex;align-items:center;padding:9px 12px}
+.paybar .tot{background:var(--mc);color:#fff;padding:9px 22px;display:flex;flex-direction:column;justify-content:center;align-items:flex-end;min-width:190px}
+.paybar .tot .l{font-size:11px;color:rgba(255,255,255,.75)}
+.paybar .tot .v{font-family:var(--num);font-size:27px;font-weight:600;line-height:1.1}
+
+.status{border-top:1px solid var(--line);background:var(--fill);padding:5px 14px;font-size:11.5px;color:var(--ink2);display:flex;gap:16px;align-items:center}
+.status .sp{flex:1}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--brand);margin-right:5px}
+.dot.off{background:#b07a20}
+
+/* ---- diálogos, al estilo del sistema actual ---- */
+.ov{position:fixed;inset:0;background:rgba(25,30,28,.45);display:none;align-items:center;justify-content:center;padding:20px;z-index:60}
+.ov.on{display:flex}
+.modal{background:#fff;border:2px solid var(--mc);box-shadow:0 10px 30px rgba(0,0,0,.28);width:min(920px,100%);max-height:88vh;overflow-y:auto;overflow-x:hidden}
+.modal>header{background:var(--mc);color:#fff;padding:7px 12px;font-weight:600;font-size:13.5px;display:flex;align-items:center}
+.modal>header .x{margin-left:auto;cursor:pointer;width:22px;height:22px;line-height:19px;text-align:center;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3)}
+.modal .sub{background:var(--mcl);border-bottom:1px solid var(--line);padding:6px 12px;font-size:12px;color:var(--ink2)}
+.modal .content{padding:13px;overflow-x:hidden}
+.modal>footer{padding:10px 12px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:space-between;background:#fafbfa}
+
+/* ---- pestañas de ticket ---- */
+.tickets{display:flex;gap:3px;align-items:flex-end;margin-bottom:9px;border-bottom:1px solid var(--line)}
+.tickets button{font-family:inherit;font-size:12.5px;padding:5px 14px;border:1px solid var(--line);border-bottom:none;
+  background:var(--fill);cursor:pointer;color:var(--ink2);border-radius:3px 3px 0 0;margin-bottom:-1px}
+.tickets button.on{background:#fff;color:var(--mc);font-weight:600;border-color:var(--line);border-bottom:1px solid #fff}
+.tickets button.add{border-style:dashed;color:var(--mc)}
+
+/* ---- selector de medio de pago ---- */
+.pays{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:13px}
+.pay{border:1px solid var(--line);background:#fff;padding:11px 8px;text-align:center;cursor:pointer;border-radius:3px}
+.pay:hover{border-color:var(--mc);background:var(--mcl)}
+.pay.on{border:2px solid var(--mc);background:var(--mcl)}
+.pay .ic{font-size:23px;line-height:1.1}
+.pay .nm{font-size:12.5px;font-weight:600;margin-top:3px}
+.pay .ds{font-size:10.5px;color:var(--ink3)}
+
+/* ---- total grande del diálogo de cobro ---- */
+.bigtot{text-align:center;padding:9px 0 13px}
+.bigtot .l{font-size:12.5px;color:var(--ink2)}
+.bigtot .v{font-family:var(--num);font-size:40px;font-weight:600;color:var(--mc);line-height:1.1}
+
+/* ---- columna de acciones tipo sistema actual ---- */
+.withside{display:grid;grid-template-columns:minmax(0,1fr) 212px;gap:12px;align-items:start}
+.withside>div{min-width:0}
+@media (max-width:760px){.withside{grid-template-columns:1fr}}
+.sidebox{background:var(--fill);border:1px solid var(--line);padding:9px}
+.sidebox h4{margin:0 0 7px;font-size:10.5px;color:var(--ink2);font-weight:600;letter-spacing:.05em}
+.sidebox button.act{width:100%;justify-content:flex-start;margin-bottom:6px;text-align:left;white-space:normal;line-height:1.3}
+.sidebox .tot{margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:12px;color:var(--ink2)}
+.sidebox .tot b{display:block;font-family:var(--num);font-size:19px;color:var(--ink)}
+
+/* ---- billetes y monedas ---- */
+.cash{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:10px}
+@media (max-width:620px){.cash{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.den{border:1px solid var(--line);background:#fff;padding:7px;text-align:center;border-radius:3px}
+.den .bill{height:34px;border-radius:3px;display:grid;place-items:center;font-family:var(--num);font-size:11.5px;
+  color:#3a3020;font-weight:600;border:1px solid rgba(0,0,0,.18)}
+.den .coin{height:34px;width:34px;border-radius:50%;margin:0 auto;display:grid;place-items:center;
+  font-family:var(--num);font-size:11px;color:#4a3a1c;font-weight:600;border:2px solid rgba(0,0,0,.2)}
+.den .cnt{margin-top:5px;border:1px solid var(--line);background:#fff;font-family:var(--num);font-size:14px;padding:2px}
+.den .sub{font-size:10.5px;color:var(--ink3);margin-top:2px;font-family:var(--num)}
+.b1000{background:#9cc47f}.b2000{background:#b3a2d0}.b5000{background:#e0959f}
+.b10000{background:#93b3d9}.b20000{background:#e8ad7e}
+.c500{background:#c9a86a}.c100{background:#d4be86}.c50{background:#c69a55}.c10{background:#c98f5e}
+
+.stepper{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:5px}
+.stepper button{width:24px;height:24px;padding:0;font-size:15px;line-height:1;border:1px solid var(--line);
+  background:#fff;cursor:pointer;border-radius:3px;font-family:inherit}
+.stepper button:hover{background:var(--mcl);border-color:var(--mc)}
+.stepper .cnt{min-width:30px;text-align:center;font-family:var(--num);font-size:15px;
+  border:1px solid var(--line);background:#fff;padding:1px 4px}
+.den.has{border-color:var(--mc);background:var(--mcl)}
+button.act.on{background:var(--mc);border-color:var(--mc);color:#fff}
+button.act.on .fk{background:rgba(255,255,255,.22);border-color:transparent;color:#fff}
+.payinfo{border:1px solid var(--line);background:#fafbfa;padding:11px;margin-bottom:11px}
+
+/* ---- barra del prototipo ---- */
+.proto{max-width:1240px;margin:0 auto 11px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:12.5px;color:#3b433f}
+.proto .tag,.proto label{background:#fff;border:1px solid #a4aca8;padding:3px 9px;display:flex;align-items:center;gap:6px}
+.proto label{cursor:pointer}
+.proto select{font-family:inherit;font-size:12.5px;border:1px solid #a4aca8;padding:2px 4px;background:#fff}
+.proto .tag.link{cursor:pointer}
+
+/* ---- mapa ---- */
+.maprap{overflow-x:auto;border:1px solid var(--line);background:#fbfcfb;padding:10px}
+svg .nd rect{fill:#fff;stroke:var(--line)}
+svg .nd:hover rect{fill:var(--mcl);stroke:var(--mc)}
+svg .nd text{font-family:var(--ui);font-size:11.5px;fill:var(--ink)}
+svg .nd{cursor:pointer}
+svg .edge{stroke:var(--line);stroke-width:1.2;fill:none}
+svg .glabel{font-family:var(--ui);font-size:10.5px;fill:var(--ink3)}
+
+@media (max-width:860px){.g2,.g3,.g4,.cards{grid-template-columns:1fr 1fr}.paybar{flex-wrap:wrap}}
+@media (prefers-reduced-motion:no-preference){.screen{animation:f .13s ease-out}@keyframes f{from{opacity:.4}to{opacity:1}}}
+</style>
+</head>
+<body>
+
+<div class="proto">
+  <span class="tag"><b>Prototipo navegable v2</b> · Emporio NaturalSur</span>
+  <label><input type="checkbox" id="annChk"> Mostrar trazabilidad</label>
+  <label>Perfil <select id="roleSel"><option value="admin">Administradora</option><option value="vend">Vendedora</option></select></label>
+  <label><input type="checkbox" id="offChk"> Simular sin conexión</label>
+  <span class="tag link" id="mapBtn">Mapa de navegación</span>
+  <span class="tag link" id="cmpBtn">Comparar con el sistema actual</span>
+</div>
+
+<div class="win" id="win">
+  <div class="brand">
+    <div class="mark">◕</div>
+    <div class="nm">NaturalSur<small>PUNTO DE VENTA E INVENTARIO</small></div>
+    <div class="sp"></div>
+    <div class="chip">Le atiende: <b id="whoami">Roxana Cifuentes</b> · <span id="whorole">Administradora</span></div>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="banner"><h1 id="bTitle"></h1><span class="bsub" id="bSub"></span></div>
+  <div class="subnav" id="subnav"></div>
+  <div id="actsWrap"></div>
+  <div class="screen" id="screen"></div>
+  <div id="payWrap"></div>
+
+  <div class="status">
+    <span id="stSync"><span class="dot"></span>Sincronizado</span>
+    <span id="stCaja">Jornada abierta · fondo $15.000</span>
+    <span class="sp"></span>
+    <span>Prototipo · no es el sistema construido</span>
+    <span id="stClock">15-sep-2026 09:50</span>
+  </div>
+</div>
+
+<div class="ov" id="ov"><div class="modal" role="dialog" aria-modal="true">
+  <header><span id="mTitle"></span><span class="x" id="mX" role="button" tabindex="0" aria-label="Cerrar">×</span></header>
+  <div class="sub" id="mSub"></div>
+  <div class="content" id="mBody"></div>
+  <footer><div id="mLeft"></div><div id="mFoot" style="display:flex;gap:8px"></div></footer>
+</div></div>
+
+<script>
+/* ===================== helpers ===================== */
+const E=s=>String(s==null?"":s);
+const hu=id=>id?`<span class="hu">${id}</span>`:"";
+const A=(l,o={})=>`<button class="act ${o.pri?'pri':''} ${o.danger?'danger':''}" ${o.go?`data-go="${o.go}"`:''} ${o.modal?`data-modal="${o.modal}"`:''} ${o.act?`data-act="1"`:''}>${o.fk?`<span class="fk">${o.fk}</span>`:''}${l}</button>`;
+const acts=arr=>`<div class="acts">${arr.map(b=>A(b.l,b)).join("")}</div>`;
+const fld=(l,v,o={})=>`<div class="fld"><label>${l}${hu(o.hu)}</label><div class="box ${o.ro?'ro':''} ${o.calc?'calc':''} ${o.sel?'sel':''}">${E(v)||'&nbsp;'}</div>${o.hint?`<div class="hint">${o.hint}</div>`:''}</div>`;
+const G=(n,it)=>`<div class="grid g${n}">${it.join("")}</div>`;
+const T=(cols,rows,o={})=>`<table>${o.cap?`<caption>${o.cap}${hu(o.hu)}</caption>`:''}<thead><tr>${cols.map(c=>`<th${c.n?' style="text-align:right"':''}>${c.t||c}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr class="${r.cls||''}">${r.c.map((v,i)=>`<td class="${cols[i]&&cols[i].n?'n':''}">${E(v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+const K=arr=>`<div class="cards">${arr.map(k=>`<div class="kpi"><div class="l">${k.l}${hu(k.hu)}</div><div class="v">${k.v}</div><div class="s">${k.s||''}</div></div>`).join("")}</div>`;
+const P=(t,c,h)=>`<div class="panel"><h3>${t}${hu(h)}</h3><div>${c}</div></div>`;
+const note=t=>`<div class="note">${t}</div>`;
+const warn=t=>`<div class="warn">${t}</div>`;
+const DEN=[{v:20000,c:"bill b20000"},{v:10000,c:"bill b10000"},{v:5000,c:"bill b5000"},
+ {v:2000,c:"bill b2000"},{v:1000,c:"bill b1000"},{v:500,c:"coin c500"},{v:100,c:"coin c100"},
+ {v:50,c:"coin c50"},{v:10,c:"coin c10"}];
+const $$=n=>"$"+n.toLocaleString("es-CL");
+const CASH_ST={pago:{20000:1,10000:2},conteo:{20000:4,10000:2,5000:1,1000:1,100:4}};
+const cashTot=k=>DEN.reduce((a,d)=>a+d.v*(CASH_ST[k][d.v]||0),0);
+const CASH=k=>`<div class="cash">${DEN.map(d=>{const n=CASH_ST[k][d.v]||0;
+ return `<div class="den ${n?'has':''}"><div class="${d.c}">${d.v>=1000?(d.v/1000)+"mil":d.v}</div>
+ <div class="stepper"><button data-den="${d.v}" data-kind="${k}" data-op="-1" aria-label="Quitar">−</button>
+ <span class="cnt">${n}</span>
+ <button data-den="${d.v}" data-kind="${k}" data-op="1" aria-label="Agregar">+</button></div>
+ <div class="sub">${n?$$(d.v*n):"—"}</div></div>`}).join("")}</div>`;
+const PAY={medio:"efectivo"};
+const MEDIOS=[["efectivo","◉","Efectivo","redondea a la decena"],["tarjeta","▭","Tarjeta","terminal TUU"],
+ ["transferencia","⇄","Transferencia","medio propio"],["credito","☺","Crédito de cliente","a una cuenta"]];
+const code=(o={})=>`<div class="codebar"><label>${o.l||'Código del producto:'}</label><div class="inp">│</div><span class="hintk">${o.h||'El cursor queda acá al abrir. El lector escribe solo y agrega con Enter.'}</span></div>`;
+
+/* ===================== módulos ===================== */
+const MOD = {
+ op :{fk:"F1", l:"Operación",      c:"#1D4E6F", cl:"#E8F0F5"},
+ cat:{fk:"F2", l:"Catálogo",       c:"#8A5A17", cl:"#F7F0E3"},
+ inv:{fk:"F3", l:"Inventario",     c:"#5B3E7E", cl:"#F0EBF6"},
+ cli:{fk:"F4", l:"Clientes",       c:"#2E6B3E", cl:"#E9F2EA"},
+ com:{fk:"F5", l:"Compras",        c:"#7A4A2E", cl:"#F5EEE9"},
+ rep:{fk:"F6", l:"Reportes",       c:"#1E5F63", cl:"#E7F1F1"},
+ adm:{fk:"F7", l:"Administración", c:"#4A4F55", cl:"#EEEFF0"}
+};
+const SUB = {
+ op :[["venta","Venta"],["caja","Caja y corte"],["panel","Resumen del día"]],
+ cat:[["productos","Productos"],["categorias","Categorías"]],
+ inv:[["existencias","Existencias"],["lotes","Lotes y vencimientos"],["alertas","Alertas"]],
+ cli:[["clientes","Clientes"],["cliente-cuenta","Cuenta"],["estado-cuenta","Estado de cuenta"]],
+ com:[["compras","Facturas de compra"],["compra-registro","Registrar factura"],["proveedores","Proveedores"]],
+ rep:[["rep-ventas","Ventas"],["rep-rentabilidad","Rentabilidad"],["rep-rotacion","Rotación"]],
+ adm:[["usuarios","Usuarios"],["auditoria","Auditoría"],["configuracion","Configuración"]]
+};
+const VEND_OK=["venta","caja","panel","productos"];
+
+/* ===================== pantallas ===================== */
+const S={};
+
+/* ---------- OPERACIÓN ---------- */
+S.venta={mod:"op",t:"VENTA DE PRODUCTOS",sub:"Ticket 3 · 3 abiertos",
+ acts:[{l:"Nuevo ticket",fk:"INS",modal:"nuevoticket"},{l:"Buscar producto",fk:"F10",modal:"buscar"},
+       {l:"Tickets en espera",fk:"F6",modal:"espera"},{l:"Descuento a la línea",fk:"F4",modal:"descuento-venta"},
+       {l:"Nota de la venta",fk:"F7",modal:"nota"},{l:"Reimprimir último",fk:"F8",act:1},
+       {l:"Borrar línea",fk:"DEL",danger:1,act:1},{l:"Cobrar",fk:"F12",pri:1,modal:"cobro"}],
+ pay:{n:3,total:"$33.670",pago:"$40.000",cambio:"$6.330"},
+ body: `<div class="tickets">
+    <button data-act="1">Ticket 1 · $18.240</button>
+    <button data-act="1">Ticket 2 · $7.180</button>
+    <button class="on">Ticket 3 · $33.665</button>
+    <button class="add" data-modal="nuevoticket">+ Nuevo ticket</button></div>`
+  + code()
+  + G(2,[fld("Cliente de la venta","— sin cliente —",{sel:1,hint:"Solo si se carga a una cuenta de crédito"}),
+         fld("Vendedora","Roxana Cifuentes",{ro:1})])
+  + T([{t:"Código de barras"},{t:"Descripción del producto"},{t:"Precio",n:1},{t:"Cant.",n:1},{t:"Dcto.",n:1},{t:"Importe",n:1},{t:"Existencia",n:1}],[
+      {c:["7801234500017","Castaña de cajú 1 kilo","22.220","1","—","22.220","14"]},
+      {c:["2100070500048","Quinoa blanca a granel","6.900/kg","0,705 kg","—","4.865","granel"],cls:"sel"},
+      {c:["7801234500109","Pan integral El Castillo","3.290","2","—","6.580","9"]}],{cap:"Ticket 3",hu:"HU-VTA-01"})
+  + note("La línea marcada es la seleccionada: <b>DEL</b> la quita del ticket y <b>F4</b> le aplica un descuento. Los tres tickets conviven sin descontar existencia: el stock se mueve recién al cobrar.")
+  + warn("<b>Descuento en la venta:</b> no se levantó en las entrevistas y no está entre las 44 historias. Está acá para mostrarlo, pero requiere validación de la Product Owner y una historia propia, porque afecta el cálculo de rentabilidad.")};
+
+S.caja={mod:"op",t:"CORTE Y ARQUEO DE CAJA",sub:"Jornada del 15-09-2026",
+ acts:[{l:"Abrir jornada",modal:"apertura"},{l:"Movimiento de caja",modal:"movcaja"},
+       {l:"Contar la gaveta",modal:"conteo"},{l:"Imprimir corte",fk:"F8",act:1},{l:"Hacer corte de hoy",pri:1,act:1}],
+ body: G(3,[fld("Día","martes, 15 de septiembre de 2026",{sel:1}),fld("Cajera","Todas",{sel:1}),fld("Estado","Jornada abierta",{ro:1})])
+  + `<div class="grid g2">
+     <div>${P("Venta de la jornada",T([{t:"Medio de pago"},{t:"Monto",n:1}],[
+        {c:["Efectivo","$121.400"]},{c:["Tarjeta (terminal TUU)","$78.128"]},
+        {c:["Transferencia","$46.112"]},{c:["Cuenta de cliente","$14.126"],cls:"alert"},
+        {c:["<b>Total vendido</b>","<b>$259.766</b>"]}]),"HU-CAJ-02")}</div>
+     <div>${P("Dinero en caja",G(1,[fld("Fondo inicial","$15.000",{ro:1,hu:"HU-CAJ-01"}),
+        fld("Ventas en efectivo","+ $121.400",{ro:1}),fld("Movimientos de caja","− $30.000",{ro:1,hu:"HU-CAJ-04"}),
+        fld("Efectivo esperado","$106.400",{calc:1}),
+        fld("Efectivo contado en la gaveta","$106.400",{hint:"Se cuenta por denominación con el botón «Contar la gaveta»"}),
+        fld("Diferencia","$0",{calc:1})]))}</div>
+    </div>`
+  + P("Para conciliar con el terminal TUU",T([{t:"Concepto"},{t:"Monto",n:1},{t:"Observación"}],[
+      {c:["Tarjeta según el sistema","$78.128","El terminal lo desglosa en $40.958 débito + $37.170 crédito"]},
+      {c:["Abonos de clientes recibidos hoy","$9.000","Entra dinero, pero no es venta de hoy"]},
+      {c:["Ingresos bancarios esperados","$124.240","Neto de comisión del proveedor"]}]),"HU-CAJ-03")
+  + P("Ventas por departamento",T([{t:"Departamento"},{t:"Monto",n:1},{t:"Participación",n:1}],[
+      {c:["Granel","$71.680","27,6%"]},{c:["Frutos secos","$62.600","24,1%"]},
+      {c:["Panadería","$20.260","7,8%"]},{c:["Líquidos","$17.400","6,7%"]},
+      {c:["Resto de departamentos","$87.826","33,8%"]},
+      {c:["<b>Sin departamento</b>","<b>$0</b>","<b>0%</b>"]}]),"HU-REP-02")
+  + note("Este cuadro hoy sale vacío o casi vacío, porque entre el 57% y el 66% de la venta se registra sin departamento. Con la categoría obligatoria en la ficha de producto, deja de pasar.")};
+
+S.panel={mod:"op",t:"RESUMEN DEL DÍA",sub:"Al abrir el sistema",
+ acts:[{l:"Ir a la venta",fk:"F1",go:"venta"},{l:"Configurar meta diaria",modal:"meta"},{l:"Ver reportes",go:"rep-ventas"}],
+ body: K([{l:"Venta de hoy",v:"$259.766",s:"28 transacciones",hu:"HU-REP-01"},
+          {l:"Venta de la semana",v:"$1.104.320",s:"6 jornadas"},
+          {l:"Ganancia de hoy",v:"$88.320",s:"34,0% sobre venta",hu:"HU-REP-03"},
+          {l:"Meta de la jornada",v:"106%",s:"cumplida",hu:"HU-REP-05"}])
+  + `<div class="grid g2">
+     <div>${P("Venta por medio de pago",T([{t:"Medio"},{t:"Monto",n:1},{t:"Ventas",n:1}],[
+        {c:["Efectivo","$121.400","13"]},{c:["Tarjeta","$78.128","11"]},
+        {c:["Transferencia","$46.112","3"]},{c:["Cuenta de cliente","$14.126","1"]}]),"HU-CAJ-03")}</div>
+     <div>${P("Mayor aporte de ganancia",T([{t:"Producto"},{t:"Ganancia",n:1}],[
+        {c:["Quinoa blanca a granel","$21.040"]},{c:["Castaña de cajú 1 kilo","$16.440"]},
+        {c:["Almendra sin sal 500 g","$11.220"]},{c:["Pan integral El Castillo","$7.980"]}]),"HU-REP-03")}</div></div>`
+  + P("Necesita atención hoy",T([{t:"Aviso"},{t:"Detalle"},{t:"Acción"}],[
+      {c:["3 lotes por vencer","Pan integral El Castillo vence en 2 días",A("Ver alertas",{go:"alertas"})],cls:"alert"},
+      {c:["5 productos bajo el mínimo","Kombucha jengibre, almendra sin sal y 3 más",A("Ver existencias",{go:"existencias"})]},
+      {c:["12 productos sin costo cargado","Su margen no se puede calcular",A("Ver catálogo",{go:"productos"})]}]),"HU-INV-03")
+  + note("El sistema actual no tiene una pantalla así: hay que entrar a Corte para saber cómo va el día. Esta es de las pocas cosas que no tienen equivalente y conviene explicarla en la capacitación.")};
+
+/* ---------- CATÁLOGO ---------- */
+S.productos={mod:"cat",t:"PRODUCTOS",sub:"1.135 productos · 8 en pantalla",
+ acts:[{l:"Nuevo",go:"producto-ficha"},{l:"Modificar",go:"producto-ficha"},{l:"Desactivar",danger:1,act:1},
+       {l:"Categorías",go:"categorias"},{l:"Historial de precios",modal:"historial"},{l:"Exportar",fk:"F8"}],
+ body: G(4,[fld("Buscar","castaña",{hu:"HU-PRD-07"}),fld("Categoría","Todas",{sel:1}),
+            fld("Estado","Activos",{sel:1}),fld("Costo","Todos",{sel:1,hint:"Permite aislar los pendientes"})])
+  + T([{t:"Código"},{t:"Nombre"},{t:"Categoría"},{t:"Precio",n:1},{t:"Existencia",n:1},{t:"Estado"}],[
+      {c:["7801234500017","Castaña de cajú 1 kilo","Frutos secos","22.220","14","Activo"],cls:"sel"},
+      {c:["7801234500024","Almendra sin sal 500 g","Frutos secos","9.490","31","Activo"]},
+      {c:["2100070500048","Quinoa blanca a granel","Granel","6.900/kg","granel","Activo"]},
+      {c:["2100081200127","Harina de almendra con piel","Harinas","12.400/kg","granel","Activo"]},
+      {c:["7801234500093","Miel Tierra De Abejas Quillay 1 K","Sin categoría","11.990","7","Revisar"],cls:"alert"},
+      {c:["7801234500109","Pan integral El Castillo","Panadería","3.290","9","Activo"]},
+      {c:["7801234500116","Kombucha jengibre 475 ml","Líquidos","2.990","2","Activo"]},
+      {c:["7801234500123","Crema de maní tostado 380 g","Untables","6.590","0","Inactivo"]}],{hu:"HU-PRD-06"})
+  + warn("«Miel Tierra De Abejas Quillay 1 K» queda marcada: no tiene categoría y su costo registrado es $0,0011, casi con certeza una coma corrida.")};
+
+S["producto-ficha"]={mod:"cat",t:"FICHA DE PRODUCTO",sub:"Castaña de cajú 1 kilo",
+ acts:[{l:"Guardar producto",fk:"ENTER",pri:1,act:1},{l:"Historial de precios",modal:"historial"},
+       {l:"Duplicar producto",act:1},{l:"Desactivar producto",danger:1,act:1}],
+ body: P("Producto",G(3,[fld("Descripción","Castaña de cajú 1 kilo",{hu:"HU-PRD-01",hint:"Se guarda normalizada según el protocolo de nomenclatura"}),
+      fld("Código de barras","7801234500017"),fld("Categoría","Frutos secos",{sel:1,hint:"Obligatoria: sin categoría no se guarda"})])
+   + G(3,[fld("Se vende","Por unidad",{sel:1,hu:"HU-PRD-04",hint:"Por unidad · A granel"}),
+          fld("Producto perecible","Sí",{sel:1,hu:"HU-INV-02"}),fld("Existencia mínima","6",{hu:"HU-INV-05"})])
+   + G(3,[fld("Avisar antes de vencer","14 días",{hu:"HU-INV-03",hint:"Solo si es perecible. Se puede ajustar por producto."}),
+          fld("Primer lote","L-2502",{hint:"Opcional: crea el lote al guardar"}),
+          fld("Vence el","18-12-2026",{hu:"HU-INV-02",hint:"La fecha es del lote, no del producto"})])
+   + note("<b>Por qué la fecha va en el lote y no acá.</b> El mismo pan tiene un lote que vence el 17 y otro el 29. Si la fecha viviera en la ficha solo cabría una, y el control volvería a ser aproximado. En la ficha se marca que el producto es perecible y con cuántos días avisar; la fecha entra con cada lote que llega."))
+  + P("Costo",G(4,[fld("Precio costo neto","11.765",{hu:"HU-PRD-02"}),fld("IVA 19%","2.235",{calc:1}),
+      fld("Impuesto adicional","0",{ro:1,hint:"Solo productos afectos"}),fld("Costo total","14.000",{calc:1})])
+   + G(2,[fld("Estado del costo","Cargado el 02-09-2026 desde la factura F-4471",{ro:1,hu:"HU-PRD-08"}),
+          fld("Origen del costo","Módulo de compras",{ro:1})]),"HU-PRD-02")
+  + P("Precio y ganancia",G(4,[fld("Precio venta","22.220",{hu:"HU-PRD-03"}),
+      fld("Ganancia sobre venta","37,0%",{calc:1,hint:"Calculada. No se escribe."}),
+      fld("Markup sobre costo","58,7%",{calc:1,hint:"Calculado. No se escribe."}),
+      fld("Ganancia por unidad","8.220",{calc:1})]),"HU-PRD-03")
+  + note("<b>Acá está el cambio más importante respecto del sistema actual.</b> Hoy la ganancia es un campo que se escribe y el precio se calcula a partir de él; por eso un precio puesto a mano se sobreescribe solo al volver a entrar. Ahora es al revés: se escribe el precio y la ganancia se calcula. Los campos verdes son resultados, no datos.")
+  + warn("Si el precio quedara bajo el costo, el sistema pide confirmación y explica por qué. No lo impide: liquidar por vencimiento próximo es una operación legítima.")};
+
+S.categorias={mod:"cat",t:"CATEGORÍAS",sub:"Antes llamadas departamentos",
+ acts:[{l:"Nueva categoría",modal:"categoria-nueva"},{l:"Renombrar",modal:"renombrar"},{l:"Fusionar categorías",modal:"fusionar"}],
+ body: T([{t:"Categoría"},{t:"Productos",n:1},{t:"Venta del mes",n:1},{t:"Participación",n:1}],[
+   {c:["Granel","212","$2.106.880","27,6%"]},{c:["Frutos secos","184","$1.842.300","24,1%"]},
+   {c:["Harinas","96","$742.100","9,7%"]},{c:["Panadería","41","$598.440","7,8%"]},
+   {c:["Líquidos","73","$512.900","6,7%"]},{c:["Refrigerados","89","$447.160","5,9%"]},
+   {c:["Untables","58","$401.220","5,3%"]},{c:["Cosmética natural","64","$389.700","5,1%"]},
+   {c:["Sin categoría","318","$594.300","7,8%"],cls:"alert"}],{hu:"HU-PRD-01"})
+  + note("«Sin departamento» es lo que hoy se lleva más de la mitad de la venta. Acá aparece como «Sin categoría» y debe llegar a cero antes de la puesta en marcha.")};
+
+/* ---------- INVENTARIO ---------- */
+S.existencias={mod:"inv",t:"INVENTARIO",sub:"Existencias por producto",
+ acts:[{l:"Agregar a inventario",modal:"entrada"},{l:"Ajustes y mermas",modal:"merma"},
+       {l:"Reporte de inventario",fk:"F8",modal:"repinv"},{l:"Reporte de movimientos",modal:"movs"}],
+ body: G(4,[fld("Buscar","",{}),fld("Categoría","Todas",{sel:1}),fld("Mostrar","Todos",{sel:1,hu:"HU-INV-05"}),fld("Ordenar","Por urgencia",{sel:1})])
+  + T([{t:"Producto"},{t:"Existencia",n:1},{t:"Mínimo",n:1},{t:"Última venta"},{t:"Estado"}],[
+      {c:["Crema de maní tostado 380 g","0","4","28-08-2026","Agotado"],cls:"alert"},
+      {c:["Kombucha jengibre 475 ml","2","8","15-09-2026","Bajo el mínimo"],cls:"alert"},
+      {c:["Pan integral El Castillo","9","6","15-09-2026","Normal"]},
+      {c:["Castaña de cajú 1 kilo","14","6","15-09-2026","Normal"]},
+      {c:["Almendra sin sal 500 g","31","10","14-09-2026","Normal"]},
+      {c:["Quinoa blanca a granel","sin control","—","15-09-2026","Granel"]}],{hu:"HU-INV-01"})
+  + note("El sistema actual solo permite <b>agregar</b> cantidad al inventario. Lo que falta, y es la causa de que el stock no cuadre, es poder <b>descontar</b> con un motivo: vencimiento, rotura o pérdida. Eso es el botón de Ajustes y mermas.")
+  + warn("<b>No confundir con «Nuevo producto» del Catálogo.</b> Allá se crea la ficha —qué es, su código, su precio— y se hace una vez. Acá se dice cuántas unidades llegaron de algo que ya existe, y se hace cada vez que llega mercadería. Lo habitual será que la entrada venga desde la factura de compra, que carga las cantidades y actualiza el costo de una sola vez.")};
+
+S.lotes={mod:"inv",t:"LOTES Y VENCIMIENTOS",sub:"Funcionalidad nueva",
+ acts:[{l:"Nuevo lote",modal:"lote"},{l:"Registrar merma",danger:1,modal:"merma"}],
+ body: T([{t:"Producto"},{t:"Lote"},{t:"Vence"},{t:"Cantidad",n:1},{t:"Faltan"},{t:"Aviso configurado"}],[
+   {c:["Pan integral El Castillo","L-2609","17-09-2026","9","2 días","3 días"],cls:"alert"},
+   {c:["Kombucha jengibre 475 ml","L-2551","24-09-2026","2","9 días","14 días"],cls:"alert"},
+   {c:["Crema de maní tostado 380 g","L-2488","04-11-2026","0","50 días","14 días"]},
+   {c:["Castaña de cajú 1 kilo","L-2502","18-12-2026","14","94 días","14 días"]},
+   {c:["Almendra sin sal 500 g","L-2517","30-01-2027","31","137 días","14 días"]}],{hu:"HU-INV-02"})
+  + note("En las 241 columnas de la base del sistema actual no existe ningún campo de vencimiento ni de lote. Hoy el control es enteramente mental, y esta pantalla no tiene equivalente al que compararla.")
+  + warn("El pan del Castillo dura dos semanas en total, así que su aviso está en 3 días. Con el plazo general de 14 se avisaría el mismo día que llega la mercadería.")};
+
+S.alertas={mod:"inv",t:"ALERTAS",sub:"Vencimientos y reposición",
+ acts:[{l:"Exportar lista de reposición",fk:"F8"},{l:"Ajustar plazos de aviso",go:"configuracion"}],
+ body: P("Por vencer",T([{t:"Producto"},{t:"Lote"},{t:"Vence"},{t:"Cant.",n:1},{t:"Acción"}],[
+   {c:["Pan integral El Castillo","L-2609","17-09-2026","9",A("Sugerir descuento",{modal:"descuento"})+A("Merma",{modal:"merma",danger:1})],cls:"alert"},
+   {c:["Kombucha jengibre 475 ml","L-2551","24-09-2026","2",A("Sugerir descuento",{modal:"descuento"})+A("Merma",{modal:"merma",danger:1})],cls:"alert"},
+   {c:["Yogur de coco 400 g","L-2593","28-09-2026","6",A("Sugerir descuento",{modal:"descuento"})+A("Merma",{modal:"merma",danger:1})]}]),"HU-INV-03")
+  + P("Bajo el mínimo",T([{t:"Producto"},{t:"Existencia",n:1},{t:"Mínimo",n:1},{t:"Acción"}],[
+   {c:["Crema de maní tostado 380 g","0","4",A("Ver ficha",{go:"producto-ficha"})],cls:"alert"},
+   {c:["Kombucha jengibre 475 ml","2","8",A("Ver ficha",{go:"producto-ficha"})],cls:"alert"},
+   {c:["Té verde hojas 100 g","3","6",A("Ver ficha",{go:"producto-ficha"})]}]),"HU-INV-05")
+  + note("El descuento por vencimiento siempre se sugiere y nunca se aplica solo. Rebajar un precio es una decisión comercial y la toma una persona.")};
+
+/* ---------- CLIENTES ---------- */
+S.clientes={mod:"cli",t:"CRÉDITO A CLIENTES",sub:"5 cuentas activas",
+ acts:[{l:"Nuevo cliente",modal:"cliente-nuevo"},{l:"Modificar cliente",modal:"cliente-nuevo"},
+       {l:"Reporte de saldos",fk:"F8",modal:"saldos"},{l:"Desactivar cliente",danger:1,act:1}],
+ body: G(3,[fld("Buscar","",{}),fld("Estado","Activos",{sel:1}),fld("Ordenar","Mayor saldo",{sel:1})])
+  + T([{t:"N°"},{t:"Cliente"},{t:"Contacto"},{t:"Último consumo"},{t:"Saldo",n:1},{t:"Estado"}],[
+   {c:["1","Cliente A","+56 9 •••• 4412","15-09-2026","$47.310","Activo"],cls:"sel"},
+   {c:["2","Cliente B","+56 9 •••• 7708","14-09-2026","$22.940","Activo"]},
+   {c:["3","Cliente C","+56 9 •••• 1093","09-09-2026","$8.650","Activo"]},
+   {c:["4","Cliente D","+56 9 •••• 5521","30-08-2026","$0","Activo"]},
+   {c:["5","Cliente E","—","—","$0","Inactivo"]}],{hu:"HU-CLI-01"})
+  + warn("En el sistema actual esta lista trae nombres reales de familiares y hasta una ficha llamada «Emporio NaturalSur» y otra «GIFTCARD», que no son clientes de crédito. En el prototipo los nombres van enmascarados: la base contiene datos de personas naturales y no pueden salir del equipo.")};
+
+S["cliente-cuenta"]={mod:"cli",t:"CUENTA DEL CLIENTE",sub:"Cliente A",
+ acts:[{l:"Registrar abono",modal:"abono"},{l:"Imprimir movimientos",fk:"F8",act:1}],
+ body: G(4,[fld("Cliente","Cliente A",{ro:1}),fld("Contacto","+56 9 •••• 4412",{ro:1}),
+            fld("Ciclo","Septiembre 2026",{sel:1}),fld("Saldo actual","$47.310",{calc:1,hu:"HU-CLI-03"})])
+  + T([{t:"Fecha"},{t:"Movimiento"},{t:"Detalle"},{t:"Cargo",n:1},{t:"Abono",n:1},{t:"Saldo",n:1}],[
+   {c:["01-09-2026","Saldo anterior","Cierre de agosto","","","$12.400"]},
+   {c:["03-09-2026","Consumo","Venta N° 1188 · 6 productos","$18.640","","$31.040"]},
+   {c:["05-09-2026","Abono","Transferencia","","$12.400","$18.640"]},
+   {c:["09-09-2026","Consumo","Venta N° 1231 · 4 productos","$14.544","","$33.184"]},
+   {c:["15-09-2026","Consumo","Venta N° 1276 · 3 productos","$14.126","","$47.310"]}],{hu:"HU-CLI-03"})
+  + note("El saldo no se guarda en ninguna parte: se calcula sumando los movimientos. Un movimiento registrado no se edita; si hay un error, se corrige con otro movimiento que queda a la vista.")};
+
+S["estado-cuenta"]={mod:"cli",t:"ESTADO DE CUENTA",sub:"Ciclo de septiembre 2026",
+ acts:[{l:"Imprimir",fk:"F8",act:1},{l:"Exportar",act:1},{l:"Marcar como enviado",pri:1,modal:"enviado"}],
+ body: G(3,[fld("Cliente","Cliente A",{ro:1}),fld("Ciclo","01 al 30 de septiembre de 2026",{ro:1}),fld("Emitido","15-09-2026",{ro:1})])
+  + T([{t:"Fecha"},{t:"Detalle del consumo"},{t:"Monto",n:1}],[
+   {c:["03-09-2026","Venta N° 1188 · 6 productos","$18.640"]},
+   {c:["09-09-2026","Venta N° 1231 · 4 productos","$14.544"]},
+   {c:["15-09-2026","Venta N° 1276 · 3 productos","$14.126"]}],{hu:"HU-CLI-04"})
+  + `<div class="grid g4"><div></div>${fld("Consumos del ciclo","$47.310",{ro:1})}
+     ${fld("Descuento del crédito familiar","por confirmar",{calc:1,hint:"Regla pendiente con la Product Owner"})}
+     ${fld("Total a pagar","por confirmar",{calc:1})}</div>`
+  + warn("La regla del descuento sigue pendiente: se levantó como «80% sobre el total consumido», pero falta un ejemplo numérico real que confirme sobre qué base se aplica. El prototipo no inventa el cálculo.")};
+
+/* ---------- COMPRAS ---------- */
+S.compras={mod:"com",t:"FACTURAS DE COMPRA",sub:"Módulo nuevo · no existe en el sistema actual",
+ acts:[{l:"Nueva factura",go:"compra-registro"},{l:"Ver detalle",go:"compra-registro"},
+       {l:"Anular",danger:1,act:1},{l:"Proveedores",go:"proveedores"}],
+ body: G(4,[fld("Desde","01-09-2026"),fld("Hasta","15-09-2026"),fld("Proveedor","Todos",{sel:1}),fld("Estado","Todas",{sel:1})])
+  + T([{t:"Documento"},{t:"Fecha"},{t:"Proveedor"},{t:"Neto",n:1},{t:"Impuestos",n:1},{t:"Total",n:1},{t:"Estado"}],[
+   {c:["F-4471","02-09-2026","Distribuidora Andes","$412.900","$78.451","$491.351","Confirmada"]},
+   {c:["F-4488","06-09-2026","Frutos del Maule","$238.400","$45.296","$283.696","Confirmada"]},
+   {c:["F-4502","11-09-2026","Panadería El Castillo","$96.200","$18.278","$114.478","Confirmada"]},
+   {c:["F-4519","15-09-2026","Distribuidora Andes","$187.300","$35.587","$222.887","Borrador"],cls:"sel"}],{hu:"HU-CMP-01"})
+  + note("Los gastos generales del local —luz, agua, arriendo— quedan fuera a pedido de las propietarias. Este módulo registra mercadería, no la operación completa del negocio.")};
+
+S["compra-registro"]={mod:"com",t:"REGISTRAR FACTURA DE COMPRA",sub:"F-4519 · borrador",
+ acts:[{l:"Confirmar factura",fk:"ENTER",pri:1,act:1},{l:"Agregar línea",modal:"linea-factura"},{l:"Guardar borrador",act:1}],
+ body: P("Datos de la factura",G(3,[fld("Proveedor","Distribuidora Andes",{sel:1,hu:"HU-CMP-01"}),
+      fld("Número de documento","F-4519"),fld("Fecha","15-09-2026")])
+   + G(3,[fld("Monto neto","187.300"),fld("Impuestos","35.587"),fld("Total","222.887",{calc:1})]))
+  + T([{t:"Producto"},{t:"Cantidad",n:1},{t:"Costo unitario neto",n:1},{t:"Subtotal",n:1},{t:"Costo anterior",n:1}],[
+   {c:["Castaña de cajú 1 kilo","10","11.765","117.650","11.765"]},
+   {c:["Almendra sin sal 500 g","20","2.940","58.800","3.120"]},
+   {c:["Crema de maní tostado 380 g","5","2.170","10.850","sin costo"],cls:"alert"}],{cap:"Detalle de productos adquiridos",hu:"HU-CMP-02"})
+  + `<div class="grid g4"><div></div><div></div>${fld("Suma del detalle","187.300",{calc:1})}${fld("Diferencia con el neto","$0",{calc:1,hint:"Debe ser cero para confirmar"})}</div>`
+  + note("<b>Esto es lo que arregla la ganancia de raíz.</b> Al confirmar, el costo de cada producto se actualiza desde la factura del proveedor. La crema de maní no tenía costo y este documento se lo da: deja de reportar 100% de ganancia.")};
+
+S.proveedores={mod:"com",t:"PROVEEDORES",sub:"Funcionalidad deseable, no comprometida",
+ acts:[{l:"Nuevo proveedor",modal:"proveedor-nuevo"},{l:"Modificar",modal:"proveedor-nuevo"},{l:"Desactivar",danger:1,act:1}],
+ body: T([{t:"Proveedor"},{t:"Contacto"},{t:"Facturas",n:1},{t:"Última compra"},{t:"Estado"}],[
+   {c:["Distribuidora Andes","ventas@andes.cl","23","15-09-2026","Activo"]},
+   {c:["Frutos del Maule","+56 9 •••• 2210","14","06-09-2026","Activo"]},
+   {c:["Panadería El Castillo","+56 9 •••• 8834","31","11-09-2026","Activo"]}],{hu:"HU-CMP-03"})
+  + warn("Declarada deseable y no comprometida en la definición del proyecto. Si el tiempo aprieta, es lo primero que sale del alcance sin incumplir nada.")};
+
+/* ---------- REPORTES ---------- */
+S["rep-ventas"]={mod:"rep",t:"VENTAS POR PERÍODO Y CATEGORÍA",sub:"01 al 15 de septiembre",
+ acts:[{l:"Exportar",fk:"F8",act:1},{l:"Imprimir",act:1}],
+ body: G(4,[fld("Desde","01-09-2026"),fld("Hasta","15-09-2026"),fld("Categoría","Todas",{sel:1}),fld("Valores","Brutos",{sel:1,hint:"Bruto o neto de impuestos"})])
+  + T([{t:"Categoría"},{t:"Ventas",n:1},{t:"Unidades",n:1},{t:"Monto",n:1},{t:"Participación",n:1}],[
+   {c:["Granel","184","—","$2.106.880","27,6%"]},{c:["Frutos secos","211","394","$1.842.300","24,1%"]},
+   {c:["Harinas","96","142","$742.100","9,7%"]},{c:["Panadería","163","288","$598.440","7,8%"]},
+   {c:["Líquidos","121","209","$512.900","6,7%"]},{c:["Refrigerados","77","118","$447.160","5,9%"]},
+   {c:["Untables","64","91","$401.220","5,3%"]},{c:["Cosmética natural","38","52","$389.700","5,1%"]},
+   {c:["Sin categoría","89","144","$594.300","7,8%"],cls:"alert"},
+   {c:["<b>Total</b>","<b>1.043</b>","","<b>$7.635.000</b>","<b>100%</b>"]}],{hu:"HU-REP-02"})
+  + note("Hoy este mismo reporte pondría entre 57% y 66% del monto en «sin departamento». El 7,8% que queda acá es lo que falta depurar del catálogo heredado.")};
+
+S["rep-rentabilidad"]={mod:"rep",t:"RENTABILIDAD POR PRODUCTO",sub:"01 al 15 de septiembre",
+ acts:[{l:"Exportar",fk:"F8",act:1},{l:"Imprimir",act:1}],
+ body: G(4,[fld("Desde","01-09-2026"),fld("Hasta","15-09-2026"),fld("Categoría","Todas",{sel:1}),fld("Ordenar","Mayor ganancia",{sel:1})])
+  + T([{t:"Producto"},{t:"Unidades",n:1},{t:"Venta",n:1},{t:"Costo",n:1},{t:"Ganancia",n:1},{t:"Margen",n:1}],[
+   {c:["Quinoa blanca a granel","—","$412.400","$248.900","$163.500","39,6%"]},
+   {c:["Castaña de cajú 1 kilo","37","$822.140","$518.000","$304.140","37,0%"]},
+   {c:["Almendra sin sal 500 g","61","$578.890","$378.400","$200.490","34,6%"]},
+   {c:["Pan integral El Castillo","288","$947.520","$632.700","$314.820","33,2%"]},
+   {c:["Kombucha jengibre 475 ml","94","$281.060","$196.400","$84.660","30,1%"]},
+   {c:["Crema de maní tostado 380 g","19","$125.210","sin costo","no disponible","—"],cls:"alert"}],{hu:"HU-REP-03"})
+  + note("El cálculo usa el costo que tenía el producto cuando se vendió, no el de hoy. Y la crema de maní no distorsiona el total: como su costo está pendiente, el reporte lo dice en vez de suponer cero y declarar 100% de ganancia.")};
+
+S["rep-rotacion"]={mod:"rep",t:"ROTACIÓN DE PRODUCTOS",sub:"Sin venta en 90 días",
+ acts:[{l:"Desactivar seleccionados",danger:1,act:1},{l:"Exportar",fk:"F8",act:1}],
+ body: G(4,[fld("Sin venta en","90 días",{sel:1}),fld("Categoría","Todas",{sel:1}),fld("Estado","Activos",{sel:1}),fld("Ordenar","Más antiguo primero",{sel:1})])
+  + T([{t:"Producto"},{t:"Unidades 90 días",n:1},{t:"Última venta"},{t:"Días detenido",n:1},{t:"Existencia",n:1}],[
+   {c:["Aceite de coco 200 ml","0","04-04-2026","164","3"],cls:"alert"},
+   {c:["Sal rosada molida 250 g","0","22-05-2026","116","5"],cls:"alert"},
+   {c:["Crema de maní tostado 380 g","1","28-08-2026","18","0"]},
+   {c:["Té verde hojas 100 g","8","11-09-2026","4","3"]},
+   {c:["Castaña de cajú 1 kilo","37","15-09-2026","0","14"]}],{hu:"HU-REP-04"})
+  + note("Esta es la medida que evita que el catálogo vuelva a llenarse de productos muertos, como pasó con los 4.109 registros heredados.")};
+
+/* ---------- ADMINISTRACIÓN ---------- */
+S.usuarios={mod:"adm",t:"USUARIOS Y PERFILES",sub:"3 usuarios activos",
+ acts:[{l:"Nuevo usuario",modal:"usuario-nuevo"},{l:"Cambiar contraseña",act:1},{l:"Cambiar perfil",modal:"cambiarperfil"},
+       {l:"Desactivar",danger:1,act:1},{l:"Ver auditoría",go:"auditoria"}],
+ body: T([{t:"Usuario"},{t:"Nombre"},{t:"Perfil"},{t:"Último acceso"},{t:"Estado"}],[
+   {c:["roxana","Roxana Cifuentes","Administradora","15-09-2026 09:12","Activo"]},
+   {c:["germaine","Germaine Seitz","Administradora","15-09-2026 14:40","Activo"]},
+   {c:["mostrador","Turno de mostrador","Vendedora","15-09-2026 10:03","Activo"]}],{hu:"HU-USR-01"})
+  + P("Qué puede hacer cada perfil",T([{t:"Función"},{t:"Administradora"},{t:"Vendedora"}],[
+   {c:["Registrar ventas y cobrar","Sí","Sí"]},{c:["Abrir y cerrar la jornada de caja","Sí","Sí"]},
+   {c:["Consultar productos","Sí","Sí"]},{c:["Crear, modificar o desactivar productos","Sí","No"]},
+   {c:["Registrar mermas y ajustes","Sí","No"]},{c:["Registrar facturas de compra","Sí","No"]},
+   {c:["Ver reportes de rentabilidad","Sí","No"]},{c:["Administrar usuarios y ver auditoría","Sí","No"]}]),"HU-USR-02")
+  + note("Hoy el sistema entra directo como «Administrador de la Tienda», sin pedir nada: quien se siente frente al computador puede cambiar cualquier precio. Arriba, en la barra del prototipo, se puede cambiar el perfil a Vendedora para ver cómo queda la barra de módulos.")};
+
+S.auditoria={mod:"adm",t:"AUDITORÍA DE CAMBIOS",sub:"Solo lectura",
+ acts:[{l:"Exportar",fk:"F8",act:1},{l:"Imprimir",act:1}],
+ body: G(4,[fld("Usuario","Todos",{sel:1}),fld("Desde","01-09-2026"),fld("Hasta","15-09-2026"),fld("Operación","Todas",{sel:1})])
+  + T([{t:"Fecha y hora"},{t:"Usuario"},{t:"Operación"},{t:"Registro"},{t:"Antes"},{t:"Después"}],[
+   {c:["15-09-2026 14:52","roxana","Cambio de precio","Castaña de cajú 1 kilo","21.900","22.220"]},
+   {c:["15-09-2026 11:20","roxana","Confirmación de factura","F-4502","Borrador","Confirmada"]},
+   {c:["14-09-2026 18:05","germaine","Merma","Pan integral El Castillo · L-2588","12","9"]},
+   {c:["14-09-2026 09:44","roxana","Alta de producto","Yogur de coco 400 g","—","creado"]},
+   {c:["13-09-2026 16:30","roxana","Confirmación de valor advertido","Miel Quillay 1 K","costo $0,0011","confirmado"],cls:"alert"}],{hu:"HU-USR-03"})
+  + note("La última línea registra que alguien confirmó un valor que el sistema marcó como sospechoso. Ese rastro es lo que permite encontrar después de dónde salió un dato raro.")};
+
+S.configuracion={mod:"adm",t:"CONFIGURACIÓN",sub:"Parámetros de operación",
+ acts:[{l:"Guardar cambios",pri:1,act:1},{l:"Restaurar valores por defecto",act:1}],
+ body: P("Equipos conectados",G(3,[fld("Impresora de comprobantes","Xprinter 58 mm (USB)",{sel:1}),
+   fld("Cajón de dinero","Conectado a la impresora",{sel:1}),
+   fld("Lector de códigos","TxPOS (USB)",{ro:1,hint:"Se detecta solo"})]),"HU-VTA-06")
+  + P("Reglas de operación",G(3,[fld("Redondeo en efectivo","A la decena",{sel:1,hu:"HU-VTA-04"}),
+   fld("Fondo de caja habitual","15.000",{hu:"HU-CAJ-01"}),
+   fld("Aviso de vencimiento por defecto","14 días",{hu:"HU-INV-03",hint:"Cada producto puede tener el suyo"})]))
+  + P("Listas editables",G(2,[fld("Motivos de merma","Vencimiento · Rotura · Pérdida · Consumo interno · Devolución",{hu:"HU-INV-04",hint:"Pendiente de definir con las propietarias"}),
+   fld("Motivos de movimiento de caja","Retiro a bóveda · Ingreso de fondo · Pago menor",{hu:"HU-CAJ-04",hint:"Pendiente de definir con las propietarias"})]))
+  + P("Sincronización y respaldo",G(3,[fld("Estado de la conexión","Conectado",{ro:1,hu:"HU-VTA-07"}),
+   fld("Operaciones pendientes de enviar","0",{ro:1}),fld("Último respaldo verificado","15-09-2026 03:00",{ro:1})]))
+  + warn("Las dos listas de motivos están con valores de ejemplo y deben acordarse con Roxana y Germaine antes de construirse.")};
+
+/* ---------- COMPARACIÓN ---------- */
+S.comparar={mod:"adm",t:"QUÉ CAMBIA RESPECTO DEL SISTEMA ACTUAL",sub:"Material de apoyo para la capacitación",
+ acts:[{l:"Ver mapa de navegación",go:"mapa"},{l:"Ir al resumen",go:"panel"}],
+ body: P("Lo que se mantiene igual, a propósito",T([{t:"Del sistema actual"},{t:"Cómo queda"}],[
+   {c:["Barra horizontal de módulos con teclas de función","Igual: F1 a F7, misma posición"]},
+   {c:["Cada módulo con su color","Igual: azul venta, dorado productos, morado inventario, verde clientes, verde azulado corte"]},
+   {c:["Botonera de acciones bajo el título del módulo","Igual"]},
+   {c:["Código del producto como primer campo de la venta","Igual, con el cursor puesto ahí al entrar"]},
+   {c:["Total grande abajo a la derecha y F12 Cobrar","Igual"]},
+   {c:["Varios tickets abiertos a la vez","Igual, y ahora sí se puede atender en paralelo"]},
+   {c:["Buscar producto con F10","Igual"]},
+   {c:["Reimprimir el último comprobante","Igual"]},
+   {c:["Corte del día con dinero en caja y ventas por departamento","Igual, más el desglose por medio de pago"]}]))
+  + P("Lo que cambia porque hoy da problemas",T([{t:"Hoy"},{t:"En el sistema nuevo"}],[
+   {c:["La ganancia se escribe y el precio se calcula desde ella","Se escribe el precio y la ganancia se calcula"],cls:"alert"},
+   {c:["Un precio puesto a mano se sobreescribe al volver a entrar","El precio queda como se escribió"],cls:"alert"},
+   {c:["El costo se ingresa con IVA incluido en un solo campo","Neto, IVA e impuesto adicional por separado"],cls:"alert"},
+   {c:["«Sin departamento» permitido","La categoría es obligatoria para guardar"],cls:"alert"},
+   {c:["El corte no incluye las ventas a crédito","El crédito aparece dentro del total vendido"],cls:"alert"},
+   {c:["Solo se puede agregar cantidad al inventario","Se puede descontar con motivo: merma y ajuste"],cls:"alert"},
+   {c:["Una sola persona puede usar el sistema a la vez","Ya no hay esa restricción"],cls:"alert"},
+   {c:["Entra directo como Administrador de la Tienda","Cada persona entra con su usuario"],cls:"alert"}]))
+  + P("Lo que no existe hoy y hay que enseñar",T([{t:"Nuevo"},{t:"Para qué"}],[
+   {c:["Resumen del día al abrir","Ver cómo va la jornada sin entrar a Corte"]},
+   {c:["Lotes con fecha de vencimiento","Dejar de controlar los vencimientos de memoria"]},
+   {c:["Alertas de vencimiento y de reposición","Que el sistema avise antes de perder mercadería o quebrar stock"]},
+   {c:["Facturas de compra","Que el costo venga del proveedor y no de una estimación"]},
+   {c:["Auditoría de cambios","Saber quién modificó qué y cuándo"]},
+   {c:["Operación sin conexión","Seguir vendiendo cuando se cae internet"]}]))
+  + note("Esta pantalla no forma parte del sistema: es material de apoyo del prototipo. Sirve para la capacitación de la semana de marcha blanca y para explicarle a la comisión qué se conservó y por qué.")};
+
+/* ---------- MAPA ---------- */
+const MN=[["login","Inicio de sesión",25,360,148,""],["panel","Resumen del día",205,360,148,""],
+ ["venta","Venta",425,25,158,""],["caja","Caja y corte",425,90,158,""],
+ ["productos","Productos",425,155,158,""],["existencias","Existencias",425,280,158,""],
+ ["alertas","Alertas",425,345,158,""],["clientes","Clientes",425,410,158,""],
+ ["compras","Compras",425,495,158,""],["rep-ventas","Reportes de venta",425,585,158,""],
+ ["usuarios","Usuarios",425,675,158,""],["configuracion","Configuración",425,740,158,""],
+ ["producto-ficha","Ficha de producto",655,155,168,""],["categorias","Categorías",655,210,168,""],
+ ["lotes","Lotes y vencimientos",655,280,168,""],["cliente-cuenta","Cuenta del cliente",655,410,168,""],
+ ["compra-registro","Registrar factura",655,475,168,""],["proveedores","Proveedores",655,530,168,""],
+ ["rep-rentabilidad","Rentabilidad",655,565,168,""],["rep-rotacion","Rotación",655,620,168,""],
+ ["auditoria","Auditoría",655,675,168,""],["estado-cuenta","Estado de cuenta",885,410,168,""]];
+const ME=[["login","panel"],["panel","venta"],["panel","caja"],["panel","productos"],["panel","existencias"],
+ ["panel","alertas"],["panel","clientes"],["panel","compras"],["panel","rep-ventas"],["panel","usuarios"],
+ ["panel","configuracion"],["productos","producto-ficha"],["productos","categorias"],["existencias","lotes"],
+ ["alertas","lotes"],["clientes","cliente-cuenta"],["cliente-cuenta","estado-cuenta"],["compras","compra-registro"],
+ ["compras","proveedores"],["rep-ventas","rep-rentabilidad"],["rep-ventas","rep-rotacion"],["usuarios","auditoria"]];
+
+S.mapa={mod:"adm",t:"MAPA DE NAVEGACIÓN",sub:"22 pantallas y 13 diálogos",
+ acts:[{l:"Comparar con el sistema actual",go:"comparar"},{l:"Ir al resumen",go:"panel"}],
+ body:(()=>{const p={};MN.forEach(n=>p[n[0]]={x:n[2],y:n[3],w:n[4]});
+  const ed=ME.map(([a,b])=>{const A2=p[a],B=p[b],x1=A2.x+A2.w,y1=A2.y+15,x2=B.x,y2=B.y+15,mx=x1+(x2-x1)/2;
+   return `<path class="edge" d="M${x1} ${y1} H${mx} V${y2} H${x2}"/>`}).join("");
+  const nd=MN.map(([id,l,x,y,w])=>`<g class="nd" data-go="${id}" role="link" tabindex="0"><rect x="${x}" y="${y}" width="${w}" height="30"/><text x="${x+10}" y="${y+19}">${l}</text></g>`).join("");
+  const lb=`<text class="glabel" x="425" y="14">Operación</text><text class="glabel" x="425" y="146">Catálogo</text>
+   <text class="glabel" x="425" y="271">Inventario</text><text class="glabel" x="425" y="401">Clientes</text>
+   <text class="glabel" x="425" y="486">Compras</text><text class="glabel" x="425" y="576">Reportes</text>
+   <text class="glabel" x="425" y="666">Administración</text>`;
+  return `<div class="maprap"><svg viewBox="0 0 1075 785" width="1055" height="770" role="img" aria-label="Mapa de navegación">${ed}${lb}${nd}</svg></div>`})()
+ + `<div class="grid g2" style="margin-top:12px">
+   ${P("Los 13 diálogos",T([{t:"Diálogo"},{t:"Se abre desde"}],[
+     {c:["Buscar producto (F10)","Venta"]},{c:["Ingresar peso a granel","Venta"]},{c:["Cobrar (F12)","Venta"]},
+     {c:["Tickets en espera","Venta"]},{c:["Abrir jornada","Caja"]},{c:["Movimiento de caja","Caja"]},
+     {c:["Historial de precios","Productos · Ficha"]},{c:["Agregar a inventario","Existencias"]},
+     {c:["Merma o ajuste","Existencias · Lotes · Alertas"]},{c:["Reporte de movimientos","Existencias"]},
+     {c:["Nuevo lote","Lotes"]},{c:["Registrar abono","Cuenta del cliente"]},{c:["Meta diaria","Resumen del día"]}]))}
+   ${P("Cómo leer este prototipo",`<p style="margin:0 0 8px">Conserva la estructura del sistema actual —módulos arriba con teclas de función, franja de color, botonera de acciones, total grande abajo— para que aprenderlo cueste lo menos posible.</p>
+     <p style="margin:0 0 8px">La aplicación se construye en Python con Tkinter sobre Windows 8.1. El aspecto final será algo más sobrio que esto, pero la disposición y el color por módulo sí se pueden reproducir.</p>
+     <p style="margin:0">Con <b>Mostrar trazabilidad</b> activado, cada campo indica la historia de usuario que lo origina.</p>`)}</div>`};
+
+/* ===================== diálogos ===================== */
+const M={
+ buscar:{t:"Búsqueda de productos",s:"Teclee las primeras letras del producto, o % para buscar en toda la descripción",b:
+  G(2,[fld("Descripción contiene","almen",{hu:"HU-PRD-07"}),fld("Categoría","Todas",{sel:1})])
+  + T([{t:"Descripción del producto"},{t:"Precio venta",n:1},{t:"Categoría"},{t:"Se vende"},{t:"Existencia",n:1}],[
+    {c:["Almendra sin sal 500 g","9.490","Frutos secos","Por unidad","31"],cls:"sel"},
+    {c:["Harina de almendra con piel","12.400/kg","Harinas",A("A granel · pedir peso",{modal:"peso"}),"granel"]},
+    {c:["Quinoa blanca a granel","6.900/kg","Granel",A("A granel · pedir peso",{modal:"peso"}),"granel"]},
+    {c:["Leche de almendras 1 L","3.890","Líquidos","Por unidad","12"]}])
+  + note("No distingue mayúsculas ni acentos, y los productos inactivos no aparecen. Debe responder en menos de un segundo sobre el catálogo completo.")
+  + note("<b>Igual que hoy:</b> si el producto elegido está catalogado como granel, al aceptar se abre solo el cuadro que pide la cantidad y calcula el importe. Pruébalo en cualquiera de las dos filas de granel."),
+  l:[{l:"Modificar producto",go:"producto-ficha"},{l:"Marcar como favorito",act:1}],
+  f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Aceptar",fk:"ENTER",pri:1,act:1}]},
+
+ peso:{t:"¿Cantidad del producto?",s:"Se abre solo al elegir un producto catalogado como granel",b:
+  `<div class="withside"><div>
+     <div style="text-align:center;padding:6px 0 12px">
+       <div style="font-family:var(--num);font-size:19px;font-weight:600;letter-spacing:.06em">QUINOA BLANCA A GRANEL</div>
+     </div>
+     ${G(2,[fld("Cantidad del producto (kg)","0,705",{hu:"HU-VTA-02"}),fld("Importe actual","$4.865",{calc:1})])}
+     <div style="text-align:center;font-family:var(--num);font-size:17px;color:#1f5333;padding:4px 0 10px">Precio por kilo = $6.900</div>
+   </div>
+   <div class="sidebox"><h4>ACCIONES</h4>
+     ${A("Aceptar",{fk:"ENTER",pri:1,act:1})}${A("Cancelar",{fk:"ESC",act:1})}
+     <div class="tot">Importe<b>$4.865</b></div>
+   </div></div>`
+  + note("Igual que hoy: al buscar con F10 un producto marcado como granel, el sistema abre este cuadro y calcula el importe con el peso que marcó la balanza.")
+  + warn("Si la cantidad se aparta mucho del promedio del producto, pide confirmación. Es la protección contra digitar 705 donde va 0,705."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Aceptar",fk:"ENTER",pri:1,act:1}]},
+
+ cobro:{t:"Venta de productos: cobrar",s:"Ticket 3 · 3 productos",b:()=>{
+  const TOT=33670, pagado=cashTot("pago"), vuelto=pagado-TOT;
+  const sel=MEDIOS.map(([id,ic,nm,ds])=>`<div class="pay ${PAY.medio===id?'on':''}" data-pay="${id}" role="button" tabindex="0"><div class="ic">${ic}</div><div class="nm">${nm}</div><div class="ds">${ds}</div></div>`).join("");
+  let cuerpo="";
+  if(PAY.medio==="efectivo"){
+    cuerpo=`<div style="font-size:12px;color:var(--ink2);margin-bottom:6px">Billetes y monedas que entrega el cliente${hu("HU-VTA-04")}</div>`
+      + CASH("pago")
+      + G(3,[fld("Pagó con",$$(pagado),{calc:1,hint:"Suma de lo ingresado arriba"}),
+             fld("Total a cobrar",$$(TOT),{ro:1}),
+             fld("Su cambio", vuelto>=0?$$(vuelto):"falta "+$$(-vuelto), {calc:1})])
+      + (vuelto<0?warn("Lo ingresado no alcanza a cubrir el total. La venta no se puede cerrar hasta que lo cubra."):"")
+      + note("<b>Por qué se ingresan los billetes.</b> Al registrar con qué se pagó, la gaveta queda cuadrada por denominación y el cambio se calcula solo. Es también lo que permite contar la caja después sin adivinar cómo se compuso.");
+  } else if(PAY.medio==="tarjeta"){
+    cuerpo=`<div class="payinfo">${G(2,[fld("Monto a cobrar en tarjeta",$$(TOT),{ro:1}),fld("Comprobante del terminal","",{hint:"Opcional: número que imprime el TUU"})])}</div>`
+      + warn("<b>Tarjeta es un solo medio.</b> El terminal TUU solo pide seleccionar «tarjeta», sin distinguir débito de crédito, así que el sistema registra un único total. El desglose lo entrega el propio terminal en su cierre, y la conciliación compara ambos totales.")
+      + note("El monto se digita en el terminal aparte, igual que hoy. La integración con el terminal está fuera del alcance del proyecto.");
+  } else if(PAY.medio==="transferencia"){
+    cuerpo=`<div class="payinfo">${G(2,[fld("Monto transferido",$$(TOT),{ro:1}),fld("Referencia","",{hint:"Opcional"})])}</div>`
+      + warn("Hoy la transferencia se registra como efectivo y se corrige a mano en una libreta. Acá es un medio propio y el corte cuadra sin corrección.");
+  } else {
+    cuerpo=`<div class="payinfo">${G(3,[fld("Cliente","Cliente A",{sel:1,hu:"HU-CLI-02"}),fld("Saldo actual","$47.310",{ro:1}),fld("Saldo resultante",$$(47310+TOT),{calc:1})])}</div>`
+      + note("La venta queda cargada a la cuenta del cliente y aparece en el corte de la jornada dentro del total vendido, como partida propia. Es exactamente lo que hoy no hace el sistema y obliga a explicar la diferencia cada día.");
+  }
+  return `<div class="withside"><div>
+    <div class="bigtot"><div class="l">Total a cobrar</div><div class="v">${$$(TOT)}</div></div>
+    <div class="pays">${sel}</div>
+    ${cuerpo}
+   </div>
+   <div class="sidebox"><h4>ACCIONES</h4>
+     ${A("Cobrar e imprimir ticket",{fk:"F1",pri:1,act:1})}
+     ${A("Cobrar solo registrando la venta",{fk:"F2",act:1})}
+     ${A("Ingresar notas",{fk:"F4",modal:"nota"})}
+     ${A("Cancelar",{fk:"ESC",act:1})}
+     <div class="tot">Total de artículos<b>3</b></div>
+   </div></div>`
+  + note("<b>Cobrar e imprimir</b> genera el comprobante de detalle, que no tiene validez tributaria: la boleta la emite el terminal. <b>Cobrar solo registrando la venta</b> la deja anotada sin imprimir, para cuando el cliente no pide el detalle.");
+ },
+  l:[],f:[]},
+
+ espera:{t:"Tickets en espera",s:"Sobreviven al cierre de la aplicación",b:
+  T([{t:"Ticket"},{t:"Abierto"},{t:"Líneas",n:1},{t:"Total",n:1},{t:"Acción"}],[
+    {c:["N° 1","14:38","4","$18.240",A("Retomar",{act:1})+A("Descartar",{danger:1,act:1})]},
+    {c:["N° 2","14:51","2","$7.180",A("Retomar",{act:1})+A("Descartar",{danger:1,act:1})]},
+    {c:["N° 3","14:59","3","$33.665","en pantalla"],cls:"sel"}],{hu:"HU-VTA-05"})
+  + note("Si queda alguno sin cobrar, el corte de la jornada lo advierte antes de cerrar."),
+  l:[],f:[{l:"Cerrar",fk:"ESC",act:1}]},
+
+ apertura:{t:"Abrir jornada de caja",s:"No se puede vender sin jornada abierta",b:
+  G(2,[fld("Fecha","15-09-2026",{ro:1}),fld("Usuaria","Roxana Cifuentes",{ro:1})])
+  + G(2,[fld("Monto inicial","15.000",{hu:"HU-CAJ-01",hint:"Se propone el fondo habitual y se puede cambiar"}),
+         fld("Jornada anterior","Cerrada el 14-09 a las 21:14",{ro:1})])
+  + note("No puede haber dos jornadas abiertas a la vez."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Abrir jornada",fk:"ENTER",pri:1,act:1}]},
+
+ movcaja:{t:"Movimiento de caja",s:"Entradas y salidas de efectivo que no son ventas",b:
+  G(2,[fld("Tipo","Retiro",{sel:1,hu:"HU-CAJ-04"}),fld("Monto","30.000")])
+  + G(1,[fld("Motivo","Retiro a bóveda",{sel:1,hint:"Obligatorio, de la lista configurada"}),fld("Observación","")])
+  + warn("No surgió del levantamiento sino del arqueo: sin esto, cualquier retiro aparece como diferencia inexplicada en el corte. Requiere validación de la Product Owner."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Registrar",fk:"ENTER",pri:1,act:1}]},
+
+ historial:{t:"Historial de precios",s:"Castaña de cajú 1 kilo",b:
+  T([{t:"Fecha"},{t:"Usuaria"},{t:"Precio anterior",n:1},{t:"Precio nuevo",n:1},{t:"Motivo"}],[
+    {c:["15-09-2026 14:52","roxana","21.900","22.220","Ajuste por alza de costo"]},
+    {c:["02-09-2026 10:15","roxana","20.500","21.900","Ajuste por alza de costo"]},
+    {c:["14-07-2026 17:40","roxana","—","20.500","Precio inicial"]}],{hu:"HU-PRD-05"})
+  + note("El historial no se edita ni se borra desde la aplicación, y las ventas ya hechas conservan el precio que tenían ese día."),
+  l:[],f:[{l:"Cerrar",fk:"ESC",act:1}]},
+
+ entrada:{t:"Agregar cantidad a inventario",s:"Equivale al «Agregar a Inv.» del sistema actual",b:
+  G(2,[fld("Código del producto","7801234500017"),fld("Descripción","Castaña de cajú 1 kilo",{ro:1})])
+  + G(3,[fld("Cantidad actual","14",{ro:1}),fld("Cantidad a agregar","10",{hu:"HU-INV-01"}),fld("Cantidad resultante","24",{calc:1})])
+  + G(2,[fld("Origen","Factura de compra F-4519",{sel:1,hint:"Si viene de una factura, el costo se actualiza solo"}),
+         fld("Lote","L-2617 · vence 18-12-2026",{sel:1,hu:"HU-INV-02"})])
+  + note("En el sistema actual esta entrada no deja rastro de dónde salió la mercadería. Acá queda asociada a la factura y al lote."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Agregar a inventario",fk:"ENTER",pri:1,act:1}]},
+
+ merma:{t:"Registrar merma o ajuste",s:"Lo que hoy no se puede hacer y desajusta el stock",b:
+  G(2,[fld("Producto","Pan integral El Castillo",{sel:1}),fld("Lote","L-2609 · vence 17-09-2026",{sel:1})])
+  + G(3,[fld("Existencia actual","9",{ro:1}),fld("Cantidad a dar de baja","3",{hu:"HU-INV-04"}),fld("Existencia resultante","6",{calc:1})])
+  + G(1,[fld("Motivo","Vencimiento",{sel:1,hint:"Obligatorio"}),fld("Observación","Retirado de sala")])
+  + note("Un ajuste registrado no se edita: si hubo un error, se corrige con un movimiento inverso que queda a la vista."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Registrar merma",fk:"ENTER",pri:1,act:1}]},
+
+ movs:{t:"Reporte de movimientos de inventario",s:"01 al 15 de septiembre",b:
+  T([{t:"Fecha"},{t:"Producto"},{t:"Movimiento"},{t:"Cantidad",n:1},{t:"Motivo"},{t:"Usuario"}],[
+    {c:["15-09-2026","Castaña de cajú 1 kilo","Venta","−1","Ticket 1276","mostrador"]},
+    {c:["14-09-2026","Pan integral El Castillo","Merma","−3","Vencimiento","germaine"]},
+    {c:["11-09-2026","Pan integral El Castillo","Entrada","+12","Factura F-4502","roxana"]},
+    {c:["06-09-2026","Almendra sin sal 500 g","Entrada","+20","Factura F-4488","roxana"]},
+    {c:["04-09-2026","Kombucha jengibre 475 ml","Ajuste","−2","Pérdida","roxana"]}],{hu:"HU-INV-04"})
+  + note("Cada línea dice de dónde salió o entró la mercadería. Es lo que permite cuantificar la pérdida por sustracción que Roxana quería medir."),
+  l:[],f:[{l:"Cerrar",fk:"ESC",act:1},{l:"Exportar",fk:"F8",pri:1,act:1}]},
+
+ lote:{t:"Nuevo lote",s:"Solo para productos marcados como perecibles",b:
+  G(2,[fld("Producto","Pan integral El Castillo",{sel:1,hu:"HU-INV-02"}),fld("Identificador de lote","L-2617")])
+  + G(3,[fld("Fecha de vencimiento","29-09-2026"),fld("Cantidad","12"),
+         fld("Aviso para este producto","3 días",{hu:"HU-INV-03",hint:"Distinto del plazo general de 14"})])
+  + note("Un mismo producto puede tener varios lotes con fechas distintas conviviendo."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar lote",fk:"ENTER",pri:1,act:1}]},
+
+ abono:{t:"Registrar abono",s:"Cliente A",b:
+  G(2,[fld("Cliente","Cliente A",{ro:1}),fld("Saldo actual","$47.310",{ro:1})])
+  + G(3,[fld("Monto","20.000",{hu:"HU-CLI-03"}),fld("Fecha","15-09-2026"),fld("Medio de pago","Transferencia",{sel:1})])
+  + G(1,[fld("Saldo resultante","$27.310",{calc:1})])
+  + note("El abono aparece en el corte de la jornada como partida separada de la venta: es dinero que entra, pero no es una venta de hoy."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Registrar abono",fk:"ENTER",pri:1,act:1}]},
+
+ descuento:{t:"Sugerencia de descuento por vencimiento",s:"El sistema sugiere, la persona decide",b:
+  G(2,[fld("Producto","Pan integral El Castillo",{ro:1}),fld("Vence en","2 días",{ro:1})])
+  + G(3,[fld("Precio actual","3.290",{ro:1}),fld("Costo","2.196",{ro:1}),fld("Precio sugerido","2.630",{calc:1,hu:"HU-INV-06"})])
+  + warn("Si el precio elegido queda bajo el costo se muestra una advertencia, pero la operación se permite: liquidar es preferible a perder la mercadería completa."),
+  l:[],f:[{l:"No aplicar",fk:"ESC",act:1},{l:"Aplicar precio rebajado",fk:"ENTER",pri:1,act:1}]},
+
+
+ nuevoticket:{t:"Nuevo ticket",s:"Para atender a otro cliente sin cerrar el actual",b:
+  G(2,[fld("Número de ticket","4",{ro:1}),fld("Cliente","— sin cliente —",{sel:1})])
+  + note("El ticket actual queda abierto con sus productos y no descuenta existencia. Se puede volver a él desde las pestañas o desde <b>F6 Tickets en espera</b>.")
+  + warn("En el sistema actual también se pueden abrir varios tickets, pero como la base admite una sola conexión, si llegan dos clientes a la vez el segundo igual tiene que esperar. Esa restricción desaparece."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Abrir ticket 4",fk:"ENTER",pri:1,act:1}]},
+
+ "descuento-venta":{t:"Descuento a la línea",s:"Quinoa blanca a granel · 0,705 kg",b:
+  G(3,[fld("Importe de la línea","4.865",{ro:1}),fld("Tipo de descuento","Porcentaje",{sel:1,hint:"Porcentaje · Monto fijo"}),fld("Valor","10")])
+  + G(3,[fld("Descuento aplicado","486",{calc:1}),fld("Importe final","4.379",{calc:1}),fld("Motivo","Cortesía",{sel:1,hint:"Obligatorio"})])
+  + warn("<b>Requisito nuevo, sin validar.</b> No aparece en las entrevistas ni en las 44 historias del backlog. Si se implementa, el descuento debe guardarse como campo propio: si se descuenta bajando el precio, el reporte de rentabilidad muestra menos margen sin decir por qué.")
+  + note("Para liquidar mercadería por vencimiento próximo no se usa esto, sino el cambio de precio del producto, que queda en el historial con su motivo."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Aplicar descuento",fk:"ENTER",pri:1,act:1}]},
+
+ nota:{t:"Nota de la venta",s:"Queda guardada junto al ticket",b:
+  G(1,[fld("Nota","Cliente pidió el detalle impreso aparte de la boleta del terminal.",{hint:"Aparece en la consulta de la venta y en la auditoría"})])
+  + note("Sirve para dejar constancia de algo fuera de lo común: un producto cambiado, un cobro que quedó pendiente, una devolución. No se imprime en el comprobante."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar nota",fk:"ENTER",pri:1,act:1}]},
+
+ conteo:{t:"Conteo de la gaveta",s:"Cuente el efectivo por denominación",b:()=>{
+  const esp=106400, tot=cashTot("conteo"), dif=tot-esp;
+  return CASH("conteo")
+   + G(3,[fld("Total contado",$$(tot),{calc:1}),fld("Efectivo esperado",$$(esp),{ro:1}),
+          fld("Diferencia",(dif===0?"$0":(dif>0?"sobran ":"faltan ")+$$(Math.abs(dif))),{calc:1})])
+   + (dif!==0?warn("Hay diferencia contra el efectivo esperado. Antes de cerrar conviene revisar si faltó registrar un retiro, un depósito o una venta en efectivo."):
+              note("La gaveta cuadra con lo esperado."))
+   + note("<b>Por qué contar por denominación.</b> Hoy el arqueo es un número suelto: si aparece una diferencia no hay cómo saber dónde se produjo. Registrando con qué está compuesta la caja, la revisión es posible.")
+   + warn("<b>Requisito nuevo, sin validar.</b> El conteo por denominación y el registro de retiros y depósitos no salieron de las entrevistas. Requieren validación de la Product Owner y una historia propia.");
+ },
+  l:[{l:"Registrar retiro",modal:"movcaja"},{l:"Registrar depósito",modal:"movcaja"}],
+  f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar conteo",fk:"ENTER",pri:1,act:1}]},
+
+ "cliente-nuevo":{t:"Cliente con crédito",s:"Solo familiares, según lo definido por las propietarias",b:
+  G(2,[fld("Nombre","",{hu:"HU-CLI-01",hint:"Obligatorio"}),fld("Teléfono","",{hint:"Al menos un medio de contacto"})])
+  + G(2,[fld("Correo",""),fld("Estado","Activo",{sel:1})])
+  + G(1,[fld("Observaciones","")])
+  + note("El cliente parte con saldo cero. Desactivarlo lo saca de la lista de cobro sin borrar su historial de consumos."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar cliente",fk:"ENTER",pri:1,act:1}]},
+
+ saldos:{t:"Reporte de saldos",s:"Al 15 de septiembre de 2026",b:
+  T([{t:"Cliente"},{t:"Último consumo"},{t:"Consumos del ciclo",n:1},{t:"Abonos del ciclo",n:1},{t:"Saldo",n:1}],[
+    {c:["Cliente A","15-09-2026","$47.310","$12.400","$47.310"]},
+    {c:["Cliente B","14-09-2026","$22.940","$0","$22.940"]},
+    {c:["Cliente C","09-09-2026","$8.650","$5.000","$8.650"]},
+    {c:["Cliente D","30-08-2026","$0","$14.200","$0"]},
+    {c:["<b>Total por cobrar</b>","","<b>$78.900</b>","<b>$31.600</b>","<b>$78.900</b>"]}],{hu:"HU-CLI-03"})
+  + note("Es lo que hoy hay que sumar a mano cuenta por cuenta antes de enviar los estados de cuenta del mes."),
+  l:[],f:[{l:"Cerrar",fk:"ESC",act:1},{l:"Exportar",fk:"F8",pri:1,act:1}]},
+
+ "categoria-nueva":{t:"Nueva categoría",s:"",b:
+  G(2,[fld("Nombre","",{hu:"HU-PRD-01"}),fld("Estado","Activa",{sel:1})])
+  + note("Una categoría sin productos se puede eliminar. Una con productos solo se puede fusionar con otra."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar categoría",fk:"ENTER",pri:1,act:1}]},
+
+ fusionar:{t:"Fusionar categorías",s:"Herramienta de depuración del catálogo",b:
+  G(2,[fld("Categoría de origen","Sin categoría",{sel:1,hint:"Se elimina al terminar"}),
+       fld("Categoría de destino","Frutos secos",{sel:1,hint:"Recibe los productos"})])
+  + G(2,[fld("Productos que se moverán","318",{calc:1}),fld("Ventas históricas afectadas","0",{ro:1,hint:"El historial no se altera"})])
+  + note("<b>Para qué sirve.</b> Al depurar los 4.109 productos heredados van a aparecer categorías repetidas o escritas distinto. Fusionar pasa todos los productos de una a otra y borra la vacía, sin tocar las ventas ya registradas. La alternativa es corregir producto por producto.")
+  + warn("La operación no se puede deshacer: la categoría de origen se elimina. Queda registrada en la auditoría con quién la ejecutó y cuántos productos movió."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Fusionar",fk:"ENTER",pri:1,act:1}]},
+
+ "proveedor-nuevo":{t:"Proveedor",s:"Funcionalidad deseable, no comprometida",b:
+  G(2,[fld("Nombre","",{hu:"HU-CMP-03"}),fld("Contacto","")])
+  + G(2,[fld("Teléfono",""),fld("Estado","Activo",{sel:1})])
+  + warn("Declarada deseable y no comprometida en la definición del proyecto. Si el tiempo aprieta, es lo primero que sale del alcance sin incumplir nada."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar proveedor",fk:"ENTER",pri:1,act:1}]},
+
+ "usuario-nuevo":{t:"Usuario",s:"",b:
+  G(2,[fld("Nombre","",{hu:"HU-USR-01"}),fld("Usuario","")])
+  + G(3,[fld("Perfil","Vendedora",{sel:1,hu:"HU-USR-02",hint:"Administradora · Vendedora"}),
+         fld("Contraseña",""),fld("Repetir contraseña","")])
+  + note("La contraseña no se guarda en texto plano. Si se olvida, una administradora la restablece: nadie puede recuperarla."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar usuario",fk:"ENTER",pri:1,act:1}]},
+
+ renombrar:{t:"Renombrar categoría",s:"",b:
+  G(2,[fld("Nombre actual","Frutos secos",{ro:1}),fld("Nombre nuevo","Frutos secos y semillas",{hu:"HU-PRD-01"})])
+  + G(2,[fld("Productos que la usan","184",{ro:1}),fld("Ventas históricas","$1.842.300",{ro:1,hint:"No se alteran"})])
+  + note("Renombrar cambia solo la etiqueta: los productos siguen siendo los mismos y el historial de ventas queda intacto. Si lo que quieres es juntar dos categorías en una, usa <b>Fusionar categorías</b>.")
+  + warn("Si el nombre nuevo ya existe, el sistema lo rechaza y propone fusionar en su lugar."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar nombre",fk:"ENTER",pri:1,act:1}]},
+
+ repinv:{t:"Reporte de inventario",s:"Existencias valorizadas al 15-09-2026",b:
+  G(3,[fld("Categoría","Todas",{sel:1}),fld("Incluir","Solo activos",{sel:1}),fld("Valorizar a","Costo",{sel:1,hint:"Costo · Precio de venta"})])
+  + T([{t:"Producto"},{t:"Existencia",n:1},{t:"Costo unitario",n:1},{t:"Valor en existencia",n:1},{t:"Estado"}],[
+    {c:["Almendra sin sal 500 g","31","2.940","$91.140","Normal"]},
+    {c:["Castaña de cajú 1 kilo","14","11.765","$164.710","Normal"]},
+    {c:["Pan integral El Castillo","9","2.196","$19.764","Normal"]},
+    {c:["Kombucha jengibre 475 ml","2","1.610","$3.220","Bajo el mínimo"],cls:"alert"},
+    {c:["Crema de maní tostado 380 g","0","2.170","$0","Agotado"],cls:"alert"},
+    {c:["Quinoa blanca a granel","sin control","—","no valorizable","Granel"]},
+    {c:["<b>Total valorizado</b>","","","<b>$278.834</b>",""]}],{hu:"HU-INV-01"})
+  + note("Los productos a granel no entran en la valorización porque no se controlan por unidades. Es una decisión del levantamiento, no una omisión.")
+  + warn("Los productos con costo pendiente quedan fuera del total y se listan aparte: valorizarlos en cero daría una cifra falsa."),
+  l:[],f:[{l:"Cerrar",fk:"ESC",act:1},{l:"Exportar",fk:"F8",pri:1,act:1}]},
+
+ cambiarperfil:{t:"Cambiar perfil de usuario",s:"mostrador · Turno de mostrador",b:
+  G(2,[fld("Usuario","mostrador",{ro:1}),fld("Perfil actual","Vendedora",{ro:1})])
+  + G(1,[fld("Perfil nuevo","Administradora",{sel:1,hu:"HU-USR-02",hint:"Administradora · Vendedora"})])
+  + P("Qué gana con el cambio",T([{t:"Función"},{t:"Antes"},{t:"Después"}],[
+    {c:["Crear, modificar o desactivar productos","No","Sí"]},
+    {c:["Registrar mermas y ajustes de inventario","No","Sí"]},
+    {c:["Registrar facturas de compra","No","Sí"]},
+    {c:["Ver reportes de rentabilidad","No","Sí"]},
+    {c:["Administrar usuarios y ver auditoría","No","Sí"]}]))
+  + warn("El cambio tiene efecto en el próximo inicio de sesión del usuario, y queda registrado en la auditoría con quién lo hizo y cuándo.")
+  + note("Para probarlo sin cambiar nada, arriba en la barra del prototipo se puede alternar el perfil y ver cómo queda la barra de módulos."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar perfil",fk:"ENTER",pri:1,act:1}]},
+
+ "linea-factura":{t:"Agregar línea a la factura",s:"F-4519 · Distribuidora Andes",b:
+  G(2,[fld("Producto","Crema de maní tostado 380 g",{sel:1,hu:"HU-CMP-02",hint:"Busca en el catálogo por nombre o código"}),
+       fld("Se vende","Por unidad",{ro:1})])
+  + G(3,[fld("Cantidad recibida","5"),fld("Costo unitario neto","2.170"),fld("Subtotal de la línea","10.850",{calc:1})])
+  + G(3,[fld("Costo actual del producto","sin costo",{ro:1,hu:"HU-PRD-08"}),
+         fld("Costo después de confirmar","2.170",{calc:1}),
+         fld("Ingresa al inventario","Sí",{sel:1,hint:"Suma las 5 unidades a la existencia"})])
+  + G(2,[fld("Lote","L-2620",{hu:"HU-INV-02",hint:"Solo si el producto es perecible"}),
+         fld("Vence el","04-11-2026",{hu:"HU-INV-02"})])
+  + note("<b>Para qué sirve.</b> Una factura trae varios productos, y cada uno es una línea con su cantidad y su costo unitario. La suma de las líneas tiene que cuadrar con el monto neto de la factura antes de poder confirmarla.")
+  + note("Al confirmar la factura completa, cada línea hace dos cosas: suma la cantidad al inventario y actualiza el costo del producto. Este producto no tenía costo cargado y esta línea se lo da: deja de reportar 100% de ganancia."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Agregar línea",fk:"ENTER",pri:1,act:1}]},
+
+ enviado:{t:"Marcar el estado de cuenta como enviado",s:"Cliente A · ciclo de septiembre 2026",b:
+  G(3,[fld("Enviado el","15-09-2026",{ro:1}),fld("Por","Roxana Cifuentes",{ro:1}),
+       fld("Medio","WhatsApp",{sel:1,hint:"WhatsApp · Correo · Entregado en persona"})])
+  + G(1,[fld("Observación","")])
+  + note("<b>Para qué sirve.</b> Deja registrado que a este cliente ya se le mandó el detalle del mes. Así no se envía dos veces ni se olvida a alguien: el listado de clientes muestra cuáles del ciclo quedan pendientes de enviar.")
+  + warn("Es un agregado del prototipo, no salió de las entrevistas. Hoy el envío se lleva de memoria. Si a las propietarias les parece innecesario, se retira sin afectar el resto."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Marcar como enviado",fk:"ENTER",pri:1,act:1}]},
+
+ meta:{t:"Meta diaria de ganancia",s:"Sobre ganancia, no sobre monto vendido",b:
+  T([{t:"Tipo de día"},{t:"Meta de ganancia",n:1},{t:"Vigente desde"}],[
+    {c:["Lunes a viernes","$85.000","01-09-2026"]},{c:["Sábado","$95.000","01-09-2026"]},
+    {c:["Domingo y festivos","$35.000","01-09-2026"]}],{hu:"HU-REP-05"})
+  + G(3,[fld("Bajo el 85%","Rojo",{ro:1}),fld("Entre 85% y 100%","Amarillo",{ro:1}),fld("Sobre el 100%","Verde",{ro:1})])
+  + warn("Los valores son de ejemplo. Las metas reales salen del Excel de punto de equilibrio de la Product Owner, que todavía no ha sido entregado.")
+  + note("Cambiar una meta no altera el cumplimiento ya calculado de jornadas anteriores: cada meta guarda su fecha de vigencia."),
+  l:[],f:[{l:"Cancelar",fk:"ESC",act:1},{l:"Guardar metas",fk:"ENTER",pri:1,act:1}]}
+};
+
+/* ===================== estado y render ===================== */
+let cur="venta", role="admin", logged=false;
+const $=s=>document.querySelector(s);
+
+function setColor(m){const d=MOD[m]||MOD.op;document.documentElement.style.setProperty('--mc',d.c);document.documentElement.style.setProperty('--mcl',d.cl);}
+
+function drawTabs(){
+  $("#tabs").innerHTML=Object.entries(MOD).map(([id,m])=>{
+    const first=SUB[id][0][0];
+    const blocked=role==="vend"&&!SUB[id].some(([s])=>VEND_OK.includes(s));
+    const on=S[cur]&&S[cur].mod===id;
+    return `<button data-tab="${id}" class="${on?'on':''}" ${blocked?'disabled':''} title="${m.l}"><span class="fk">${m.fk}</span>${m.l}</button>`;
+  }).join("");
+}
+
+function drawSub(){
+  const m=S[cur].mod, list=SUB[m]||[];
+  const extra = (cur==="mapa"||cur==="comparar") ? [[cur, S[cur].t.charAt(0)+S[cur].t.slice(1).toLowerCase()]] : [];
+  $("#subnav").innerHTML=[...list,...extra].map(([id,l])=>{
+    const blocked=role==="vend"&&!VEND_OK.includes(id);
+    return `<button data-go="${id}" class="${cur===id?'on':''}" ${blocked?'disabled':''}>${l}</button>`;
+  }).join("");
+}
+
+function go(id){
+  if(!S[id])return;
+  if(role==="vend"&&!VEND_OK.includes(id)){
+    setColor("op");
+    $("#bTitle").textContent="ACCESO RESTRINGIDO"; $("#bSub").textContent="";
+    $("#actsWrap").innerHTML=acts([{l:"Volver a la venta",fk:"F1",pri:1,go:"venta"}]);
+    $("#screen").innerHTML=warn("El perfil de <b>vendedora</b> no tiene acceso a esta sección. Pídele a una administradora que la abra.")
+      + note("Así se comporta el control de acceso por perfil. La restricción se aplica en la aplicación y también en la base de datos, no solo ocultando el botón.");
+    $("#payWrap").innerHTML=""; $("#subnav").innerHTML=""; drawTabs(); return;
+  }
+  cur=id; const s=S[id];
+  setColor(s.mod);
+  $("#bTitle").textContent=s.t;
+  $("#bSub").textContent=s.sub||"";
+  drawTabs(); drawSub();
+  $("#actsWrap").innerHTML=s.acts?acts(s.acts):"";
+  $("#screen").innerHTML=s.body;
+  $("#payWrap").innerHTML=s.pay?`<div class="paybar">
+      <div class="cnt"><b>${s.pay.n}</b> productos en la venta actual</div>
+      <div class="figs">
+        <div class="fig"><div class="l">Total</div><div class="v">${s.pay.total}</div></div>
+        <div class="fig"><div class="l">Pagó con</div><div class="v">${s.pay.pago}</div></div>
+        <div class="fig"><div class="l">Cambio</div><div class="v">${s.pay.cambio}</div></div>
+      </div>
+      <div class="cobrar">${A("Cobrar",{fk:"F12",pri:1,modal:"cobro"})}</div>
+      <div class="tot"><div class="l">Total a cobrar</div><div class="v">${s.pay.total}</div></div>
+    </div>`:"";
+  window.scrollTo({top:0,behavior:"instant"});
+}
+
+let curModal=null;
+function openM(k){
+  const m=M[k]; if(!m)return;
+  curModal=k;
+  $("#mTitle").textContent=m.t; $("#mSub").textContent=m.s||"";
+  $("#mSub").style.display=m.s?"block":"none";
+  $("#mBody").innerHTML=(typeof m.b==="function")?m.b():m.b;
+  $("#mLeft").innerHTML=(m.l||[]).map(b=>A(b.l,b)).join("");
+  $("#mFoot").innerHTML=m.f.map(b=>A(b.l,b)).join("");
+  $("#ov").classList.add("on");
+}
+function closeM(){
+  $("#ov").classList.remove("on"); curModal=null;
+  document.querySelectorAll("#actsWrap button.act.on").forEach(b=>b.classList.remove("on"));
+}
+
+/* ---- login ---- */
+function showLogin(){
+  logged=false; setColor("op");
+  $("#tabs").innerHTML=""; $("#subnav").innerHTML=""; $("#actsWrap").innerHTML=""; $("#payWrap").innerHTML="";
+  $("#bTitle").textContent="INICIAR SESIÓN"; $("#bSub").textContent="";
+  $("#screen").innerHTML=`<div style="max-width:400px;margin:36px auto">
+    ${G(1,[fld("Usuario","roxana",{hu:"HU-USR-01"}),fld("Contraseña","••••••••")])}
+    ${acts([{l:"Entrar",fk:"ENTER",pri:1,act:1,go:"venta"}])}
+    ${note("Hoy el sistema entra directo como «Administrador de la Tienda», sin pedir nada. Cada persona tendrá su usuario, y cada venta y cada cambio de precio quedará asociado a quien lo hizo.")}
+    ${warn("Si las credenciales no coinciden, el mensaje dice «usuario o contraseña incorrectos» sin precisar cuál de los dos falló.")}</div>`;
+}
+S.login={mod:"op",t:"INICIAR SESIÓN",sub:"",body:""};
+
+/* ---- eventos ---- */
+document.addEventListener("click",e=>{
+  const t=e.target.closest("[data-tab]");
+  if(t&&!t.disabled){ closeM(); go(SUB[t.getAttribute("data-tab")][0][0]); return; }
+  const g=e.target.closest("[data-go]");
+  if(g&&!g.disabled){ closeM(); logged=true; go(g.getAttribute("data-go")); return; }
+  const dn=e.target.closest("[data-den]");
+  if(dn){
+    const k=dn.getAttribute("data-kind"), v=+dn.getAttribute("data-den"), op=+dn.getAttribute("data-op");
+    CASH_ST[k][v]=Math.max(0,(CASH_ST[k][v]||0)+op);
+    if(curModal) $("#mBody").innerHTML=(typeof M[curModal].b==="function")?M[curModal].b():M[curModal].b;
+    return;
+  }
+  const pz=e.target.closest("[data-pay]");
+  if(pz){
+    PAY.medio=pz.getAttribute("data-pay");
+    if(curModal) $("#mBody").innerHTML=M[curModal].b();
+    return;
+  }
+  const m=e.target.closest("[data-modal]");
+  if(m){
+    if(m.classList.contains("act")){
+      document.querySelectorAll("#actsWrap button.act.on").forEach(b=>b.classList.remove("on"));
+      if(m.closest("#actsWrap")) m.classList.add("on");
+    }
+    openM(m.getAttribute("data-modal")); return; }
+  if(e.target.closest("[data-act]")){ closeM(); return; }
+  if(e.target.id==="mX"||e.target.id==="ov") closeM();
+  if(e.target.id==="mapBtn"){ closeM(); go("mapa"); }
+  if(e.target.id==="cmpBtn"){ closeM(); go("comparar"); }
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){closeM();return}
+  if(!logged) return;
+  const fk={F1:"op",F2:"cat",F3:"inv",F4:"cli",F5:"com",F6:"rep",F7:"adm"}[e.key];
+  if(fk){ e.preventDefault(); const first=SUB[fk][0][0];
+    if(!(role==="vend"&&!VEND_OK.includes(first))){ closeM(); go(first);} return; }
+  if(e.key==="F10"&&cur==="venta"){e.preventDefault();openM("buscar")}
+});
+$("#annChk").addEventListener("change",e=>document.body.classList.toggle("ann",e.target.checked));
+$("#offChk").addEventListener("change",e=>{
+  $("#stSync").innerHTML=e.target.checked
+    ?`<span class="dot off"></span>Sin conexión · 4 operaciones pendientes de enviar`
+    :`<span class="dot"></span>Sincronizado`;});
+$("#roleSel").addEventListener("change",e=>{
+  role=e.target.value;
+  $("#whoami").textContent=role==="admin"?"Roxana Cifuentes":"Turno de mostrador";
+  $("#whorole").textContent=role==="admin"?"Administradora":"Vendedora";
+  if(role==="vend"&&!VEND_OK.includes(cur)) go("venta"); else go(cur);});
+
+showLogin();
+</script>
+</body>
+</html>
