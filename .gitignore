@@ -197,5 +197,9 @@ guia-conexion-vm-emporio.local.md
 *_id_rsa
 id_ed25519
 id_rsa
+
+# Exports de chat (contienen credenciales del sistema antiguo y contenido personal)
+WhatsApp Chat*/
+WhatsApp Chat*.zip
 *.pem
 *.ppk
