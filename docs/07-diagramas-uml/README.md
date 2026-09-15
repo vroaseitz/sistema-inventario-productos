@@ -2,17 +2,186 @@
 
 Diagramas mínimos exigidos por el instructivo.
 
-## Qué va aquí
-
 | Diagrama | Estado |
 | --- | --- |
-| Casos de uso | Pendiente |
-| Clases | Pendiente |
-| Secuencia de la funcionalidad principal | Pendiente |
-| Componentes | Pendiente |
-
-Guardar el archivo editable junto con la imagen exportada.
+| Casos de uso | ✅ |
+| Clases | ✅ |
+| Secuencia de la funcionalidad principal | ✅ |
+| Componentes | ✅ |
 
 > **Responde al instructivo:** diagramas UML mínimos (obligatorio transversal).
 >
 > La funcionalidad principal para el diagrama de secuencia es el **registro de una venta**.
+
+## 1. Casos de uso
+
+Dos perfiles (HU-USR-01/02 del Product Backlog): Administradora y Vendedora. La
+Vendedora no accede a Catálogo, Inventario, Compras, Reportes ni Administración
+(ver `docs/08-diseno/prototipo-naturalsur-pantalla-completa.html`).
+
+```mermaid
+flowchart LR
+    Vendedora([Vendedora])
+    Admin([Administradora])
+
+    Vendedora --> UC1[Registrar venta]
+    Vendedora --> UC2[Buscar producto]
+    Vendedora --> UC3[Abrir / cerrar turno de caja]
+    Vendedora --> UC4[Consultar cuenta de cliente]
+
+    Admin --> UC1
+    Admin --> UC2
+    Admin --> UC3
+    Admin --> UC5[Administrar catálogo]
+    Admin --> UC6[Registrar factura de compra]
+    Admin --> UC7[Ajustar inventario]
+    Admin --> UC8[Ver reportes de rentabilidad]
+    Admin --> UC9[Administrar usuarios]
+
+    UC5 -.include.-> UC10[Calcular margen y markup]
+    UC1 -.include.-> UC11[Sincronizar con Supabase]
+    UC7 -.include.-> UC11
+```
+
+## 2. Clases
+
+Refleja el código real de `src/pos/dominio/` (no un diseño aspiracional —
+arquitectura por capas, ver ADR 0001).
+
+```mermaid
+classDiagram
+    class Producto {
+        +str codigo
+        +str nombre
+        +Dinero precio
+        +UnidadVenta unidad_venta
+        +str categoria
+        +bool activo
+        +Costo costo
+        +es_granel bool
+        +margen Decimal
+        +markup Decimal
+        +calcular_total(cantidad) Dinero
+    }
+    class Dinero {
+        +int monto
+        +str moneda
+        +desde_decimal(valor) Dinero
+        +multiplicado_por(factor) Dinero
+    }
+    class Costo {
+        +Dinero neto
+        +Dinero iva
+        +Dinero impuesto_adicional
+        +total Dinero
+    }
+    class UnidadVenta {
+        <<enumeration>>
+        UNIDAD
+        GRANEL
+    }
+    class Existencia {
+        +str codigo_producto
+        +Decimal cantidad
+        +ingresar(cantidad)
+        +descontar(cantidad)
+    }
+    class RepositorioProductos {
+        <<interface>>
+        +guardar(producto)
+        +obtener_por_codigo(codigo) Producto
+        +listar() list~Producto~
+    }
+    class RepositorioExistencias {
+        <<interface>>
+        +obtener(codigo) Existencia
+        +guardar(existencia)
+    }
+    class RegistrarProducto {
+        +repositorio RepositorioProductos
+        +ejecutar(codigo, nombre, precio, ...) Producto
+    }
+    class AjustarStock {
+        +repositorio RepositorioExistencias
+        +ingresar(codigo, cantidad) Existencia
+        +descontar(codigo, cantidad) Existencia
+    }
+
+    Producto "1" --> "1" Dinero : precio
+    Producto "1" --> "0..1" Costo : costo
+    Producto "1" --> "1" UnidadVenta
+    Costo "1" --> "3" Dinero : neto/iva/adicional
+    RegistrarProducto ..> RepositorioProductos : usa
+    RegistrarProducto ..> Producto : crea
+    AjustarStock ..> RepositorioExistencias : usa
+    AjustarStock ..> Existencia : modifica
+    RepositorioProductos <|.. RepositorioProductosSQLite : implementa
+    RepositorioExistencias <|.. RepositorioExistenciasSQLite : implementa
+```
+
+## 3. Secuencia — Registro de una venta
+
+Funcionalidad principal (HU-VTA-01/02). Ilustra el flujo objetivo una vez
+construido el módulo de ventas sobre los casos de uso y repositorios ya existentes;
+`RegistrarVenta` y `RepositorioVentas` son el trabajo de Sprint 4.
+
+```mermaid
+sequenceDiagram
+    participant V as Vendedora
+    participant GUI as Interfaz (Tkinter)
+    participant CU as RegistrarVenta (caso de uso)
+    participant RP as RepositorioProductos
+    participant RE as RepositorioExistencias
+    participant RV as RepositorioVentas
+    participant Cola as ColaSincronizacion
+
+    V->>GUI: escanea código de barras
+    GUI->>CU: agregar_linea(codigo, cantidad)
+    CU->>RP: obtener_por_codigo(codigo)
+    RP-->>CU: Producto (con costo y precio)
+    CU->>CU: calcular_total() / calcular ganancia (generada, no editable)
+    CU-->>GUI: línea agregada al ticket
+
+    V->>GUI: F12 Cobrar
+    GUI->>CU: confirmar_venta(medios_pago)
+    CU->>RE: descontar(codigo, cantidad) por cada línea
+    RE-->>CU: Existencia actualizada
+    CU->>RV: guardar(venta, líneas, pagos)
+    RV-->>CU: venta_id
+    CU->>Cola: encolar(entidad="venta", operacion="crear", id_cliente=uuid)
+    Cola-->>CU: encolado (pendiente de sincronizar con Supabase)
+    CU-->>GUI: venta confirmada, ticket cerrado
+    GUI-->>V: muestra vuelto y opción de reimprimir
+```
+
+## 4. Componentes
+
+```mermaid
+flowchart TB
+    subgraph Interfaz
+        GUI[Tkinter - VentanaProductos, VentanaVenta]
+    end
+    subgraph Aplicacion
+        CU1[Casos de uso: Registrar, Escanear,\nAjustarStock, SincronizarPendientes]
+    end
+    subgraph Dominio
+        D1[Producto, Costo, Dinero,\nInventario, CodigoBarras]
+    end
+    subgraph Infraestructura
+        SQLite[(SQLite local\nespejo offline)]
+        Cola[Cola de sincronizacion]
+        Adaptador[Adaptador Supabase]
+    end
+    subgraph Externo
+        Supabase[(Supabase / PostgreSQL)]
+    end
+
+    GUI --> CU1
+    CU1 --> D1
+    CU1 --> SQLite
+    CU1 --> Cola
+    Cola --> Adaptador
+    Adaptador -- HTTPS / TLS 1.2 --> Supabase
+
+    style Externo fill:#f5f5f5,stroke:#999
+```
