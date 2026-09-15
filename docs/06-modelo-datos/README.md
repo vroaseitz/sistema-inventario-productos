@@ -34,6 +34,13 @@ original:
 - **`costo_cargado` es un booleano separado del monto** — 358 productos con costo
   cero generaban 100 % de margen falso porque el sistema no distinguía «cuesta
   cero» de «no sé cuánto cuesta» (implementado: `Producto.costo: Costo | None`).
+- **`medio_pago` es `tarjeta`, no `debito`/`credito` separados** — el terminal TUU
+  solo pide seleccionar «tarjeta» al cobrar; no distingue débito de crédito ni se
+  lo muestra a quien atiende, así que pedirle esa distinción al sistema sería
+  forzarla a adivinar. El desglose real (débito/crédito) lo entrega el propio
+  cierre del terminal, y la conciliación de caja compara el total de `tarjeta` del
+  sistema contra esa suma — no reconstruye el desglose. Corrige HU-VTA-03,
+  HU-CAJ-02 y HU-CAJ-03.
 
 ## 1. Diagrama entidad-relación
 
@@ -185,7 +192,7 @@ erDiagram
     VENTA_PAGO {
         int id PK
         int venta_id FK
-        text medio_pago "efectivo|debito|credito|transferencia|credito_cliente"
+        text medio_pago "efectivo|tarjeta|transferencia|credito_cliente"
         numeric monto
     }
     AUDITORIA {

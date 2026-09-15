@@ -16,13 +16,13 @@ class RepositorioProductosSQLite:
         # SQL parametrizado (nunca interpolacion de strings): evita inyeccion SQL.
         self._con.execute(
             """
-            INSERT INTO productos (codigo, nombre, precio, unidad_venta, categoria, activo)
+            INSERT INTO productos (codigo, nombre, precio, unidad_venta, categoria_id, activo)
             VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(codigo) DO UPDATE SET
                 nombre=excluded.nombre,
                 precio=excluded.precio,
                 unidad_venta=excluded.unidad_venta,
-                categoria=excluded.categoria,
+                categoria_id=excluded.categoria_id,
                 activo=excluded.activo
             """,
             (
@@ -30,7 +30,7 @@ class RepositorioProductosSQLite:
                 producto.nombre,
                 producto.precio.monto,
                 producto.unidad_venta.value,
-                producto.categoria,
+                producto.categoria_id,
                 1 if producto.activo else 0,
             ),
         )
@@ -50,6 +50,6 @@ class RepositorioProductosSQLite:
             nombre=fila["nombre"],
             precio=Dinero(int(fila["precio"])),
             unidad_venta=UnidadVenta(fila["unidad_venta"]),
-            categoria=fila["categoria"],
+            categoria_id=fila["categoria_id"],
             activo=bool(fila["activo"]),
         )

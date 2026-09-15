@@ -30,7 +30,7 @@ class Producto:
     nombre: str
     precio: Dinero
     unidad_venta: UnidadVenta = UnidadVenta.UNIDAD
-    categoria: str | None = None
+    categoria_id: int | None = None
     activo: bool = True
     costo: Costo | None = None
     _validado: bool = field(default=False, repr=False)

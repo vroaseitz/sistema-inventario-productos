@@ -94,12 +94,22 @@ def test_escanear_codigo_producto_inexistente():
 def test_ajustar_stock_ingreso_y_descuento():
     repo = RepoExistenciasMemoria()
     caso = AjustarStock(repo)
-    caso.ingresar("12345", Decimal("10"))
-    e = caso.descontar("12345", Decimal("3"))
+    caso.ingresar("12345", Decimal("10"), motivo="Entrada de mercaderia")
+    e = caso.descontar("12345", Decimal("3"), motivo="Merma por vencimiento")
     assert e.cantidad == Decimal("7")
 
 
 def test_descontar_sin_existencia_falla():
     caso = AjustarStock(RepoExistenciasMemoria())
     with pytest.raises(ReglaInventarioInvalida):
-        caso.descontar("nope", Decimal("1"))
+        caso.descontar("nope", Decimal("1"), motivo="Ajuste manual")
+
+
+def test_ajustar_stock_exige_motivo():
+    # HU-INV-04: el motivo es obligatorio, corrige los 29.715 ajustes sin causa
+    # del sistema legado.
+    caso = AjustarStock(RepoExistenciasMemoria())
+    with pytest.raises(ReglaInventarioInvalida):
+        caso.ingresar("12345", Decimal("10"), motivo="")
+    with pytest.raises(ReglaInventarioInvalida):
+        caso.ingresar("12345", Decimal("10"), motivo="   ")

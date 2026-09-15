@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS productos (
     nombre        TEXT NOT NULL,
     precio        INTEGER NOT NULL CHECK (precio >= 0),
     unidad_venta  TEXT NOT NULL DEFAULT 'unidad',
-    categoria     TEXT,
+    categoria_id  INTEGER,
     activo        INTEGER NOT NULL DEFAULT 1
 );
 

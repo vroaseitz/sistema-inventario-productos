@@ -20,7 +20,7 @@ class RegistrarProducto:
         nombre: str,
         precio: int,
         unidad_venta: UnidadVenta = UnidadVenta.UNIDAD,
-        categoria: str | None = None,
+        categoria_id: int | None = None,
     ) -> Producto:
         if self.repositorio.obtener_por_codigo(codigo) is not None:
             raise DatosProductoInvalidos(f"Ya existe un producto con codigo {codigo}")
@@ -29,7 +29,7 @@ class RegistrarProducto:
             nombre=nombre,
             precio=Dinero(precio),
             unidad_venta=unidad_venta,
-            categoria=categoria,
+            categoria_id=categoria_id,
         )
         self.repositorio.guardar(producto)
         return producto

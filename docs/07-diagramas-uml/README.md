@@ -55,7 +55,7 @@ classDiagram
         +str nombre
         +Dinero precio
         +UnidadVenta unidad_venta
-        +str categoria
+        +int categoria_id
         +bool activo
         +Costo costo
         +es_granel bool
@@ -103,8 +103,8 @@ classDiagram
     }
     class AjustarStock {
         +repositorio RepositorioExistencias
-        +ingresar(codigo, cantidad) Existencia
-        +descontar(codigo, cantidad) Existencia
+        +ingresar(codigo, cantidad, motivo) Existencia
+        +descontar(codigo, cantidad, motivo) Existencia
     }
 
     Producto "1" --> "1" Dinero : precio
@@ -118,6 +118,12 @@ classDiagram
     RepositorioProductos <|.. RepositorioProductosSQLite : implementa
     RepositorioExistencias <|.. RepositorioExistenciasSQLite : implementa
 ```
+
+`Producto.categoria_id` referencia la tabla `categoria` del modelo ER (§06) en vez
+de guardar el nombre como texto: renombrar o fusionar categorías (HU-PRD-10) solo
+debe tocar una fila de esa tabla, no reescribir cada producto que la usa.
+`AjustarStock.ingresar/descontar` exigen `motivo` (HU-INV-04) — es la corrección de
+los 29.715 ajustes de inventario sin causa del sistema legado.
 
 ## 3. Secuencia — Registro de una venta
 
