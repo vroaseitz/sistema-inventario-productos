@@ -6,7 +6,7 @@ import pytest
 
 from pos.dominio.errores import DatosProductoInvalidos
 from pos.dominio.productos import Producto, UnidadVenta
-from pos.dominio.value_objects import Dinero
+from pos.dominio.value_objects import Costo, Dinero
 
 
 def test_dinero_no_admite_negativos():
@@ -49,3 +49,35 @@ def test_producto_granel_cobra_por_kilo():
     )
     assert p.es_granel is True
     assert p.calcular_total(Decimal("1.500")).monto == 12000
+
+
+def test_margen_y_markup_no_disponibles_sin_costo_cargado():
+    # HU-PRD-03 / HU-PRD-08: sin costo cargado, los indicadores no estan disponibles.
+    p = Producto(codigo="1", nombre="Miel", precio=Dinero(3000))
+    assert p.margen is None
+    assert p.markup is None
+
+
+def test_margen_y_markup_se_calculan_sobre_el_neto():
+    # Costo neto 1000, precio 2000 -> margen 50% sobre venta, markup 100% sobre costo.
+    p = Producto(
+        codigo="1",
+        nombre="Miel",
+        precio=Dinero(2000),
+        costo=Costo(neto=Dinero(1000), iva=Dinero(190)),
+    )
+    assert p.margen == Decimal("0.5000")
+    assert p.markup == Decimal("1.0000")
+
+
+def test_markup_no_disponible_con_costo_neto_cero():
+    # HU-PRD-08: costo neto realmente cero es distinto de costo no cargado,
+    # pero el markup sobre cero sigue sin estar definido.
+    p = Producto(
+        codigo="1",
+        nombre="Muestra gratis",
+        precio=Dinero(500),
+        costo=Costo(neto=Dinero(0), iva=Dinero(0)),
+    )
+    assert p.margen == Decimal("1.0000")
+    assert p.markup is None

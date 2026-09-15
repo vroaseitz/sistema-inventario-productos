@@ -50,3 +50,26 @@ class Dinero:
     def _misma_moneda(self, otro: Dinero) -> None:
         if self.moneda != otro.moneda:
             raise DatosProductoInvalidos("No se pueden operar montos de distinta moneda")
+
+
+@dataclass(frozen=True)
+class Costo:
+    """Costo de adquisicion de un producto (HU-PRD-02).
+
+    Neto, IVA e impuesto adicional se capturan como tres campos separados,
+    tal como vienen en la factura del proveedor -- el IVA no se deriva como
+    un porcentaje fijo del neto porque el impuesto adicional a bebidas no es
+    uniforme entre productos. El neto queda guardado tal cual, sin impuesto
+    incluido: en el sistema legado ese mismo campo se cargaba con IVA
+    incluido, lo que distorsionaba el margen y hacia irrecuperable el IVA
+    credito. Por eso `Producto.margen` y `Producto.markup` (HU-PRD-03) se
+    calculan sobre `neto`, no sobre `total`.
+    """
+
+    neto: Dinero
+    iva: Dinero
+    impuesto_adicional: Dinero = Dinero(0)
+
+    @property
+    def total(self) -> Dinero:
+        return self.neto + self.iva + self.impuesto_adicional
