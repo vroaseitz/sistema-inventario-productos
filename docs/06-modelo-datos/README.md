@@ -19,7 +19,7 @@ análisis de la base legada, no a una preferencia de diseño:
 | 5 | Vencimiento y lote en tabla propia | No existía ningún campo de vencimiento en las 241 columnas del esquema legado |
 | 6 | Motivo obligatorio en ajustes de inventario | 29.715 ajustes manuales sin causa registrada |
 | 7 | Auditoría de quién hizo cada cambio | La tabla equivalente del sistema legado estaba vacía |
-| 8 | Perfiles de usuario diferenciados | Credencial genérica compartida por todo el local |
+| 8 | Autenticación local, con auditoría, sin roles diferenciados (perfil único) | Credencial genérica compartida por todo el local. Decisión de alcance del 16-09-2026: se prioriza login + auditoría (2 de 3 sub-objetivos de OE12); el control de acceso por roles queda como incremento posterior, aún sin tarea ni fecha |
 | 9 | Medios de pago como tabla hija de la venta | La transferencia se registraba como efectivo; el pago mixto era imposible |
 
 Además, tres decisiones que los datos exigieron aunque no estaban en la lista
@@ -63,9 +63,6 @@ erDiagram
     VENTA }o--|| USUARIO : registra
     CLIENTE ||--o{ MOVIMIENTO_CREDITO : acumula
     VENTA ||--o| MOVIMIENTO_CREDITO : origina
-    USUARIO }o--|| ROL : tiene
-    ROL ||--o{ ROL_PERMISO : otorga
-    PERMISO ||--o{ ROL_PERMISO : concede
     USUARIO ||--o{ TURNO_CAJA : abre
     USUARIO ||--o{ AUDITORIA : genera
     USUARIO ||--o{ MOVIMIENTO_INVENTARIO : ejecuta
@@ -143,23 +140,10 @@ erDiagram
         numeric monto
         timestamp creado_en
     }
-    ROL {
-        int id PK
-        text nombre "Administradora|Vendedora"
-    }
-    PERMISO {
-        int id PK
-        text nombre
-    }
-    ROL_PERMISO {
-        int rol_id PK_FK
-        int permiso_id PK_FK
-    }
     USUARIO {
         int id PK
         text nombre
         text correo UK
-        int rol_id FK
         text contrasena_hash
         bool activo
     }

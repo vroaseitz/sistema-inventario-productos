@@ -15,28 +15,26 @@ Diagramas mínimos exigidos por el instructivo.
 
 ## 1. Casos de uso
 
-Dos perfiles (HU-USR-01/02 del Product Backlog): Administradora y Vendedora. La
-Vendedora no accede a Catálogo, Inventario, Compras, Reportes ni Administración
-(ver `docs/08-diseno/prototipo-naturalsur-pantalla-completa.html`).
+**Perfil único** (HU-USR-01/03 del Product Backlog, decisión de alcance del
+16-09-2026): se elimina la distinción Administradora/Vendedora. Cualquier
+usuaria autenticada accede a todos los casos de uso; el control de acceso por
+rol queda como incremento posterior, sin tarea ni fecha todavía. El
+`prototipo-naturalsur-pantalla-completa.html` (`docs/08-diseno/`) sigue
+mostrando el selector de perfil porque es anterior a esta decisión — no
+representa el alcance actual.
 
 ```mermaid
 flowchart LR
-    Vendedora([Vendedora])
-    Admin([Administradora])
+    Usuaria([Usuaria])
 
-    Vendedora --> UC1[Registrar venta]
-    Vendedora --> UC2[Buscar producto]
-    Vendedora --> UC3[Abrir / cerrar turno de caja]
-    Vendedora --> UC4[Consultar cuenta de cliente]
-
-    Admin --> UC1
-    Admin --> UC2
-    Admin --> UC3
-    Admin --> UC5[Administrar catálogo]
-    Admin --> UC6[Registrar factura de compra]
-    Admin --> UC7[Ajustar inventario]
-    Admin --> UC8[Ver reportes de rentabilidad]
-    Admin --> UC9[Administrar usuarios]
+    Usuaria --> UC1[Registrar venta]
+    Usuaria --> UC2[Buscar producto]
+    Usuaria --> UC3[Abrir / cerrar turno de caja]
+    Usuaria --> UC4[Consultar cuenta de cliente]
+    Usuaria --> UC5[Administrar catálogo]
+    Usuaria --> UC6[Registrar factura de compra]
+    Usuaria --> UC7[Ajustar inventario]
+    Usuaria --> UC8[Ver reportes de rentabilidad]
 
     UC5 -.include.-> UC10[Calcular margen y markup]
     UC1 -.include.-> UC11[Sincronizar con Supabase]
