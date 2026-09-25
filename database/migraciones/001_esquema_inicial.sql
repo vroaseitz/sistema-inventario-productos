@@ -26,3 +26,15 @@ CREATE TABLE IF NOT EXISTS cola_sincronizacion (
     datos      JSONB NOT NULL,
     creado_en  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Historial de cambios de precio (HU-PRD-05)
+CREATE TABLE IF NOT EXISTS historial_precios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo_producto TEXT NOT NULL,
+    precio_anterior INTEGER NOT NULL,
+    precio_nuevo INTEGER NOT NULL,
+    usuario TEXT NOT NULL,
+    fecha TIMESTAMP NOT NULL
+);
+
+ALTER TABLE productos ADD COLUMN costo INTEGER NULL;
