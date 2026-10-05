@@ -6,6 +6,6 @@ Un documento por integrante.
 Apellido_Nombre_2.1_APT122_DiarioReflexionFase2.docx
 ```
 
-- [ ] `Roa_Victoria_2.1_APT122_DiarioReflexionFase2`
+- [X] `Roa_Victoria_2.1_APT122_DiarioReflexionFase2`
 - [ ] `Guzman_Eduardo_2.1_APT122_DiarioReflexionFase2`
 - [ ] `Silva_Fernando_2.1_APT122_DiarioReflexionFase2`
