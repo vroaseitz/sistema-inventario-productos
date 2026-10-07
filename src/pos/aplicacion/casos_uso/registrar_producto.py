@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pos.aplicacion.puertos import RepositorioProductos
 from pos.dominio.errores import DatosProductoInvalidos
 from pos.dominio.productos import Producto, UnidadVenta
-from pos.dominio.value_objects import Dinero
+from pos.dominio.value_objects import Costo, Dinero
 
 
 @dataclass
@@ -19,24 +19,22 @@ class RegistrarProducto:
         codigo: str,
         nombre: str,
         precio: int,
-        categoria_id: str,
         unidad_venta: UnidadVenta = UnidadVenta.UNIDAD,
-        es_perecible: bool = False,
-        dias_aviso_vencimiento: int | None = None,
+        categoria_id: int | None = None,
+        costo: int | None = None,
     ) -> Producto:
-        
-        producto_existente = self.repositorio.obtener_por_codigo(codigo)
-        if producto_existente and producto_existente.activo:
-            raise DatosProductoInvalidos(f"Ya existe un producto activo con codigo {codigo}")
-            
+        if self.repositorio.obtener_por_codigo(codigo) is not None:
+            raise DatosProductoInvalidos(f"Ya existe un producto con codigo {codigo}")
+
+        costo_obj = Costo(neto=Dinero(costo), iva=Dinero(0)) if costo is not None else None
+
         producto = Producto(
             codigo=codigo,
             nombre=nombre,
             precio=Dinero(precio),
-            categoria_id=categoria_id,
             unidad_venta=unidad_venta,
-            es_perecible=es_perecible,
-            dias_aviso_vencimiento=dias_aviso_vencimiento,
+            categoria_id=categoria_id,
+            costo=costo_obj,
         )
         self.repositorio.guardar(producto)
         return producto

@@ -23,6 +23,16 @@ CREATE TABLE IF NOT EXISTS existencias (
     FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
 );
 
+CREATE TABLE IF NOT EXISTS historial_precios (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo_producto TEXT NOT NULL,
+    precio_anterior INTEGER NOT NULL,
+    precio_nuevo    INTEGER NOT NULL,
+    usuario         TEXT NOT NULL,
+    fecha           TEXT NOT NULL,
+    FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
+);
+
 -- Cola de operaciones pendientes de sincronizar con Supabase (modo offline).
 -- id_cliente es un UUID generado en el cliente: permite sincronizacion idempotente
 -- (ON CONFLICT DO NOTHING en el destino) aunque una operacion se reintente.

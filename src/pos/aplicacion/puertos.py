@@ -10,14 +10,15 @@ from __future__ import annotations
 from typing import Protocol, runtime_checkable
 
 from pos.dominio.inventario import Existencia
-from pos.dominio.productos import Producto
-from pos.dominio.productos import RegistroCambioPrecio
+from pos.dominio.productos import Producto, RegistroCambioPrecio
+
 
 @runtime_checkable
 class RepositorioProductos(Protocol):
     def guardar(self, producto: Producto) -> None: ...
     def obtener_por_codigo(self, codigo: str) -> Producto | None: ...
     def listar(self) -> list[Producto]: ...
+    def buscar(self, termino: str) -> list[Producto]: ...
 
 
 @runtime_checkable
@@ -45,19 +46,9 @@ class PublicadorRemoto(Protocol):
 
     def publicar(self, operacion: dict) -> None: ...
 
-from pos.dominio.productos import RegistroCambioPrecio
-
 @runtime_checkable
 class RepositorioHistorial(Protocol):
     """Puerto para persistir el historial de cambios de precio (HU-PRD-05)."""
-    
+
     def guardar_registro_precio(self, registro: RegistroCambioPrecio) -> None: ...
 
-@runtime_checkable
-class RepositorioProductos(Protocol):
-    def guardar(self, producto: Producto) -> None: ...
-    def obtener_por_codigo(self, codigo: str) -> Producto | None: ...
-    def listar(self) -> list[Producto]: ...
-    
-    # NUEVO: Método de búsqueda tolerante
-    def buscar(self, termino: str) -> list[Producto]: ...

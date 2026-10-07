@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
 from enum import Enum
 
 from .errores import DatosProductoInvalidos
-from .value_objects import Dinero
-
-from datetime import datetime
+from .value_objects import Costo, Dinero
 
 
 class UnidadVenta(Enum):
@@ -30,36 +30,50 @@ class Producto:
     codigo: str
     nombre: str
     precio: Dinero
-    categoria_id: str  # Ahora es obligatorio y representa una referencia
     unidad_venta: UnidadVenta = UnidadVenta.UNIDAD
-    es_perecible: bool = False
-    dias_aviso_vencimiento: int | None = None
+    categoria_id: int | None = None
     activo: bool = True
+    costo: Costo | None = None
     _validado: bool = field(default=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.codigo or not self.codigo.strip():
             raise DatosProductoInvalidos("El producto requiere un codigo")
-        
         if not self.nombre or not self.nombre.strip():
             raise DatosProductoInvalidos("El producto requiere un nombre")
-        # Normalización del nombre
-        self.nombre = self.nombre.strip().upper()
-
         if not isinstance(self.precio, Dinero):
             raise DatosProductoInvalidos("El precio debe ser un value object Dinero")
-            
-        # Validación estricta de categoría
-        if not self.categoria_id or not str(self.categoria_id).strip():
-            raise DatosProductoInvalidos("El sistema impide guardar un producto sin categoria asignada")
-            
-        # Validación de producto perecible
-        if self.es_perecible and (self.dias_aviso_vencimiento is None or self.dias_aviso_vencimiento < 0):
-            raise DatosProductoInvalidos("Un producto perecible requiere indicar con cuantos dias avisar antes del vencimiento")
 
     @property
     def es_granel(self) -> bool:
         return self.unidad_venta is UnidadVenta.GRANEL
+
+    @property
+    def margen(self) -> Decimal | None:
+        """Margen sobre venta: (precio - costo neto) / precio.
+
+        `None` si el producto no tiene costo capturado todavia.
+        """
+        if self.costo is None:
+            return None
+        if self.precio.monto == 0:
+            raise DatosProductoInvalidos("No se puede calcular margen con precio 0")
+        diferencia = self.precio.monto - self.costo.neto.monto
+        return (Decimal(diferencia) / Decimal(self.precio.monto)).quantize(Decimal("0.0001"))
+
+    @property
+    def markup(self) -> Decimal | None:
+        """Markup sobre costo: (precio - costo neto) / costo neto.
+
+        `None` si el producto no tiene costo capturado todavia (HU-PRD-08:
+        costo `None`), o si el costo neto cargado es legitimamente cero (el
+        markup sobre cero no esta definido, pero a diferencia del caso
+        anterior esto no es un dato faltante).
+        """
+        if self.costo is None or self.costo.neto.monto == 0:
+            return None
+        diferencia = self.precio.monto - self.costo.neto.monto
+        return (Decimal(diferencia) / Decimal(self.costo.neto.monto)).quantize(Decimal("0.0001"))
 
     def calcular_total(self, cantidad) -> Dinero:
         """Total para una cantidad dada.
@@ -74,13 +88,14 @@ class Producto:
         if int(cantidad) != cantidad or cantidad < 0:
             raise DatosProductoInvalidos("Un producto por unidad requiere cantidad entera >= 0")
         return self.precio.multiplicado_por(Decimal(int(cantidad)))
+
+
 @dataclass
 class RegistroCambioPrecio:
     """Registro inmutable de un cambio de precio (HU-PRD-05)."""
+
     codigo_producto: str
     precio_anterior: Dinero
     precio_nuevo: Dinero
     usuario: str
     fecha: datetime = field(default_factory=datetime.now)
-    
-    

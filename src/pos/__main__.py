@@ -10,13 +10,13 @@ Uso:
 
 from __future__ import annotations
 
-from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
 from pos.aplicacion.casos_uso.editar_producto import EditarProducto  # NUEVO
+from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
 from pos.infraestructura.config import Config
 from pos.infraestructura.sqlite.conexion import crear_conexion
 from pos.infraestructura.sqlite.esquema import crear_esquema
-from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
 from pos.infraestructura.sqlite.repositorio_historial import RepositorioHistorialSQLite  # NUEVO
+from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
 
 
 def main() -> None:
