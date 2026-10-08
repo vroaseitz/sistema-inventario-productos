@@ -13,4 +13,4 @@ Capstone (PTY4614) · Semanas 5 a 15 · **50% de la nota final**
 | `Evidencias Individuales/` | Diario de reflexión de cada integrante |
 | `Evidencias de Proyecto/` | Presentación, documentación, sistema y base de datos |
 
-> Fase aún no iniciada. La estructura queda creada para que los documentos tengan dónde llegar.
+> Corte al 08-10-2026: evidencias del informe de avance (semana 10) cargadas. El informe final se completa en la semana 15.
