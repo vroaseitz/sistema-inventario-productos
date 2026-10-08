@@ -17,7 +17,7 @@ from pos.dominio.errores import (
     DatosProductoInvalidos,
     ReglaInventarioInvalida,
 )
-from pos.dominio.inventario import Existencia
+from pos.dominio.inventario import AjusteInventario, Existencia, MotivoAjuste
 from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Dinero
 
@@ -45,6 +45,15 @@ class RepoExistenciasMemoria:
 
     def guardar(self, existencia):
         self._datos[existencia.codigo_producto] = existencia
+
+
+class RepoAjustesMemoria:
+    def __init__(self):
+        self.ajustes: list[AjusteInventario] = []
+
+    def guardar_ajuste(self, ajuste: AjusteInventario) -> None:
+        self.ajustes.append(ajuste)
+
 
 
 def ean13(doce: str) -> str:
@@ -103,3 +112,51 @@ def test_descontar_sin_existencia_falla():
     caso = AjustarStock(RepoExistenciasMemoria())
     with pytest.raises(ReglaInventarioInvalida):
         caso.descontar("nope", Decimal("1"))
+
+
+def test_ajustar_stock_ejecutar_merma_calcula_diferencia_y_persiste():
+    repo_existencias = RepoExistenciasMemoria()
+    repo_ajustes = RepoAjustesMemoria()
+    repo_existencias.guardar(Existencia("P001", Decimal("10.000")))
+
+    caso = AjustarStock(repo_existencias, repo_ajustes)
+    ajuste = caso.ejecutar(
+        codigo_producto="P001",
+        cantidad_real_contada=8.5,
+        motivo=MotivoAjuste.MERMA,
+        usuario="admin",
+    )
+
+    assert isinstance(ajuste, AjusteInventario)
+    assert ajuste.codigo_producto == "P001"
+    assert ajuste.cantidad_anterior == Decimal("10.000")
+    assert ajuste.cantidad_nueva == Decimal("8.5")
+    assert ajuste.diferencia_conteo == Decimal("-1.5")
+    assert ajuste.motivo == MotivoAjuste.MERMA
+    assert ajuste.usuario == "admin"
+
+    # Verificar que el stock se actualizó
+    assert repo_existencias.obtener("P001").cantidad == Decimal("8.5")
+    # Verificar que se registró en el repo de ajustes
+    assert len(repo_ajustes.ajustes) == 1
+    assert repo_ajustes.ajustes[0] == ajuste
+
+
+def test_ajustar_stock_producto_sin_existencia_previa():
+    repo_existencias = RepoExistenciasMemoria()
+    repo_ajustes = RepoAjustesMemoria()
+
+    caso = AjustarStock(repo_existencias, repo_ajustes)
+    ajuste = caso.ejecutar(
+        codigo_producto="NUEVO",
+        cantidad_real_contada=5.0,
+        motivo=MotivoAjuste.INVENTARIO_FISICO,
+        usuario="auditor",
+    )
+
+    assert ajuste.cantidad_anterior == Decimal("0")
+    assert ajuste.cantidad_nueva == Decimal("5.0")
+    assert ajuste.diferencia_conteo == Decimal("5.0")
+    assert repo_existencias.obtener("NUEVO").cantidad == Decimal("5.0")
+    assert len(repo_ajustes.ajustes) == 1
+
