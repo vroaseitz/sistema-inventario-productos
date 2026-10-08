@@ -189,3 +189,5 @@ dist/
 *.fdb
 # Variables de entorno con credenciales
 .env
+pos_local.db-shm
+pos_local.db-wal
