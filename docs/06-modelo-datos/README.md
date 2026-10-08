@@ -108,7 +108,7 @@ erDiagram
         numeric saldo "CHECK >= 0"
     }
     EXISTENCIA {
-        int producto_id PK_FK
+        int producto_id PK, FK
         numeric cantidad "CHECK >= 0"
     }
     MOTIVO_MOVIMIENTO {
