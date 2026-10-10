@@ -60,6 +60,7 @@ class Venta:
     pagos: list[Pago] = field(default_factory=list)
     estado: EstadoVenta = EstadoVenta.PAGADA
     creado_en: datetime = field(default_factory=datetime.now)
+    id: int | None = None
 
     def agregar_detalle(
         self,

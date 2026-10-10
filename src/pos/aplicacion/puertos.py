@@ -9,8 +9,10 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from pos.dominio.caja import MovimientoCaja, TurnoCaja
 from pos.dominio.inventario import Existencia
 from pos.dominio.productos import Producto
+from pos.dominio.ventas import Venta
 
 
 @runtime_checkable
@@ -33,6 +35,23 @@ class ColaSincronizacion(Protocol):
     def encolar(self, entidad: str, operacion: str, datos: dict, id_cliente: str) -> None: ...
     def pendientes(self) -> list[dict]: ...
     def marcar_sincronizada(self, id_cliente: str) -> None: ...
+
+
+@runtime_checkable
+class RepositorioTurnosCaja(Protocol):
+    """Puerto para persistir el turno de caja y sus movimientos (HU-CAJ-01/04)."""
+
+    def guardar(self, turno: TurnoCaja) -> None: ...
+    def obtener_abierto(self) -> TurnoCaja | None: ...
+    def registrar_movimiento(self, turno_id: int, movimiento: MovimientoCaja) -> None: ...
+
+
+@runtime_checkable
+class RepositorioVentas(Protocol):
+    """Puerto para persistir la venta, sus lineas y sus pagos (HU-VTA-01/03/04)."""
+
+    def guardar(self, venta: Venta) -> None: ...
+    def obtener_por_turno(self, turno_caja_id: int) -> list[Venta]: ...
 
 
 @runtime_checkable

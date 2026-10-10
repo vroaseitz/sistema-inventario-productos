@@ -51,6 +51,7 @@ class TurnoCaja:
     abierto_en: datetime = field(default_factory=datetime.now)
     cerrado_en: datetime | None = None
     movimientos: list[MovimientoCaja] = field(default_factory=list)
+    id: int | None = None
 
     @property
     def esta_abierto(self) -> bool:
