@@ -1,29 +1,27 @@
 # Documentación del proyecto
 
-Esta carpeta contiene toda la documentación académica y técnica del proyecto de título.
+Documentación del Proyecto de Título — Sistema de Punto de Venta e Inventario para Emporio NaturalSur.
 
-| Carpeta | Contenido |
-|---|---|
-| `propuesta/` | Propuesta de proyecto y anteproyecto presentados a la institución |
-| `avances/` | Informes de avance correspondientes a cada etapa del cronograma |
-| `diagramas/` | Diagramas UML (casos de uso, clases, secuencia, despliegue), modelo entidad-relación y modelamiento de procesos |
-| `actas/` | Actas de las reuniones del equipo y de las reuniones con la contraparte y el profesor guía |
-| `informe-final/` | Informe final del proyecto y material de apoyo para la defensa |
+Las carpetas están numeradas siguiendo el orden lógico del proyecto y cubren los artefactos que exige el instructivo de Capstone.
 
-## Convención de nombres
-
-Para mantener el orden y facilitar la búsqueda, los archivos siguen este formato:
-
-```
-AAAA-MM-DD_tipo-documento_version.extension
-```
-
-Ejemplos:
-
-- `2026-08-20_acta-reunion-01.docx`
-- `2026-09-15_informe-avance-etapa2_v1.pdf`
-- `2026-09-30_diagrama-casos-de-uso_v2.png`
+| Carpeta | Contenido | Exigido por el instructivo |
+| --- | --- | --- |
+| `01-diagnostico/` | Diagnóstico del sistema actual | Comprensión del problema |
+| `02-vision-producto/` | Product Vision y documento de inicio | Product Vision |
+| `03-backlog/` | Product Backlog, historias de usuario, Definition of Done | Necesidades del sistema |
+| `04-requisitos-no-funcionales/` | Seguridad, rendimiento, disponibilidad, portabilidad | Obligatorio transversal |
+| `05-arquitectura/` | Diagrama, componentes y comunicación | Obligatorio transversal |
+| `06-modelo-datos/` | Modelo ER y diccionario de datos | Obligatorio transversal |
+| `07-diagramas-uml/` | Casos de uso, clases, secuencia, componentes | Obligatorio transversal |
+| `08-diseno/` | Documento de diseño y decisiones técnicas | Diseño de la solución |
+| `09-plan-migracion/` | Estrategia, ensayos y plan de reversa | Propio del proyecto |
+| `10-sprints/` | Sprint Backlog y retrospectivas | Planificación |
+| `11-pruebas/` | Planes y resultados de pruebas | Obligatorio transversal |
+| `12-despliegue/` | Manual técnico de despliegue | Despliegue |
+| `13-innovacion/` | Sección de innovación | Obligatorio transversal |
+| `actas/` | Actas de reunión | Evidencia de gestión |
+| `informes/` | Informes de avance e informe final | Entregas de la asignatura |
 
 ## Nota sobre el control de versiones
 
-Los documentos de esta carpeta **sí se versionan** en Git. El archivo `.gitignore` del repositorio excluye únicamente los archivos temporales que genera Microsoft Office (los que comienzan con `~$`), no los documentos en sí.
+Los documentos de estas carpetas **sí se versionan** en Git. El `.gitignore` excluye únicamente los archivos temporales de Office (los que empiezan con `~$`), no los documentos.

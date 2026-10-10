@@ -52,7 +52,6 @@ class Dinero:
             raise DatosProductoInvalidos("No se pueden operar montos de distinta moneda")
 
 
-
 @dataclass(frozen=True)
 class Costo:
     """Costo de adquisicion de un producto (HU-PRD-02).

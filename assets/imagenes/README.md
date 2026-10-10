@@ -1,2 +1,2 @@
-# Imagenes
-Logos, iconos y recursos graficos usados por el sistema o por la documentacion.
+# Imágenes
+Logos, iconos y recursos gráficos usados por el sistema o por la documentación.

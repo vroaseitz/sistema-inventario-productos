@@ -1,4 +1,4 @@
-"""Caso de uso: ajustar el stock de un producto (ingreso, descuento y registro de ajustes/mermas)."""
+"""Caso de uso: ajustar stock de un producto (ingreso, descuento y registro de ajustes/mermas)."""
 
 from __future__ import annotations
 
@@ -12,6 +12,17 @@ from pos.dominio.inventario import AjusteInventario, Existencia, MotivoAjuste
 
 @dataclass
 class AjustarStock:
+    """Ajuste manual de stock (HU-INV-04): el motivo es obligatorio en ingreso/descuento.
+
+    Corrige el defecto del sistema legado, donde 29.715 ajustes manuales de
+    inventario quedaron sin ninguna causa registrada, haciendo imposible
+    distinguir una correccion de digitacion de una merma real.
+
+    `ejecutar()` cubre el flujo mas completo de ajuste por conteo fisico
+    (merma, robo, inventario fisico), que ademas deja un registro inmutable
+    via `RepositorioAjustes`.
+    """
+
     repositorio_existencias: RepositorioExistencias
     repositorio_ajustes: RepositorioAjustes | None = None
 
@@ -27,6 +38,24 @@ class AjustarStock:
     def repositorio(self) -> RepositorioExistencias:
         """Alias para mantener compatibilidad con código existente."""
         return self.repositorio_existencias
+
+    def ingresar(self, codigo_producto: str, cantidad: Decimal | float, motivo: str) -> Existencia:
+        self._validar_motivo(motivo)
+        existencia = self.repositorio_existencias.obtener(codigo_producto) or Existencia(
+            codigo_producto
+        )
+        existencia.ingresar(Decimal(str(cantidad)))
+        self.repositorio_existencias.guardar(existencia)
+        return existencia
+
+    def descontar(self, codigo_producto: str, cantidad: Decimal | float, motivo: str) -> Existencia:
+        self._validar_motivo(motivo)
+        existencia = self.repositorio_existencias.obtener(codigo_producto)
+        if existencia is None:
+            raise ReglaInventarioInvalida(f"No hay existencia registrada para {codigo_producto}")
+        existencia.descontar(Decimal(str(cantidad)))
+        self.repositorio_existencias.guardar(existencia)
+        return existencia
 
     def ejecutar(
         self,
@@ -62,16 +91,7 @@ class AjustarStock:
 
         return ajuste
 
-    def ingresar(self, codigo_producto: str, cantidad: Decimal | float) -> Existencia:
-        existencia = self.repositorio_existencias.obtener(codigo_producto) or Existencia(codigo_producto)
-        existencia.ingresar(Decimal(str(cantidad)))
-        self.repositorio_existencias.guardar(existencia)
-        return existencia
-
-    def descontar(self, codigo_producto: str, cantidad: Decimal | float) -> Existencia:
-        existencia = self.repositorio_existencias.obtener(codigo_producto)
-        if existencia is None:
-            raise ReglaInventarioInvalida(f"No hay existencia registrada para {codigo_producto}")
-        existencia.descontar(Decimal(str(cantidad)))
-        self.repositorio_existencias.guardar(existencia)
-        return existencia
+    @staticmethod
+    def _validar_motivo(motivo: str) -> None:
+        if not motivo or not motivo.strip():
+            raise ReglaInventarioInvalida("El ajuste de stock requiere un motivo")

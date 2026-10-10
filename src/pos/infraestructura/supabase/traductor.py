@@ -12,11 +12,11 @@ from __future__ import annotations
 # Placeholders con estilo psycopg2 (%s). Las sentencias aplican la operacion a las
 # TABLAS DE NEGOCIO (no a la cola): esa es la diferencia con un simple volcado de la cola.
 _SQL_PRODUCTO = (
-    "INSERT INTO productos (codigo, nombre, precio, unidad_venta, categoria, activo) "
+    "INSERT INTO productos (codigo, nombre, precio, unidad_venta, categoria_id, activo) "
     "VALUES (%s, %s, %s, %s, %s, %s) "
     "ON CONFLICT (codigo) DO UPDATE SET "
     "nombre = EXCLUDED.nombre, precio = EXCLUDED.precio, "
-    "unidad_venta = EXCLUDED.unidad_venta, categoria = EXCLUDED.categoria, "
+    "unidad_venta = EXCLUDED.unidad_venta, categoria_id = EXCLUDED.categoria_id, "
     "activo = EXCLUDED.activo"
 )
 
@@ -41,7 +41,7 @@ def traducir_operacion(operacion: dict) -> tuple[str, tuple]:
             datos["nombre"],
             datos["precio"],
             datos["unidad_venta"],
-            datos.get("categoria"),
+            datos.get("categoria_id"),
             datos.get("activo", True),
         )
         return _SQL_PRODUCTO, params

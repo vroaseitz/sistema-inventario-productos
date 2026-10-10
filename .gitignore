@@ -191,3 +191,17 @@ dist/
 .env
 pos_local.db-shm
 pos_local.db-wal
+
+# Llaves SSH y credenciales de la VM de migracion (NUNCA versionar)
+llaves-equipo/
+guia-conexion-vm-emporio.local.md
+*_id_ed25519
+*_id_rsa
+id_ed25519
+id_rsa
+
+# Exports de chat (contienen credenciales del sistema antiguo y contenido personal)
+WhatsApp Chat*/
+WhatsApp Chat*.zip
+*.pem
+*.ppk

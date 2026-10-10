@@ -1,9 +1,11 @@
-# Plan de migración de datos (Firebird → Supabase)
+# 09 · Plan de migración de datos (Firebird → Supabase)
 
 ## Principio: la migración está DESACOPLADA de la aplicación
 
 La app de escritorio **no** incluye ningún driver de Firebird. La migración es un
-**proceso único**, separado, que se ejecuta una sola vez en el corte del sistema.
+**proceso único**, separado, que se ejecuta una sola vez en el corte del sistema. No hay
+convivencia entre ambos sistemas: el respaldo previo se conserva intacto como garantía
+de reversa.
 
 ## Por qué desacoplada (hallazgo del premortem)
 
@@ -39,9 +41,16 @@ El respaldo previo (`gbak`) se conserva intacto. Si en los primeros días algo f
 se reinstala el sistema antiguo desde ese respaldo. **El plan de reversa se prueba
 (restore real), no solo se declara.**
 
+## Registro de ensayos
+
+Los ensayos son evidencia del proyecto: cada uno realizado en máquina virtual debe
+quedar documentado aquí con fecha, resultado, incidencias y correcciones aplicadas.
+
 ## Pendiente (requiere entorno real / acción de Fernando)
 
 - [ ] Conseguir copia del `PDVDATA.FDB` del local.
 - [ ] Instalar herramientas Firebird 2.5 (32-bit) y exportar las tablas a CSV.
 - [ ] Escribir el importador CSV → SQLite/Supabase con sus pruebas.
-- [ ] Ensayar la migración completa en máquina virtual y registrar la evidencia.
+- [ ] Ensayar la migración completa en máquina virtual y registrar la evidencia (checklist del día del corte incluido).
+
+> **Responde al instructivo:** plan de migración, mapeo Firebird → nuevo modelo, registro de ensayos y plan de reversa (obligatorio transversal).

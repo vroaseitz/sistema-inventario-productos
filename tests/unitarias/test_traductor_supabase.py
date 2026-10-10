@@ -21,14 +21,14 @@ def test_traduce_producto_a_upsert_idempotente():
                 "nombre": "Nueces",
                 "precio": 8000,
                 "unidad_venta": "granel",
-                "categoria": "Frutos secos",
+                "categoria_id": 5,
                 "activo": True,
             },
         )
     )
     assert "INSERT INTO productos" in sql
     assert "ON CONFLICT (codigo) DO UPDATE" in sql  # idempotente por clave de negocio
-    assert params == ("12345", "Nueces", 8000, "granel", "Frutos secos", True)
+    assert params == ("12345", "Nueces", 8000, "granel", 5, True)
 
 
 def test_traduce_producto_con_defaults():
@@ -37,7 +37,7 @@ def test_traduce_producto_con_defaults():
             "producto", {"codigo": "1", "nombre": "Arroz", "precio": 1000, "unidad_venta": "unidad"}
         )
     )
-    # categoria ausente -> None ; activo ausente -> True
+    # categoria_id ausente -> None ; activo ausente -> True
     assert params == ("1", "Arroz", 1000, "unidad", None, True)
 
 
