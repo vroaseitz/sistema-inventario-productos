@@ -19,3 +19,11 @@ class ReglaInventarioInvalida(ErrorDominio):
 
 class DatosProductoInvalidos(ErrorDominio):
     """Los datos para construir un producto no son validos."""
+
+
+class ReglaVentaInvalida(ErrorDominio):
+    """Operacion de venta que viola una regla (pago incompleto, linea invalida, etc.)."""
+
+
+class ReglaCajaInvalida(ErrorDominio):
+    """Operacion de caja que viola una regla (dos turnos abiertos, movimiento sin motivo, etc.)."""
