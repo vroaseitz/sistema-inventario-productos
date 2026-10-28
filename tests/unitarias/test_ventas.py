@@ -124,3 +124,78 @@ def test_descuento_de_linea_no_puede_superar_el_bruto():
     detalle.descuento_linea = Dinero(600)
     with pytest.raises(ReglaVentaInvalida):
         _ = detalle.subtotal
+
+
+# --- Hallazgos QA 26-10-2026 (Hallazgos-QA_NaturalSur.xlsx) ----------------
+
+
+def test_quitar_pago():
+    # D-18a: se puede quitar un pago ya agregado antes de cerrar.
+    venta = _venta()
+    venta.agregar_detalle("12345", 1, Dinero(1000))
+    venta.agregar_pago(Pago(medio=MedioPago.TARJETA, monto=Dinero(400)))
+    venta.agregar_pago(Pago(medio=MedioPago.TRANSFERENCIA, monto=Dinero(600)))
+    venta.quitar_pago(0)
+    assert len(venta.pagos) == 1
+    assert venta.pagos[0].medio is MedioPago.TRANSFERENCIA
+
+
+def test_quitar_pago_indice_invalido_falla():
+    venta = _venta()
+    with pytest.raises(ReglaVentaInvalida):
+        venta.quitar_pago(0)
+
+
+def test_pago_no_efectivo_que_excede_el_saldo_se_rechaza_al_agregar():
+    # D-25: antes se aceptaba un pago con tarjeta mayor al total y la venta
+    # quedaba bloqueada al cerrar con un mensaje confuso; ahora se rechaza al
+    # agregarlo, con un mensaje que describe el problema real.
+    venta = _venta()
+    venta.agregar_detalle("12345", 1, Dinero(5985))
+    with pytest.raises(ReglaVentaInvalida):
+        venta.agregar_pago(Pago(medio=MedioPago.TARJETA, monto=Dinero(10_000)))
+    assert venta.pagos == []
+
+
+def test_segundo_pago_no_efectivo_considera_lo_ya_pagado():
+    venta = _venta()
+    venta.agregar_detalle("12345", 1, Dinero(1000))
+    venta.agregar_pago(Pago(medio=MedioPago.TARJETA, monto=Dinero(600)))
+    with pytest.raises(ReglaVentaInvalida):
+        # Solo quedan $400 pendientes; $500 se pasa.
+        venta.agregar_pago(Pago(medio=MedioPago.TRANSFERENCIA, monto=Dinero(500)))
+
+
+def test_construir_pago_efectivo_parcial_no_redondea_ni_calcula_vuelto():
+    # D-18b: un efectivo menor al saldo pendiente es un pago parcial valido,
+    # se registra tal cual porque falta otro pago (p. ej. tarjeta despues).
+    venta = _venta()
+    venta.agregar_detalle("12345", 1, Dinero(1000))
+    pago = venta.construir_pago_efectivo(monto_entregado=400)
+    assert pago.monto == Dinero(400)
+    assert pago.cobro_efectivo is None
+    venta.agregar_pago(pago)
+    assert venta.total_pagado == Dinero(400)
+
+
+def test_construir_pago_efectivo_que_cubre_el_saldo_redondea_y_calcula_vuelto():
+    venta = _venta()
+    venta.agregar_detalle("12345", 1, Dinero(1000))
+    venta.agregar_pago(Pago(medio=MedioPago.TARJETA, monto=Dinero(400)))
+    # Saldo pendiente $600; entrega $1.000 en efectivo -> vuelto $400.
+    pago = venta.construir_pago_efectivo(monto_entregado=1000)
+    assert pago.cobro_efectivo is not None
+    assert pago.cobro_efectivo.vuelto == Dinero(400)
+    venta.agregar_pago(pago)
+    venta.validar_cierre()  # no lanza
+
+
+def test_construir_pago_efectivo_con_composicion_por_denominacion():
+    from pos.dominio.pagos import ConteoDenominaciones
+
+    venta = _venta()
+    venta.agregar_detalle("12345", 1, Dinero(1000))
+    composicion = ConteoDenominaciones({1000: 1})
+    pago = venta.construir_pago_efectivo(composicion=composicion)
+    assert pago.monto == Dinero(1000)
+    assert pago.cobro_efectivo.composicion_entregada == composicion

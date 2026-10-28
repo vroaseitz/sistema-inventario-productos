@@ -13,7 +13,13 @@ from decimal import Decimal
 from enum import Enum
 
 from .errores import ReglaVentaInvalida
-from .pagos import MedioPago, Pago, redondear_a_decena
+from .pagos import (
+    ConteoDenominaciones,
+    MedioPago,
+    Pago,
+    calcular_cobro_efectivo,
+    redondear_a_decena,
+)
 from .value_objects import Dinero
 
 
@@ -116,7 +122,52 @@ class Venta:
         return self.total
 
     def agregar_pago(self, pago: Pago) -> None:
+        # HU-VTA-03: un pago con tarjeta/transferencia/credito que supera lo que
+        # falta por cobrar se rechaza al agregarlo, no recien al cerrar la venta
+        # (antes se aceptaba y la venta quedaba bloqueada con un mensaje confuso).
+        # El efectivo no se restringe aca: su monto ya llega redondeado y validado
+        # por calcular_cobro_efectivo, y un pago parcial en efectivo es valido.
+        if pago.medio is not MedioPago.EFECTIVO:
+            saldo = max(0, self.total_a_cobrar.monto - self.total_pagado.monto)
+            if pago.monto.monto > saldo:
+                raise ReglaVentaInvalida(
+                    f"El pago en {pago.medio.value} (${pago.monto.monto}) supera "
+                    f"lo que falta por cobrar (${saldo})"
+                )
         self.pagos.append(pago)
+
+    def quitar_pago(self, indice: int) -> None:
+        """Quita un pago ya agregado, antes de cerrar la venta (HU-VTA-03)."""
+        if indice < 0 or indice >= len(self.pagos):
+            raise ReglaVentaInvalida("No hay un pago en esa posicion")
+        del self.pagos[indice]
+
+    def construir_pago_efectivo(
+        self,
+        monto_entregado: int | None = None,
+        composicion: ConteoDenominaciones | None = None,
+    ) -> Pago:
+        """Arma el pago en efectivo correcto segun si alcanza a cubrir el saldo.
+
+        Hallazgo D-18b: un monto menor al saldo pendiente es un pago PARCIAL
+        legitimo (HU-VTA-03) y se registra tal cual, sin redondeo ni vuelto,
+        porque va a venir otro pago. Solo cuando el efectivo entregado alcanza
+        o supera el saldo se aplica el redondeo a la decena y se calcula el
+        vuelto (HU-VTA-04). Se entrega exactamente uno de los dos parametros,
+        igual que `calcular_cobro_efectivo`.
+        """
+        saldo = Dinero(max(0, self.total_a_cobrar.monto - self.total_pagado.monto))
+        entregado = (
+            Dinero(composicion.total) if composicion is not None else Dinero(monto_entregado or 0)
+        )
+        if entregado.monto < saldo.monto:
+            return Pago(medio=MedioPago.EFECTIVO, monto=entregado)
+        cobro = calcular_cobro_efectivo(
+            saldo,
+            monto_entregado=None if composicion is not None else entregado,
+            composicion=composicion,
+        )
+        return Pago(medio=MedioPago.EFECTIVO, monto=cobro.total_redondeado, cobro_efectivo=cobro)
 
     @property
     def total_pagado(self) -> Dinero:

@@ -19,6 +19,7 @@ from pos.aplicacion.puertos import (
 )
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
 from pos.dominio.pagos import Pago
+from pos.dominio.productos import UnidadVenta
 from pos.dominio.ventas import DetalleVenta, Venta
 
 
@@ -43,8 +44,32 @@ class RegistrarVenta:
         producto = self.repositorio_productos.obtener_por_codigo(codigo_producto)
         if producto is None:
             raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo_producto}")
+
+        cantidad_dec = Decimal(str(cantidad))
+        if producto.unidad_venta is UnidadVenta.UNIDAD and cantidad_dec % 1 != 0:
+            raise DatosProductoInvalidos(
+                "Un producto por unidad requiere una cantidad entera "
+                "(solo a granel admite decimales)"
+            )
+
+        # HU-INV-01: avisar al agregar el producto, no recien al cerrar la venta
+        # (antes se podia armar un ticket entero con un producto sin stock y
+        # quedaba bloqueado al cobrar, sin forma de sacar la linea).
+        ya_en_ticket = next(
+            (d.cantidad for d in venta.detalles if d.producto_codigo == codigo_producto),
+            Decimal("0"),
+        )
+        existencia = self.repositorio_existencias.obtener(codigo_producto)
+        disponible = existencia.cantidad if existencia is not None else Decimal("0")
+        pedido_total = ya_en_ticket + cantidad_dec
+        if pedido_total > disponible:
+            raise ReglaVentaInvalida(
+                f"Stock insuficiente de {codigo_producto}: "
+                f"hay {disponible}, se pedirian {pedido_total}"
+            )
+
         costo_unitario = producto.costo.neto if producto.costo is not None else None
-        return venta.agregar_detalle(codigo_producto, cantidad, producto.precio, costo_unitario)
+        return venta.agregar_detalle(codigo_producto, cantidad_dec, producto.precio, costo_unitario)
 
     def agregar_pago(self, venta: Venta, pago: Pago) -> None:
         venta.agregar_pago(pago)

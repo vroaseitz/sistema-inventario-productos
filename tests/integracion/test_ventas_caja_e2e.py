@@ -15,7 +15,7 @@ from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
 from pos.dominio.caja import TipoMovimientoCaja
-from pos.dominio.errores import ReglaCajaInvalida, ReglaVentaInvalida
+from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
 from pos.dominio.inventario import Existencia
 from pos.dominio.pagos import MedioPago, Pago, calcular_cobro_efectivo
 from pos.dominio.productos import Producto
@@ -98,9 +98,9 @@ def test_no_se_puede_vender_sin_turno_abierto(repos):
         registrar.iniciar(usuario_id=1)
 
 
-def test_venta_con_stock_insuficiente_no_persiste_nada(repos):
-    # Si el cierre falla, la venta no debe quedar guardada ni el stock descontado:
-    # ni en memoria ni en la tabla ventas.
+def test_agregar_producto_con_stock_insuficiente_falla(repos):
+    # Hallazgo D-22: el stock se valida al agregar el producto, no recien al
+    # cerrar la venta (antes se armaba el ticket entero y quedaba bloqueado).
     repo_productos, repo_existencias, repo_turnos, repo_ventas = repos
     _sembrar_producto(
         repo_productos, repo_existencias, "12345", precio=1000, costo_neto=500, stock=1
@@ -109,14 +109,39 @@ def test_venta_con_stock_insuficiente_no_persiste_nada(repos):
     AbrirTurnoCaja(repo_turnos).ejecutar(usuario_id=1, fondo_inicial=Dinero(0))
     registrar = RegistrarVenta(repo_ventas, repo_turnos, repo_productos, repo_existencias)
     venta = registrar.iniciar(usuario_id=1)
-    registrar.agregar_producto(venta, "12345", 5)  # pide 5, solo hay 1
-    venta.agregar_pago(Pago(medio=MedioPago.TARJETA, monto=Dinero(5000)))
+
+    with pytest.raises(ReglaVentaInvalida):
+        registrar.agregar_producto(venta, "12345", 5)  # pide 5, solo hay 1
+
+    assert venta.detalles == []
+    assert repo_existencias.obtener("12345").cantidad == Decimal("1")
+
+
+def test_cerrar_detecta_stock_consumido_despues_de_agregar(repos):
+    # Defensa en profundidad: si el stock se consume por otra venta DESPUES de
+    # agregar la linea (condicion de carrera), el cierre lo sigue rechazando y
+    # no deja nada persistido.
+    repo_productos, repo_existencias, repo_turnos, repo_ventas = repos
+    _sembrar_producto(
+        repo_productos, repo_existencias, "12345", precio=1000, costo_neto=500, stock=1
+    )
+
+    AbrirTurnoCaja(repo_turnos).ejecutar(usuario_id=1, fondo_inicial=Dinero(0))
+    registrar = RegistrarVenta(repo_ventas, repo_turnos, repo_productos, repo_existencias)
+    venta = registrar.iniciar(usuario_id=1)
+    registrar.agregar_producto(venta, "12345", 1)
+    venta.agregar_pago(Pago(medio=MedioPago.TARJETA, monto=Dinero(1000)))
+
+    # Se vendio por otro lado mientras el ticket seguia abierto.
+    existencia = repo_existencias.obtener("12345")
+    existencia.descontar(Decimal("1"))
+    repo_existencias.guardar(existencia)
 
     with pytest.raises(ReglaVentaInvalida):
         registrar.cerrar(venta)
 
     assert venta.id is None
-    assert repo_existencias.obtener("12345").cantidad == Decimal("1")
+    assert repo_existencias.obtener("12345").cantidad == Decimal("0")
     turno = repo_turnos.obtener_abierto()
     assert repo_ventas.obtener_por_turno(turno.id) == []
 
@@ -201,3 +226,41 @@ def test_cerrar_sin_turno_abierto_falla(repos):
     _, _, repo_turnos, repo_ventas = repos
     with pytest.raises(ReglaCajaInvalida):
         CerrarTurnoCaja(repo_turnos, repo_ventas).ejecutar(efectivo_contado=Dinero(0))
+
+
+# --- Hallazgos QA 26-10-2026 (Hallazgos-QA_NaturalSur.xlsx) ----------------
+
+
+def test_agregar_producto_por_unidad_rechaza_cantidad_decimal(repos):
+    # D-21: antes se podia vender "1.5" de un producto por unidad (no a granel).
+    repo_productos, repo_existencias, repo_turnos, repo_ventas = repos
+    _sembrar_producto(
+        repo_productos, repo_existencias, "12345", precio=3990, costo_neto=1500, stock=10
+    )
+    AbrirTurnoCaja(repo_turnos).ejecutar(usuario_id=1, fondo_inicial=Dinero(0))
+    registrar = RegistrarVenta(repo_ventas, repo_turnos, repo_productos, repo_existencias)
+    venta = registrar.iniciar(usuario_id=1)
+    with pytest.raises(DatosProductoInvalidos):
+        registrar.agregar_producto(venta, "12345", Decimal("1.5"))
+    assert venta.detalles == []
+
+
+def test_agregar_producto_a_granel_si_admite_decimales(repos):
+    from pos.dominio.productos import UnidadVenta
+
+    repo_productos, repo_existencias, repo_turnos, repo_ventas = repos
+    repo_productos.guardar(
+        Producto(
+            "99999",
+            "Almendras",
+            Dinero(5000),
+            unidad_venta=UnidadVenta.GRANEL,
+            costo=Costo(Dinero(2000), Dinero(0)),
+        )
+    )
+    repo_existencias.guardar(Existencia("99999", Decimal("5")))
+    AbrirTurnoCaja(repo_turnos).ejecutar(usuario_id=1, fondo_inicial=Dinero(0))
+    registrar = RegistrarVenta(repo_ventas, repo_turnos, repo_productos, repo_existencias)
+    venta = registrar.iniciar(usuario_id=1)
+    registrar.agregar_producto(venta, "99999", Decimal("1.5"))  # no lanza
+    assert venta.detalles[0].cantidad == Decimal("1.5")
