@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pos.aplicacion.puertos import RepositorioTurnosCaja, RepositorioVentas
+from pos.aplicacion.puertos import ColaSincronizacion, RepositorioTurnosCaja, RepositorioVentas
+from pos.aplicacion.sincronizacion import encolar_turno_cerrado
 from pos.dominio.caja import Arqueo, calcular_arqueo
 from pos.dominio.errores import ReglaCajaInvalida
 from pos.dominio.value_objects import Dinero
@@ -14,6 +15,7 @@ from pos.dominio.value_objects import Dinero
 class CerrarTurnoCaja:
     repositorio_turnos: RepositorioTurnosCaja
     repositorio_ventas: RepositorioVentas
+    cola: ColaSincronizacion | None = None
 
     def ejecutar(
         self,
@@ -25,10 +27,9 @@ class CerrarTurnoCaja:
             raise ReglaCajaInvalida("No hay una jornada de caja abierta para cerrar")
 
         ventas = self.repositorio_ventas.obtener_por_turno(turno.id)
-        arqueo = calcular_arqueo(
-            turno, ventas, efectivo_contado, abonos_efectivo=abonos_efectivo
-        )
+        arqueo = calcular_arqueo(turno, ventas, efectivo_contado, abonos_efectivo=abonos_efectivo)
 
         turno.cerrar()
         self.repositorio_turnos.guardar(turno)
+        encolar_turno_cerrado(self.cola, turno)
         return arqueo

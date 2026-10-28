@@ -23,7 +23,14 @@ from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
 from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
-from pos.aplicacion.puertos import RepositorioProductos, RepositorioTurnosCaja, RepositorioVentas
+from pos.aplicacion.casos_uso.sincronizar_pendientes import SincronizarPendientes
+from pos.aplicacion.puertos import (
+    ColaSincronizacion,
+    PublicadorRemoto,
+    RepositorioProductos,
+    RepositorioTurnosCaja,
+    RepositorioVentas,
+)
 from pos.dominio.caja import TipoMovimientoCaja
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.pagos import DENOMINACIONES_CLP, ConteoDenominaciones, MedioPago, Pago
@@ -69,8 +76,12 @@ class VentanaVentas(Tk):
         abrir_turno: AbrirTurnoCaja,
         cerrar_turno: CerrarTurnoCaja,
         registrar_movimiento: RegistrarMovimientoCaja,
+        cola: ColaSincronizacion | None = None,
+        publicador: PublicadorRemoto | None = None,
     ) -> None:
         super().__init__()
+        self._cola = cola
+        self._publicador = publicador
         self._repo_turnos = repositorio_turnos
         self._repo_productos = repositorio_productos
         self._repo_ventas = repositorio_ventas
@@ -86,6 +97,7 @@ class VentanaVentas(Tk):
         self.minsize(900, 620)
         self._construir()
         self._refrescar_turno()
+        self._refrescar_sync()
         self._nueva_venta(forzar=True)  # D-01a: siempre hay una venta abierta
 
     # ------------------------------------------------------------------ UI --
@@ -109,6 +121,15 @@ class VentanaVentas(Tk):
         ttk.Button(marco_turno, text="Ver ventas del turno", command=self._ver_ventas_turno).pack(
             side="right", padx=4, pady=6
         )
+        # HU-VTA-07: la pantalla indica de forma visible si hay operaciones pendientes.
+        # Va en su propia fila: en la barra del turno ya no cabe sin cortarse.
+        fila_sync = ttk.Frame(self)
+        fila_sync.pack(fill="x", padx=12)
+        ttk.Button(fila_sync, text="Sincronizar", command=self._sincronizar).pack(
+            side="right", padx=4
+        )
+        self._lbl_sync = ttk.Label(fila_sync, text="")
+        self._lbl_sync.pack(side="right", padx=8)
 
         marco_venta = ttk.LabelFrame(self, text="Venta en curso")
         marco_venta.pack(fill="x", padx=12, pady=8)
@@ -192,6 +213,34 @@ class VentanaVentas(Tk):
         # D-18a: los pagos ya agregados quedan listados y se pueden quitar.
         self._lista_pagos = Listbox(marco_pago, height=3)
         self._lista_pagos.pack(fill="x", padx=4, pady=(0, 6))
+
+    # --------------------------------------------------------- Sincronizacion --
+
+    def _refrescar_sync(self) -> None:
+        if self._cola is None:
+            self._lbl_sync.config(text="Sin sincronizacion")
+            return
+        pendientes = len(self._cola.pendientes())
+        destino = "" if self._publicador is not None else " (sin Supabase configurado)"
+        self._lbl_sync.config(
+            text="Todo sincronizado" if pendientes == 0 else f"Pendientes: {pendientes}{destino}"
+        )
+
+    def _sincronizar(self) -> None:
+        if self._cola is None or self._publicador is None:
+            messagebox.showwarning(
+                "Sincronizacion", "No hay Supabase configurado (variable SUPABASE_DB_URL)"
+            )
+            return
+        resultado = SincronizarPendientes(self._cola, self._publicador).ejecutar()
+        self._refrescar_sync()
+        if resultado.fallo_en is not None:
+            messagebox.showwarning(
+                "Sincronizacion",
+                f"Se sincronizaron {resultado.sincronizadas} operaciones y luego se corto "
+                "(sin conexion o error del servidor). Lo pendiente se reintenta despues; "
+                "no se pierde nada.",
+            )
 
     # -------------------------------------------------------------- Turno --
 
@@ -280,6 +329,7 @@ class VentanaVentas(Tk):
             messagebox.showerror("No se pudo abrir el turno", str(exc))
             return
         self._refrescar_turno()
+        self._refrescar_sync()
         # D-01a: si la app arranco sin turno (lo normal), la venta recien puede
         # iniciarse una vez que se abre uno; no quedaba ninguna forma de que se
         # iniciara sola despues de este punto.
@@ -396,14 +446,16 @@ class VentanaVentas(Tk):
 
     def _nueva_venta(self, forzar: bool = False) -> None:
         venta_previa = self._venta
-        tiene_contenido = venta_previa is not None and (
-            venta_previa.detalles or venta_previa.pagos
-        )
+        tiene_contenido = venta_previa is not None and (venta_previa.detalles or venta_previa.pagos)
         # D-01b: no descartar un ticket con productos o pagos sin confirmar.
-        if tiene_contenido and not forzar and not messagebox.askyesno(
-            "Descartar venta en curso",
-            "La venta actual tiene productos o pagos sin cobrar. "
-            "¿Descartarla y empezar una nueva?",
+        if (
+            tiene_contenido
+            and not forzar
+            and not messagebox.askyesno(
+                "Descartar venta en curso",
+                "La venta actual tiene productos o pagos sin cobrar. "
+                "¿Descartarla y empezar una nueva?",
+            )
         ):
             return
         try:
@@ -610,17 +662,20 @@ class VentanaVentas(Tk):
             messagebox.showerror("No se pudo cerrar la venta", str(exc))
             return
         messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con exito")
+        self._refrescar_sync()
         self._nueva_venta(forzar=True)  # D-01a: queda lista para la siguiente
 
 
 def main() -> None:
     from pos.infraestructura.config import Config
+    from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
     from pos.infraestructura.sqlite.conexion import crear_conexion
     from pos.infraestructura.sqlite.esquema import crear_esquema
     from pos.infraestructura.sqlite.repositorio_existencias import RepositorioExistenciasSQLite
     from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
     from pos.infraestructura.sqlite.repositorio_turnos_caja import RepositorioTurnosCajaSQLite
     from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite
+    from pos.infraestructura.supabase.adaptador_supabase import AdaptadorSupabase
 
     config = Config.desde_entorno()
     conexion = crear_conexion(config.sqlite_path)
@@ -630,11 +685,15 @@ def main() -> None:
     repo_existencias = RepositorioExistenciasSQLite(conexion)
     repo_turnos = RepositorioTurnosCajaSQLite(conexion)
     repo_ventas = RepositorioVentasSQLite(conexion)
+    cola = ColaSincronizacionSQLite(conexion)
+    publicador = AdaptadorSupabase(config.supabase_db_url) if config.supabase_db_url else None
 
-    registrar_venta = RegistrarVenta(repo_ventas, repo_turnos, repo_productos, repo_existencias)
-    abrir_turno = AbrirTurnoCaja(repo_turnos)
-    cerrar_turno = CerrarTurnoCaja(repo_turnos, repo_ventas)
-    registrar_movimiento = RegistrarMovimientoCaja(repo_turnos)
+    registrar_venta = RegistrarVenta(
+        repo_ventas, repo_turnos, repo_productos, repo_existencias, cola=cola
+    )
+    abrir_turno = AbrirTurnoCaja(repo_turnos, cola=cola)
+    cerrar_turno = CerrarTurnoCaja(repo_turnos, repo_ventas, cola=cola)
+    registrar_movimiento = RegistrarMovimientoCaja(repo_turnos, cola=cola)
 
     VentanaVentas(
         repo_turnos,
@@ -644,6 +703,8 @@ def main() -> None:
         abrir_turno,
         cerrar_turno,
         registrar_movimiento,
+        cola=cola,
+        publicador=publicador,
     ).mainloop()
 
 

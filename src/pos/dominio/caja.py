@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from uuid import uuid4
 
 from .errores import ReglaCajaInvalida
 from .pagos import ConteoDenominaciones, MedioPago
@@ -52,6 +53,8 @@ class TurnoCaja:
     cerrado_en: datetime | None = None
     movimientos: list[MovimientoCaja] = field(default_factory=list)
     id: int | None = None
+    # Identificador estable para sincronizar con Supabase sin depender del id local.
+    uuid: str = field(default_factory=lambda: str(uuid4()))
 
     @property
     def esta_abierto(self) -> bool:

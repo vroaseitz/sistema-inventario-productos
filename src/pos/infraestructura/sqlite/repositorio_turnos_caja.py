@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from datetime import datetime
+from uuid import uuid4
 
 from pos.dominio.caja import MovimientoCaja, TipoMovimientoCaja, TurnoCaja
 from pos.dominio.pagos import ConteoDenominaciones
@@ -24,14 +25,16 @@ class RepositorioTurnosCajaSQLite:
         if turno.id is None:
             cursor = self._con.execute(
                 """
-                INSERT INTO turnos_caja (usuario_id, fondo_inicial, composicion_fondo, abierto_en)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO turnos_caja
+                    (usuario_id, fondo_inicial, composicion_fondo, abierto_en, uuid)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     turno.usuario_id,
                     turno.fondo_inicial.monto,
                     composicion_json,
                     turno.abierto_en.isoformat(sep=" "),
+                    turno.uuid,
                 ),
             )
             turno.id = cursor.lastrowid
@@ -45,9 +48,7 @@ class RepositorioTurnosCajaSQLite:
             )
 
     def obtener_abierto(self) -> TurnoCaja | None:
-        fila = self._con.execute(
-            "SELECT * FROM turnos_caja WHERE cerrado_en IS NULL"
-        ).fetchone()
+        fila = self._con.execute("SELECT * FROM turnos_caja WHERE cerrado_en IS NULL").fetchone()
         if not fila:
             return None
         return self._a_turno(fila)
@@ -88,6 +89,7 @@ class RepositorioTurnosCajaSQLite:
 
         return TurnoCaja(
             id=fila["id"],
+            uuid=fila["uuid"] or str(uuid4()),
             usuario_id=fila["usuario_id"],
             fondo_inicial=Dinero(fila["fondo_inicial"]),
             composicion_fondo_inicial=composicion,

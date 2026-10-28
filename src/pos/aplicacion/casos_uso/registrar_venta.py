@@ -12,11 +12,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 
 from pos.aplicacion.puertos import (
+    ColaSincronizacion,
     RepositorioExistencias,
     RepositorioProductos,
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
+from pos.aplicacion.sincronizacion import encolar_existencia, encolar_venta
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
 from pos.dominio.pagos import Pago
 from pos.dominio.productos import UnidadVenta
@@ -29,6 +31,7 @@ class RegistrarVenta:
     repositorio_turnos: RepositorioTurnosCaja
     repositorio_productos: RepositorioProductos
     repositorio_existencias: RepositorioExistencias
+    cola: ColaSincronizacion | None = None
 
     def iniciar(self, usuario_id: int, cliente_id: int | None = None) -> Venta:
         turno = self.repositorio_turnos.obtener_abierto()
@@ -93,6 +96,10 @@ class RegistrarVenta:
             existencia = self.repositorio_existencias.obtener(detalle.producto_codigo)
             existencia.descontar(detalle.cantidad)
             self.repositorio_existencias.guardar(existencia)
+            encolar_existencia(self.cola, existencia)
 
         self.repositorio_ventas.guardar(venta)
+        turno = self.repositorio_turnos.obtener_abierto()
+        if turno is not None:
+            encolar_venta(self.cola, venta, turno.uuid)
         return venta

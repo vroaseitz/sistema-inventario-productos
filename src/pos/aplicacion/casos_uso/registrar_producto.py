@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pos.aplicacion.puertos import RepositorioProductos
+from pos.aplicacion.puertos import ColaSincronizacion, RepositorioProductos
+from pos.aplicacion.sincronizacion import encolar_producto
 from pos.dominio.errores import DatosProductoInvalidos
 from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Dinero
@@ -13,6 +14,7 @@ from pos.dominio.value_objects import Dinero
 @dataclass
 class RegistrarProducto:
     repositorio: RepositorioProductos
+    cola: ColaSincronizacion | None = None
 
     def ejecutar(
         self,
@@ -32,4 +34,5 @@ class RegistrarProducto:
             categoria_id=categoria_id,
         )
         self.repositorio.guardar(producto)
+        encolar_producto(self.cola, producto)
         return producto

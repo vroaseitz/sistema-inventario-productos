@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from uuid import uuid4
 
 from .errores import ReglaVentaInvalida
 from .pagos import (
@@ -67,6 +68,7 @@ class Venta:
     estado: EstadoVenta = EstadoVenta.PAGADA
     creado_en: datetime = field(default_factory=datetime.now)
     id: int | None = None
+    uuid: str = field(default_factory=lambda: str(uuid4()))
 
     def agregar_detalle(
         self,

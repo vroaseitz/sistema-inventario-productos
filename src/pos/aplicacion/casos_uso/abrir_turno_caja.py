@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pos.aplicacion.puertos import RepositorioTurnosCaja
+from pos.aplicacion.puertos import ColaSincronizacion, RepositorioTurnosCaja
+from pos.aplicacion.sincronizacion import encolar_turno_abierto
 from pos.dominio.caja import TurnoCaja
 from pos.dominio.errores import ReglaCajaInvalida
 from pos.dominio.pagos import ConteoDenominaciones
@@ -14,6 +15,7 @@ from pos.dominio.value_objects import Dinero
 @dataclass
 class AbrirTurnoCaja:
     repositorio: RepositorioTurnosCaja
+    cola: ColaSincronizacion | None = None
 
     def ejecutar(
         self,
@@ -31,4 +33,5 @@ class AbrirTurnoCaja:
             composicion_fondo_inicial=composicion_fondo_inicial,
         )
         self.repositorio.guardar(turno)
+        encolar_turno_abierto(self.cola, turno)
         return turno

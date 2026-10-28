@@ -13,6 +13,7 @@ import json
 import sqlite3
 from datetime import datetime
 from decimal import Decimal
+from uuid import uuid4
 
 from pos.dominio.pagos import CobroEfectivo, ConteoDenominaciones, MedioPago, Pago
 from pos.dominio.value_objects import Dinero
@@ -31,8 +32,8 @@ class RepositorioVentasSQLite:
         try:
             cursor = self._con.execute(
                 """
-                INSERT INTO ventas (turno_caja_id, usuario_id, cliente_id, estado, creado_en)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO ventas (turno_caja_id, usuario_id, cliente_id, estado, creado_en, uuid)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     venta.turno_caja_id,
@@ -40,6 +41,7 @@ class RepositorioVentasSQLite:
                     venta.cliente_id,
                     venta.estado.value,
                     venta.creado_en.isoformat(sep=" "),
+                    venta.uuid,
                 ),
             )
             venta.id = cursor.lastrowid
@@ -146,6 +148,7 @@ class RepositorioVentasSQLite:
 
         return Venta(
             id=fila["id"],
+            uuid=fila["uuid"] or str(uuid4()),
             turno_caja_id=fila["turno_caja_id"],
             usuario_id=fila["usuario_id"],
             cliente_id=fila["cliente_id"],

@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS turnos_caja (
     fondo_inicial      INTEGER NOT NULL CHECK (fondo_inicial >= 0),
     composicion_fondo  TEXT,
     abierto_en         TEXT NOT NULL DEFAULT (datetime('now')),
-    cerrado_en         TEXT
+    cerrado_en         TEXT,
+    uuid               TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_un_solo_turno_abierto
@@ -67,6 +68,7 @@ CREATE TABLE IF NOT EXISTS ventas (
     cliente_id     INTEGER,
     estado         TEXT NOT NULL DEFAULT 'pagada' CHECK (estado IN ('pagada', 'anulada')),
     creado_en      TEXT NOT NULL DEFAULT (datetime('now')),
+    uuid           TEXT,
     FOREIGN KEY (turno_caja_id) REFERENCES turnos_caja(id)
 );
 
@@ -96,5 +98,14 @@ CREATE TABLE IF NOT EXISTS venta_pagos (
 """
 
 
+# Columnas agregadas despues de la primera version del esquema. `CREATE TABLE IF NOT
+# EXISTS` no las agrega a una base local ya existente, asi que se revisan al abrir.
+_COLUMNAS_NUEVAS = (("turnos_caja", "uuid"), ("ventas", "uuid"))
+
+
 def crear_esquema(conexion: sqlite3.Connection) -> None:
     conexion.executescript(DDL)
+    for tabla, columna in _COLUMNAS_NUEVAS:
+        existentes = {fila[1] for fila in conexion.execute(f"PRAGMA table_info({tabla})")}
+        if columna not in existentes:
+            conexion.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} TEXT")
