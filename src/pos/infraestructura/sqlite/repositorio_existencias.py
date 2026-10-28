@@ -39,8 +39,12 @@ class RepositorioAjustesSQLite(RepositorioAjustes):
         self._con = conexion
 
     def guardar_ajuste(self, ajuste: AjusteInventario) -> None:
-        motivo_valor = ajuste.motivo.value if isinstance(ajuste.motivo, MotivoAjuste) else str(ajuste.motivo)
-        fecha_str = ajuste.fecha.isoformat() if hasattr(ajuste.fecha, "isoformat") else str(ajuste.fecha)
+        motivo_valor = (
+            ajuste.motivo.value if isinstance(ajuste.motivo, MotivoAjuste) else str(ajuste.motivo)
+        )
+        fecha_str = (
+            ajuste.fecha.isoformat() if hasattr(ajuste.fecha, "isoformat") else str(ajuste.fecha)
+        )
 
         self._con.execute(
             """
@@ -65,4 +69,3 @@ class RepositorioAjustesSQLite(RepositorioAjustes):
                 fecha_str,
             ),
         )
-

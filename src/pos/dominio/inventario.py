@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import StrEnum
 
 from .errores import ReglaInventarioInvalida
 
 
-class MotivoAjuste(str, Enum):
+class MotivoAjuste(StrEnum):
     """Motivos válidos para un ajuste de inventario."""
 
     MERMA = "merma"

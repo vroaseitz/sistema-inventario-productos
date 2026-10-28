@@ -13,9 +13,17 @@ CREATE TABLE IF NOT EXISTS productos (
     nombre        TEXT NOT NULL,
     precio        INTEGER NOT NULL CHECK (precio >= 0),
     unidad_venta  TEXT NOT NULL DEFAULT 'unidad',
-    categoria_id  INTEGER,
-    activo        INTEGER NOT NULL DEFAULT 1
+    categoria_id  INTEGER NOT NULL,
+    activo        INTEGER NOT NULL DEFAULT 1,
+    costo_neto    INTEGER,
+    perecible     INTEGER NOT NULL DEFAULT 0,
+    dias_aviso    INTEGER
 );
+
+-- Migracion ligera para bases creadas con un esquema anterior (sin costo/perecible).
+ALTER TABLE productos ADD COLUMN costo_neto INTEGER;
+ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE productos ADD COLUMN dias_aviso INTEGER;
 
 CREATE TABLE IF NOT EXISTS existencias (
     codigo_producto TEXT PRIMARY KEY,
@@ -60,4 +68,13 @@ CREATE TABLE IF NOT EXISTS cola_sincronizacion (
 
 
 def crear_esquema(conexion: sqlite3.Connection) -> None:
-    conexion.executescript(DDL)
+    """Crea el esquema; tolera migraciones ya aplicadas (columnas duplicadas)."""
+    for sentencia in DDL.strip().split(";"):
+        sentencia = sentencia.strip()
+        if not sentencia:
+            continue
+        try:
+            conexion.execute(sentencia)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise

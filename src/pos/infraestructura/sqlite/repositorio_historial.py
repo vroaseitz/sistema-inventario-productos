@@ -22,7 +22,7 @@ class RepositorioHistorialSQLite(RepositorioHistorial):
             registro.precio_anterior.monto,
             registro.precio_nuevo.monto,
             registro.usuario,
-            registro.fecha
+            registro.fecha,
         )
 
         cursor = self.conexion.cursor()

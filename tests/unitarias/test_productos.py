@@ -33,19 +33,23 @@ def test_producto_requiere_nombre():
 
 
 def test_producto_unidad_total_entero():
-    p = Producto(codigo="1", nombre="Fideos", precio=Dinero(990))
+    p = Producto(codigo="1", nombre="Fideos", precio=Dinero(990), categoria_id=1)
     assert p.calcular_total(3).monto == 2970
 
 
 def test_producto_unidad_rechaza_cantidad_fraccional():
-    p = Producto(codigo="1", nombre="Fideos", precio=Dinero(990))
+    p = Producto(codigo="1", nombre="Fideos", precio=Dinero(990), categoria_id=1)
     with pytest.raises(DatosProductoInvalidos):
         p.calcular_total(Decimal("1.5"))
 
 
 def test_producto_granel_cobra_por_kilo():
     p = Producto(
-        codigo="12345", nombre="Nueces", precio=Dinero(8000), unidad_venta=UnidadVenta.GRANEL
+        codigo="12345",
+        nombre="Nueces",
+        precio=Dinero(8000),
+        unidad_venta=UnidadVenta.GRANEL,
+        categoria_id=1,
     )
     assert p.es_granel is True
     assert p.calcular_total(Decimal("1.500")).monto == 12000
@@ -53,7 +57,7 @@ def test_producto_granel_cobra_por_kilo():
 
 def test_margen_y_markup_no_disponibles_sin_costo_cargado():
     # HU-PRD-03 / HU-PRD-08: sin costo cargado, los indicadores no estan disponibles.
-    p = Producto(codigo="1", nombre="Miel", precio=Dinero(3000))
+    p = Producto(codigo="1", nombre="Miel", precio=Dinero(3000), categoria_id=1)
     assert p.margen is None
     assert p.markup is None
 
@@ -64,6 +68,7 @@ def test_margen_y_markup_se_calculan_sobre_el_neto():
         codigo="1",
         nombre="Miel",
         precio=Dinero(2000),
+        categoria_id=1,
         costo=Costo(neto=Dinero(1000), iva=Dinero(190)),
     )
     assert p.margen == Decimal("0.5000")
@@ -77,6 +82,7 @@ def test_markup_no_disponible_con_costo_neto_cero():
         codigo="1",
         nombre="Muestra gratis",
         precio=Dinero(500),
+        categoria_id=1,
         costo=Costo(neto=Dinero(0), iva=Dinero(0)),
     )
     assert p.margen == Decimal("1.0000")

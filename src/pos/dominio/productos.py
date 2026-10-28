@@ -18,6 +18,9 @@ class UnidadVenta(Enum):
     GRANEL = "granel"  # se vende por peso (kg)
 
 
+CATEGORIAS_VALIDAS = ("frutas", "verduras", "abarrotes", "limpieza")
+
+
 @dataclass
 class Producto:
     """Producto del catalogo.
@@ -34,6 +37,8 @@ class Producto:
     categoria_id: int | None = None
     activo: bool = True
     costo: Costo | None = None
+    perecible: bool = False
+    dias_aviso: int | None = None
     _validado: bool = field(default=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -43,6 +48,10 @@ class Producto:
             raise DatosProductoInvalidos("El producto requiere un nombre")
         if not isinstance(self.precio, Dinero):
             raise DatosProductoInvalidos("El precio debe ser un value object Dinero")
+        if self.categoria_id is None:
+            raise DatosProductoInvalidos("El producto requiere una categoria (C-04)")
+        if self.perecible and (self.dias_aviso is None or self.dias_aviso <= 0):
+            raise DatosProductoInvalidos("Un producto perecible requiere dias_aviso (C-05a)")
 
     @property
     def es_granel(self) -> bool:

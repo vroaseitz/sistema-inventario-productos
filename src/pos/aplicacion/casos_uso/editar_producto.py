@@ -23,6 +23,8 @@ class EditarProducto:
         nueva_categoria_id: int | None,
         usuario: str,
         costo: int | None = None,
+        perecible: bool = False,
+        dias_aviso: int | None = None,
     ) -> None:
         # 1. Obtener el producto actual
         producto = self.repositorio_productos.obtener_por_codigo(codigo)
@@ -39,6 +41,8 @@ class EditarProducto:
         producto.categoria_id = nueva_categoria_id
         if costo is not None:
             producto.costo = Costo(neto=Dinero(costo), iva=Dinero(0))
+        producto.perecible = perecible
+        producto.dias_aviso = dias_aviso
 
         # 3. Guardar PRIMERO el producto
         self.repositorio_productos.guardar(producto)

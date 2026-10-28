@@ -55,7 +55,6 @@ class RepoAjustesMemoria:
         self.ajustes.append(ajuste)
 
 
-
 def ean13(doce: str) -> str:
     return doce + str(calcular_digito_verificador(doce))
 
@@ -66,7 +65,7 @@ def ean13(doce: str) -> str:
 def test_registrar_producto_ok():
     repo = RepoProductosMemoria()
     caso = RegistrarProducto(repo)
-    p = caso.ejecutar("12345", "Nueces", 8000, UnidadVenta.GRANEL, "Frutos secos")
+    p = caso.ejecutar("12345", "Nueces", 8000, UnidadVenta.GRANEL, categoria_id=1)
     assert repo.obtener_por_codigo("12345") is p
     assert p.es_granel is True
 
@@ -74,7 +73,7 @@ def test_registrar_producto_ok():
 def test_registrar_producto_duplicado_falla():
     repo = RepoProductosMemoria()
     caso = RegistrarProducto(repo)
-    caso.ejecutar("12345", "Nueces", 8000)
+    caso.ejecutar("12345", "Nueces", 8000, categoria_id=1)
     with pytest.raises(DatosProductoInvalidos):
         caso.ejecutar("12345", "Otro", 100)
 
@@ -84,7 +83,9 @@ def test_registrar_producto_duplicado_falla():
 
 def test_escanear_codigo_granel_calcula_total_por_peso():
     repo = RepoProductosMemoria()
-    repo.guardar(Producto("12345", "Nueces", Dinero(8000), unidad_venta=UnidadVenta.GRANEL))
+    repo.guardar(
+        Producto("12345", "Nueces", Dinero(8000), unidad_venta=UnidadVenta.GRANEL, categoria_id=1)
+    )
     caso = EscanearCodigo(repo)
     linea = caso.ejecutar(ean13("201234501500"))  # 1.5 kg
     assert linea.cantidad == Decimal("1.500")

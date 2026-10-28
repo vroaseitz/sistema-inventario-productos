@@ -46,6 +46,7 @@ class PublicadorRemoto(Protocol):
 
     def publicar(self, operacion: dict) -> None: ...
 
+
 @runtime_checkable
 class RepositorioHistorial(Protocol):
     """Puerto para persistir el historial de cambios de precio (HU-PRD-05)."""
@@ -55,8 +56,6 @@ class RepositorioHistorial(Protocol):
 
 @runtime_checkable
 class RepositorioAjustes(Protocol):
-    """Puerto para persistir el historial de ajustes de inventario (HU Registro de mermas y ajustes)."""
+    """Puerto para persistir el historial de ajustes (HU mermas y ajustes)."""
 
     def guardar_ajuste(self, ajuste: AjusteInventario) -> None: ...
-
-

@@ -45,6 +45,7 @@ class TestCalculoImpuestosYRentabilidad:
             codigo="12345",
             nombre="Bebida Isotónica",
             precio=Dinero(1500),
+            categoria_id=1,
             costo=costo,
         )
 

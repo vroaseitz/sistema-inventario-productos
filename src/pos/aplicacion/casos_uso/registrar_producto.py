@@ -22,6 +22,8 @@ class RegistrarProducto:
         unidad_venta: UnidadVenta = UnidadVenta.UNIDAD,
         categoria_id: int | None = None,
         costo: int | None = None,
+        perecible: bool = False,
+        dias_aviso: int | None = None,
     ) -> Producto:
         if self.repositorio.obtener_por_codigo(codigo) is not None:
             raise DatosProductoInvalidos(f"Ya existe un producto con codigo {codigo}")
@@ -35,6 +37,8 @@ class RegistrarProducto:
             unidad_venta=unidad_venta,
             categoria_id=categoria_id,
             costo=costo_obj,
+            perecible=perecible,
+            dias_aviso=dias_aviso,
         )
         self.repositorio.guardar(producto)
         return producto

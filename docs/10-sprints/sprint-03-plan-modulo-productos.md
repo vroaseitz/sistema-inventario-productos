@@ -19,7 +19,9 @@ Nuevo archivo `src/pos/aplicacion/casos_uso/editar_producto.py`, mismo patrón q
 class EditarProducto:
     repositorio: RepositorioProductos
 
-    def ejecutar(self, codigo: str, nombre: str, precio: int, categoria_id: int | None = None) -> Producto:
+    def ejecutar(
+        self, codigo: str, nombre: str, precio: int, categoria_id: int | None = None
+    ) -> Producto:
         producto = self.repositorio.obtener_por_codigo(codigo)
         if producto is None:
             raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo}")

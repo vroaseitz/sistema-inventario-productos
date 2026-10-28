@@ -26,7 +26,7 @@ def main() -> None:
 
     repositorio = RepositorioProductosSQLite(conexion)
     repositorio_historial = RepositorioHistorialSQLite(conexion)  # NUEVO
-    
+
     registrar = RegistrarProducto(repositorio)
     editar = EditarProducto(repositorio, repositorio_historial)  # NUEVO
 
