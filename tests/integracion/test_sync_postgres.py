@@ -56,6 +56,8 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def pg():
+    if "supabase" in PG_URL.lower():
+        pytest.fail("Este test BORRA el schema pos: nunca apuntarlo a Supabase (usa Docker local).")
     """Conexion a un schema `pos` recien migrado (002 + quitar check de 003 + 004)."""
     con = psycopg2.connect(PG_URL)
     con.autocommit = True
