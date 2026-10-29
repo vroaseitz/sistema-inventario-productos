@@ -7,6 +7,7 @@ implementa. Se usa typing.Protocol para no obligar a heredar.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Protocol, runtime_checkable
 
 from pos.dominio.caja import MovimientoCaja, TurnoCaja
@@ -55,6 +56,7 @@ class RepositorioVentas(Protocol):
 
     def guardar(self, venta: Venta) -> None: ...
     def obtener_por_turno(self, turno_caja_id: int) -> list[Venta]: ...
+    def por_periodo(self, desde: date, hasta: date) -> list[Venta]: ...
 
 
 @runtime_checkable

@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from tkinter import ttk
 
 from pos.interfaz.app_inventario import VentanaInventario
+from pos.interfaz.app_reportes import VentanaReportes
 from pos.interfaz.app_tkinter import VentanaProductos
 from pos.interfaz.app_ventas import VentanaVentas
 from pos.interfaz.login import pedir_acceso
@@ -40,7 +41,7 @@ MODULOS: tuple[Modulo, ...] = (
     Modulo("F3", "Inventario", "#5B3E7E", ("HU-INV-01 a 08",), True),
     Modulo("F4", "Clientes", "#2E6B3E", ("HU-CLI-01 a 05",)),
     Modulo("F5", "Compras", "#7A4A2E", ("HU-CMP-01 a 03",)),
-    Modulo("F6", "Reportes", "#1E5F63", ("HU-REP-01 a 05",)),
+    Modulo("F6", "Reportes", "#1E5F63", ("HU-REP-01 a 05",), True),
     Modulo("F7", "Administracion", "#4A4F55", ("HU-USR-01, 03",)),
 )
 
@@ -135,6 +136,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
     from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
     from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
+    from pos.aplicacion.casos_uso.reporte_ventas import ReporteVentas
     from pos.dominio.usuarios import Rol
     from pos.infraestructura.config import Config
     from pos.infraestructura.seguridad.hasheador_bcrypt import HasheadorBcrypt
@@ -194,6 +196,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 RegistrarProducto(repo_productos, cola=cola),
                 EditarProducto(repo_productos, repo_historial),
             ),
+            "F6": lambda padre: VentanaReportes(padre, ReporteVentas(repo_ventas, repo_productos)),
             "F3": lambda padre: VentanaInventario(
                 padre,
                 repo_productos,

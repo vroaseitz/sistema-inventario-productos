@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -99,6 +99,15 @@ class RepositorioVentasSQLite:
             "SELECT * FROM ventas WHERE turno_caja_id = ? ORDER BY id", (turno_caja_id,)
         ).fetchall()
         return [self._a_venta(f) for f in filas_venta]
+
+    def por_periodo(self, desde: date, hasta: date) -> list[Venta]:
+        """Ventas pagadas con fecha entre `desde` y `hasta`, ambas inclusive."""
+        filas = self._con.execute(
+            "SELECT * FROM ventas WHERE estado = 'pagada' "
+            "AND date(creado_en) BETWEEN ? AND ? ORDER BY id",
+            (desde.isoformat(), hasta.isoformat()),
+        ).fetchall()
+        return [self._a_venta(f) for f in filas]
 
     def _a_venta(self, fila: sqlite3.Row) -> Venta:
         detalles_filas = self._con.execute(
