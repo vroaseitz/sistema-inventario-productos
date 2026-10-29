@@ -16,6 +16,25 @@ from pos.infraestructura.sqlite.esquema import crear_esquema
 from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
 
 
+class TestOrdenBusqueda:
+    def test_orden_busqueda_prioriza_inicio(self, repositorio):
+        """QA C-15: los que EMPIEZAN con el termino van primero, luego los que solo lo contienen."""
+        repositorio.guardar(Producto(codigo="A-1", nombre="Aceite", precio=Dinero(2000), categoria_id=1))
+        repositorio.guardar(Producto(codigo="T-1", nombre="Té verde", precio=Dinero(1500), categoria_id=1))
+        repositorio.guardar(Producto(codigo="B-1", nombre="Botella de vidrio", precio=Dinero(3000), categoria_id=1))
+
+        resultados = repositorio.buscar("te")
+
+        assert len(resultados) == 3
+        nombres = [p.nombre for p in resultados]
+        # Empieza con "te" (normalizado): "Té verde".
+        assert nombres[0] == "Té verde"
+        # Solo contienen "te": van despues, ordenados alfabeticamente
+        # ("Aceite" < "Botella...").
+        assert nombres[1] == "Aceite"
+        assert nombres[2] == "Botella de vidrio"
+
+
 @pytest.fixture
 def conexion_memoria():
     con = crear_conexion(":memory:")
@@ -70,12 +89,15 @@ class TestGuardadoCompletoProducto:
         assert recuperado.dias_aviso is None
 
     def test_reconstruccion_sobrevive_ciclo_guardar_obtener(self, repositorio):
+        # El IVA guardado NO es 19% del neto a proposito: si el repositorio
+        # recalculara el impuesto al reconstruir, el total quedaria inflado
+        # (1000 + 190 = 1190) y el neto no coincidiria con el guardado.
         producto = Producto(
             codigo="P-200",
             nombre="Cereal Integral",
             precio=Dinero(4500),
             categoria_id=2,
-            costo=Costo(neto=Dinero(3000), iva=Dinero(570)),
+            costo=Costo(neto=Dinero(1000), iva=Dinero(0)),
             perecible=False,
             dias_aviso=None,
         )
@@ -84,7 +106,11 @@ class TestGuardadoCompletoProducto:
         recuperado = repositorio.obtener_por_codigo("P-200")
 
         assert recuperado.costo is not None
-        assert recuperado.costo.neto.monto == 3000
+        # QA C-05b: el neto se recupera EXACTAMENTE como se guardo, sin
+        # inflarse con recalculos de IVA (ni el neto ni el total cambian).
+        assert recuperado.costo.neto.monto == producto.costo.neto.monto
+        assert recuperado.costo.neto.monto == 1000
+        assert recuperado.costo.total.monto == 1000
         assert recuperado.perecible is False
         assert recuperado.dias_aviso is None
 
@@ -106,5 +132,6 @@ class TestGuardadoCompletoProducto:
         assert listado[0].codigo == "P-300"
         assert listado[0].costo is not None
         assert listado[0].costo.neto.monto == 700
+        assert listado[0].costo.total.monto == 700
         assert listado[0].perecible is True
         assert listado[0].dias_aviso == 3

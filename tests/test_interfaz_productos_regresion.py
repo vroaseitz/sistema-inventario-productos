@@ -71,9 +71,30 @@ class TestIndicadoresCosto:
 
         vista._actualizar_indicadores()
 
-        texto = vista._markup_var.set.call_args.args[0]
-        assert texto == "falta costo"
-        assert "100%" not in texto
+        # QA C-06: ni Margen ni Markup deben mostrar 100% con costo 0.
+        texto_margen = vista._margen_var.set.call_args.args[0]
+        texto_markup = vista._markup_var.set.call_args.args[0]
+        assert texto_margen == "falta costo"
+        assert texto_markup == "falta costo"
+        assert "100%" not in texto_margen
+        assert "100%" not in texto_markup
+
+    def test_costo_none_muestra_falta_costo(self, vista):
+        # Producto con costo None: producto.margen y producto.markup son None.
+        from pos.dominio.productos import Producto
+        from pos.dominio.value_objects import Dinero
+
+        vista._costo_var.get.return_value = ""
+        vista._precio_var.get.return_value = "2000"
+
+        producto = Producto(codigo="X", nombre="X", precio=Dinero(2000), categoria_id=1)
+        assert producto.margen is None
+        assert producto.markup is None
+
+        vista._actualizar_indicadores()
+
+        vista._margen_var.set.assert_called_once_with("falta costo")
+        vista._markup_var.set.assert_called_once_with("falta costo")
 
     def test_costo_valido_calcula_porcentajes(self, vista):
         vista._costo_var.get.return_value = "1000"
@@ -83,6 +104,23 @@ class TestIndicadoresCosto:
 
         assert vista._margen_var.set.call_args.args[0] == "50.0%"
         assert vista._markup_var.set.call_args.args[0] == "100.0%"
+
+
+class TestColumnaCategoria:
+    def test_tabla_muestra_nombre_categoria_no_id(self, vista):
+        """QA C-02: la columna Categoría muestra texto ("Abarrotes"), no el id numerico."""
+        from pos.dominio.productos import Producto
+        from pos.dominio.value_objects import Dinero
+
+        producto = Producto(codigo="C-9", nombre="Quinoa", precio=Dinero(3000), categoria_id=3)
+        vista._repo.listar.return_value = [producto]
+        vista._tabla.get_children.return_value = []
+
+        vista._refrescar()
+
+        valores = vista._tabla.insert.call_args.kwargs["values"]
+        assert valores[4] == "abarrotes"
+        assert not isinstance(valores[4], int)
 
 
 # --- QA C-08a/b: busqueda normalizada y disparada con Enter --------------------
@@ -149,4 +187,22 @@ class TestLimpiarFormulario:
         vista._perecible.set.assert_called_once_with(False)
         vista._margen_var.set.assert_called_once_with("Sin dato")
         vista._markup_var.set.assert_called_once_with("Sin dato")
+        vista._entradas["codigo"].focus_set.assert_called_once()
+
+
+class TestCancelarEdicion:
+    def test_boton_cancelar_sale_de_modo_edicion(self, vista):
+        # Simular modo edicion: boton "Guardar cambios" y codigo deshabilitado.
+        vista._boton_guardar = MagicMock(name="boton_guardar")
+        vista._producto_en_edicion = "P-200"
+
+        vista._cancelar_edicion()
+
+        # El formulario se limpia, el codigo se re-habilita y el boton
+        # vuelve al modo alta.
+        vista._entradas["codigo"].config.assert_called_once_with(state="normal")
+        vista._boton_guardar.config.assert_called_once_with(text="Agregar")
+        assert vista._producto_en_edicion is None
+        vista._costo_var.set.assert_called_with("")
+        vista._margen_var.set.assert_called_with("Sin dato")
         vista._entradas["codigo"].focus_set.assert_called_once()
