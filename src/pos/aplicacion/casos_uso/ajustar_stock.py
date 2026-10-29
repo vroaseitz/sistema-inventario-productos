@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
-from pos.aplicacion.puertos import RepositorioAjustes, RepositorioExistencias
+from pos.aplicacion.puertos import ColaSincronizacion, RepositorioAjustes, RepositorioExistencias
+from pos.aplicacion.sincronizacion import encolar_existencia
 from pos.dominio.errores import ReglaInventarioInvalida
 from pos.dominio.inventario import AjusteInventario, Existencia, MotivoAjuste
 
@@ -25,14 +26,17 @@ class AjustarStock:
 
     repositorio_existencias: RepositorioExistencias
     repositorio_ajustes: RepositorioAjustes | None = None
+    cola: ColaSincronizacion | None = None
 
     def __init__(
         self,
         repositorio_existencias: RepositorioExistencias,
         repositorio_ajustes: RepositorioAjustes | None = None,
+        cola: ColaSincronizacion | None = None,
     ) -> None:
         self.repositorio_existencias = repositorio_existencias
         self.repositorio_ajustes = repositorio_ajustes
+        self.cola = cola
 
     @property
     def repositorio(self) -> RepositorioExistencias:
@@ -46,6 +50,7 @@ class AjustarStock:
         )
         existencia.ingresar(Decimal(str(cantidad)))
         self.repositorio_existencias.guardar(existencia)
+        encolar_existencia(self.cola, existencia)
         return existencia
 
     def descontar(self, codigo_producto: str, cantidad: Decimal | float, motivo: str) -> Existencia:
@@ -55,6 +60,7 @@ class AjustarStock:
             raise ReglaInventarioInvalida(f"No hay existencia registrada para {codigo_producto}")
         existencia.descontar(Decimal(str(cantidad)))
         self.repositorio_existencias.guardar(existencia)
+        encolar_existencia(self.cola, existencia)
         return existencia
 
     def ejecutar(
@@ -86,6 +92,7 @@ class AjustarStock:
         existencia.cantidad = cantidad_contada_dec
 
         self.repositorio_existencias.guardar(existencia)
+        encolar_existencia(self.cola, existencia)
         if self.repositorio_ajustes is not None:
             self.repositorio_ajustes.guardar_ajuste(ajuste)
 
