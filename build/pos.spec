@@ -17,7 +17,7 @@
 block_cipher = None
 
 a = Analysis(
-    ["../src/pos/interfaz/app_ventas.py"],
+    ["../src/pos/__main__.py"],
     pathex=["../src"],
     binaries=[],
     datas=[],

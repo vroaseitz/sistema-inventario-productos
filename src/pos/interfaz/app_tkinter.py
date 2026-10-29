@@ -30,20 +30,21 @@ def _normalizar(texto: str) -> str:
     return sin_tildes.lower()
 
 
-class VentanaProductos(tk.Tk):
+class VentanaProductos(ttk.Frame):
+    """Pantalla de Catalogo (F2). Es un marco: la ventana la aporta VentanaPrincipal."""
+
     def __init__(
         self,
+        parent: tk.Misc,
         repositorio: RepositorioProductos,
         registrar_producto: RegistrarProducto,
         editar_producto: EditarProducto,
     ) -> None:
-        super().__init__()
+        super().__init__(parent)
         self._repo = repositorio
         self._registrar = registrar_producto
         self._editar = editar_producto
 
-        self.title("NaturalSur - Productos")
-        self.geometry("900x560")
         self._construir_busqueda()
         self._construir()
         self._refrescar()

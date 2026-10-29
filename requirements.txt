@@ -3,3 +3,4 @@
 # del SChannel del sistema operativo (clave para Windows 8.1). Ver docs/08-diseno/adr/0001.
 python-dotenv>=1.0
 psycopg2-binary>=2.9
+bcrypt>=4.0

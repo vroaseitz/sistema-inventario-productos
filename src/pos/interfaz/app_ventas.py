@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import unicodedata
 from decimal import Decimal, InvalidOperation
-from tkinter import Listbox, StringVar, Tk, Toplevel, messagebox, ttk
+from tkinter import Listbox, Misc, StringVar, Toplevel, messagebox, ttk
 
 from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
 from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
@@ -66,9 +66,12 @@ def _normalizar(texto: str) -> str:
     return sin_tildes.lower()
 
 
-class VentanaVentas(Tk):
+class VentanaVentas(ttk.Frame):
+    """Pantalla de Venta y Caja (F1). Es un marco: la ventana la aporta VentanaPrincipal."""
+
     def __init__(
         self,
+        parent: Misc,
         repositorio_turnos: RepositorioTurnosCaja,
         repositorio_productos: RepositorioProductos,
         repositorio_ventas: RepositorioVentas,
@@ -79,7 +82,7 @@ class VentanaVentas(Tk):
         cola: ColaSincronizacion | None = None,
         publicador: PublicadorRemoto | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(parent)
         self._cola = cola
         self._publicador = publicador
         self._repo_turnos = repositorio_turnos
@@ -92,9 +95,6 @@ class VentanaVentas(Tk):
 
         self._venta: Venta | None = None
 
-        self.title("NaturalSur - Venta y Caja")
-        self.geometry("980x680")
-        self.minsize(900, 620)
         self._construir()
         self._refrescar_turno()
         self._refrescar_sync()
@@ -262,7 +262,7 @@ class VentanaVentas(Tk):
         """
         dialogo = Toplevel(self)
         dialogo.title(titulo)
-        dialogo.transient(self)
+        dialogo.transient(self.winfo_toplevel())
         dialogo.grab_set()
 
         entradas: dict[int, ttk.Entry] = {}
@@ -363,7 +363,7 @@ class VentanaVentas(Tk):
         # en vez de tres ventanas sucesivas con motivo en texto libre.
         dialogo = Toplevel(self)
         dialogo.title("Movimiento de caja")
-        dialogo.transient(self)
+        dialogo.transient(self.winfo_toplevel())
         dialogo.grab_set()
 
         ttk.Label(dialogo, text="Tipo").grid(row=0, column=0, padx=8, pady=6, sticky="w")
@@ -520,7 +520,7 @@ class VentanaVentas(Tk):
         # o el lector no lo lee, sin distinguir tildes ni mayusculas.
         dialogo = Toplevel(self)
         dialogo.title("Buscar producto")
-        dialogo.transient(self)
+        dialogo.transient(self.winfo_toplevel())
         dialogo.grab_set()
         dialogo.geometry("360x320")
 
@@ -664,49 +664,3 @@ class VentanaVentas(Tk):
         messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con exito")
         self._refrescar_sync()
         self._nueva_venta(forzar=True)  # D-01a: queda lista para la siguiente
-
-
-def main() -> None:
-    from pos.infraestructura.config import Config
-    from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
-    from pos.infraestructura.sqlite.conexion import crear_conexion
-    from pos.infraestructura.sqlite.esquema import crear_esquema
-    from pos.infraestructura.sqlite.repositorio_existencias import RepositorioExistenciasSQLite
-    from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
-    from pos.infraestructura.sqlite.repositorio_turnos_caja import RepositorioTurnosCajaSQLite
-    from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite
-    from pos.infraestructura.supabase.adaptador_supabase import AdaptadorSupabase
-
-    config = Config.desde_entorno()
-    conexion = crear_conexion(config.sqlite_path)
-    crear_esquema(conexion)
-
-    repo_productos = RepositorioProductosSQLite(conexion)
-    repo_existencias = RepositorioExistenciasSQLite(conexion)
-    repo_turnos = RepositorioTurnosCajaSQLite(conexion)
-    repo_ventas = RepositorioVentasSQLite(conexion)
-    cola = ColaSincronizacionSQLite(conexion)
-    publicador = AdaptadorSupabase(config.supabase_db_url) if config.supabase_db_url else None
-
-    registrar_venta = RegistrarVenta(
-        repo_ventas, repo_turnos, repo_productos, repo_existencias, cola=cola
-    )
-    abrir_turno = AbrirTurnoCaja(repo_turnos, cola=cola)
-    cerrar_turno = CerrarTurnoCaja(repo_turnos, repo_ventas, cola=cola)
-    registrar_movimiento = RegistrarMovimientoCaja(repo_turnos, cola=cola)
-
-    VentanaVentas(
-        repo_turnos,
-        repo_productos,
-        repo_ventas,
-        registrar_venta,
-        abrir_turno,
-        cerrar_turno,
-        registrar_movimiento,
-        cola=cola,
-        publicador=publicador,
-    ).mainloop()
-
-
-if __name__ == "__main__":
-    main()
