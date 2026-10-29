@@ -1,7 +1,10 @@
 """Seguridad basica: credenciales fuera del repo, inyeccion SQL y claves hasheadas."""
 
+import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from pos.dominio.productos import Producto
 from pos.dominio.value_objects import Dinero
@@ -12,6 +15,10 @@ from pos.infraestructura.sqlite.repositorio_productos import RepositorioProducto
 RAIZ = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.skipif(
+    not (RAIZ / ".git").exists() or shutil.which("git") is None,
+    reason="sin repositorio git (p. ej. copia de prueba en la VM)",
+)
 def test_el_archivo_env_no_esta_versionado():
     archivos = subprocess.run(
         ["git", "ls-files"], cwd=RAIZ, capture_output=True, text=True, check=True
