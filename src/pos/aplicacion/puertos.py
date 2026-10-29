@@ -13,6 +13,7 @@ from pos.dominio.caja import MovimientoCaja, TurnoCaja
 from pos.dominio.inventario import AjusteInventario, Existencia
 from pos.dominio.lotes import Lote
 from pos.dominio.productos import Producto, RegistroCambioPrecio
+from pos.dominio.usuarios import Usuario
 from pos.dominio.ventas import Venta
 
 
@@ -88,3 +89,12 @@ class RepositorioLotes(Protocol):
     def guardar(self, lote: Lote) -> None: ...
     def por_producto(self, codigo_producto: str) -> list[Lote]: ...
     def con_saldo(self) -> list[Lote]: ...
+
+
+@runtime_checkable
+class RepositorioUsuarios(Protocol):
+    """Puerto de usuarios para el acceso local (HU-USR-01)."""
+
+    def guardar(self, usuario: Usuario) -> None: ...
+    def obtener_por_nombre(self, nombre: str) -> Usuario | None: ...
+    def hay_usuarios(self) -> bool: ...

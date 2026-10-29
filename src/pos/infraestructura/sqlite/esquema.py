@@ -62,6 +62,15 @@ CREATE TABLE IF NOT EXISTS cola_sincronizacion (
 
 -- Jornada de caja (HU-CAJ-01). El indice unico sobre cerrado_en IS NULL impide
 -- dos turnos abiertos a la vez, igual que en database/migraciones/ (Postgres).
+-- Usuarios locales para el acceso (HU-USR-01). La clave se guarda solo como hash bcrypt.
+CREATE TABLE IF NOT EXISTS usuarios (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre     TEXT NOT NULL UNIQUE,
+    clave_hash TEXT NOT NULL,
+    rol        TEXT NOT NULL CHECK (rol IN ('admin', 'cajero')),
+    activo     INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS turnos_caja (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id         INTEGER NOT NULL,

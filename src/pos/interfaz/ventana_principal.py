@@ -21,6 +21,8 @@ from tkinter import ttk
 from pos.interfaz.app_inventario import VentanaInventario
 from pos.interfaz.app_tkinter import VentanaProductos
 from pos.interfaz.app_ventas import VentanaVentas
+from pos.interfaz.login import pedir_acceso
+from pos.interfaz.sesion import Sesion
 
 
 @dataclass(frozen=True)
@@ -120,9 +122,10 @@ class VentanaPrincipal(tk.Tk):
         return self._activo
 
 
-def construir_aplicacion() -> VentanaPrincipal:
+def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     """Arma la app completa: repositorios SQLite, casos de uso, sincronizacion y pantallas."""
     from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
+    from pos.aplicacion.casos_uso.autenticar_usuario import AutenticarUsuario, CrearUsuario
     from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
     from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import (
         ConsultarAlertasVencimiento,
@@ -132,7 +135,9 @@ def construir_aplicacion() -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
     from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
     from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
+    from pos.dominio.usuarios import Rol
     from pos.infraestructura.config import Config
+    from pos.infraestructura.seguridad.hasheador_bcrypt import HasheadorBcrypt
     from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
     from pos.infraestructura.sqlite.conexion import crear_conexion
     from pos.infraestructura.sqlite.esquema import crear_esquema
@@ -141,6 +146,7 @@ def construir_aplicacion() -> VentanaPrincipal:
     from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
     from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
     from pos.infraestructura.sqlite.repositorio_turnos_caja import RepositorioTurnosCajaSQLite
+    from pos.infraestructura.sqlite.repositorio_usuarios import RepositorioUsuariosSQLite
     from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite
     from pos.infraestructura.supabase.adaptador_supabase import AdaptadorSupabase
 
@@ -154,11 +160,13 @@ def construir_aplicacion() -> VentanaPrincipal:
     repo_ventas = RepositorioVentasSQLite(conexion)
     repo_historial = RepositorioHistorialSQLite(conexion)
     repo_lotes = RepositorioLotesSQLite(conexion)
+    repo_usuarios = RepositorioUsuariosSQLite(conexion)
     cola = ColaSincronizacionSQLite(conexion)
+    sesion = Sesion()
     # Sin SUPABASE_DB_URL la app vende igual y deja lo pendiente en la cola.
     publicador = AdaptadorSupabase(config.supabase_db_url) if config.supabase_db_url else None
 
-    return VentanaPrincipal(
+    ventana = VentanaPrincipal(
         {
             "F1": lambda padre: VentanaVentas(
                 padre,
@@ -178,6 +186,7 @@ def construir_aplicacion() -> VentanaPrincipal:
                 RegistrarMovimientoCaja(repo_turnos, cola=cola),
                 cola=cola,
                 publicador=publicador,
+                sesion=sesion,
             ),
             "F2": lambda padre: VentanaProductos(
                 padre,
@@ -193,10 +202,29 @@ def construir_aplicacion() -> VentanaPrincipal:
             ),
         }
     )
+    if con_login:
+        hasheador = HasheadorBcrypt()
+        primer_uso = not repo_usuarios.hay_usuarios()
+        if primer_uso:
+            # El primer usuario es el administrador; los demas los crea el en F7 (pendiente).
+            def accion(nombre: str, clave: str):
+                CrearUsuario(repo_usuarios, hasheador).ejecutar(nombre, clave, Rol.ADMIN)
+                return AutenticarUsuario(repo_usuarios, hasheador).ejecutar(nombre, clave)
+        else:
+            accion = AutenticarUsuario(repo_usuarios, hasheador).ejecutar
+        ventana.withdraw()
+        usuario = pedir_acceso(ventana, accion, primer_uso)
+        if usuario is None:
+            ventana.destroy()
+            raise SystemExit(0)
+        sesion.usuario_id, sesion.nombre = usuario.id, usuario.nombre
+        ventana.title(f"NaturalSur - Emporio ({usuario.nombre})")
+        ventana.deiconify()
+    return ventana
 
 
 def main() -> None:
-    construir_aplicacion().mainloop()
+    construir_aplicacion(con_login=True).mainloop()
 
 
 if __name__ == "__main__":

@@ -36,8 +36,9 @@ from pos.dominio.errores import ErrorDominio
 from pos.dominio.pagos import DENOMINACIONES_CLP, ConteoDenominaciones, MedioPago, Pago
 from pos.dominio.value_objects import Dinero
 from pos.dominio.ventas import EstadoVenta, Venta
+from pos.interfaz.sesion import Sesion
 
-USUARIO_DEMO = 1  # sin login todavia (ver docs/04-requisitos-no-funcionales)
+USUARIO_DEMO = 1  # usuario por defecto cuando no hay sesion (pruebas / sin login)
 
 # Motivos validados por la Product Owner el 22-09 (HU-CAJ-04, hallazgo E-03).
 MOTIVOS_MOVIMIENTO_CAJA = (
@@ -81,8 +82,10 @@ class VentanaVentas(ttk.Frame):
         registrar_movimiento: RegistrarMovimientoCaja,
         cola: ColaSincronizacion | None = None,
         publicador: PublicadorRemoto | None = None,
+        sesion: Sesion | None = None,
     ) -> None:
         super().__init__(parent)
+        self._sesion = sesion or Sesion(USUARIO_DEMO)
         self._cola = cola
         self._publicador = publicador
         self._repo_turnos = repositorio_turnos
@@ -321,7 +324,7 @@ class VentanaVentas(ttk.Frame):
             return
         try:
             self._abrir_turno.ejecutar(
-                usuario_id=USUARIO_DEMO,
+                usuario_id=self._sesion.usuario_id,
                 fondo_inicial=Dinero(conteo.total),
                 composicion_fondo_inicial=conteo,
             )
@@ -459,7 +462,7 @@ class VentanaVentas(ttk.Frame):
         ):
             return
         try:
-            self._venta = self._registrar_venta.iniciar(usuario_id=USUARIO_DEMO)
+            self._venta = self._registrar_venta.iniciar(usuario_id=self._sesion.usuario_id)
         except ErrorDominio as exc:
             self._venta = None
             if not forzar:
