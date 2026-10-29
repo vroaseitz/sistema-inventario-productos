@@ -17,9 +17,9 @@ def test_hay_siete_modulos_con_atajo_y_color_del_prototipo():
     assert len({m.color for m in MODULOS}) == 7  # cada modulo con su franja
 
 
-def test_solo_operacion_y_catalogo_se_declaran_implementados():
+def test_solo_operacion_catalogo_e_inventario_se_declaran_implementados():
     # Honestidad: los demas modulos son marcadores, no pantallas (ver informe final).
-    assert {m.clave for m in MODULOS if m.implementado} == {"F1", "F2"}
+    assert {m.clave for m in MODULOS if m.implementado} == {"F1", "F2", "F3"}
 
 
 def _hay_pantalla() -> bool:
@@ -39,6 +39,7 @@ def test_la_ventana_unica_monta_venta_y_productos_y_cambia_de_modulo(tmp_path, m
         assert type(ventana._marcos["F2"]).__name__ == "VentanaProductos"
         assert ventana.modulo_activo == "F1"
 
+        assert type(ventana._marcos["F3"]).__name__ == "VentanaInventario"
         ventana.mostrar("F3")
         assert ventana.modulo_activo == "F3"
         assert ventana._franja.cget("bg") == next(m.color for m in MODULOS if m.clave == "F3")

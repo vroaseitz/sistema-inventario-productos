@@ -26,7 +26,11 @@ from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimien
 from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto  # noqa: E402
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta  # noqa: E402
 from pos.aplicacion.casos_uso.sincronizar_pendientes import SincronizarPendientes  # noqa: E402
-from pos.aplicacion.sincronizacion import encolar_existencia, encolar_venta  # noqa: E402
+from pos.aplicacion.sincronizacion import (  # noqa: E402
+    encolar_existencia,
+    encolar_producto,
+    encolar_venta,
+)
 from pos.dominio.caja import TipoMovimientoCaja  # noqa: E402
 from pos.dominio.inventario import Existencia  # noqa: E402
 from pos.dominio.pagos import MedioPago, Pago  # noqa: E402
@@ -63,9 +67,9 @@ def pg():
     con.autocommit = True
     cur = con.cursor()
     cur.execute("DROP SCHEMA IF EXISTS pos CASCADE; CREATE SCHEMA pos; SET search_path TO pos;")
-    cur.execute((MIGRACIONES / "002_modelo_completo.sql").read_text())
-    cur.execute("ALTER TABLE producto DROP CONSTRAINT IF EXISTS producto_no_vende_bajo_costo;")
-    cur.execute((MIGRACIONES / "004_sincronizacion.sql").read_text())
+    for migracion in sorted(MIGRACIONES.glob("[0-9]*.sql")):
+        if not migracion.name.startswith("001"):  # borrador antiguo, lo reemplaza 002
+            cur.execute(migracion.read_text())
     cur.execute("RESET search_path;")
     yield cur
     cur.execute("DROP SCHEMA IF EXISTS pos CASCADE;")
@@ -246,3 +250,28 @@ def test_encolar_venta_helper_es_idempotente_en_la_cola():
     antes = len(app.cola.pendientes())
     encolar_venta(app.cola, venta, app.turnos.obtener_abierto().uuid)  # doble encolado
     assert len(app.cola.pendientes()) == antes
+
+
+def test_lote_creado_y_consumido_llega_a_postgres_con_su_saldo_final(pg):
+    from datetime import date, timedelta
+
+    from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
+    from pos.dominio.productos import Producto
+    from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
+
+    app = App()
+    lotes = RepositorioLotesSQLite(app.productos._con)
+    app.venta.repositorio_lotes = lotes
+    app.productos.guardar(
+        Producto("P1", "Yogurt", Dinero(1500), categoria_id=1, perecible=True, dias_aviso=7)
+    )
+    encolar_producto(app.cola, app.productos.obtener_por_codigo("P1"))
+    IngresarStock(app.productos, app.existencias, lotes, cola=app.cola).ejecutar(
+        "P1", 10, "Compra proveedor", fecha_vencimiento=date.today() + timedelta(days=5)
+    )
+    app.abrir.ejecutar(usuario_id=1, fondo_inicial=Dinero(0))
+    app.vender([("P1", 4)], [Pago(medio=MedioPago.TARJETA, monto=Dinero(6000))])
+
+    assert app.sincronizar().fallo_en is None
+    assert _uno(pg, "SELECT count(*) FROM pos.lote") == 1
+    assert _uno(pg, "SELECT saldo FROM pos.lote") == Decimal("6.000")  # 10 - 4 vendidos (FEFO)

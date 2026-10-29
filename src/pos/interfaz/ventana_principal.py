@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from tkinter import ttk
 
+from pos.interfaz.app_inventario import VentanaInventario
 from pos.interfaz.app_tkinter import VentanaProductos
 from pos.interfaz.app_ventas import VentanaVentas
 
@@ -34,7 +35,7 @@ class Modulo:
 MODULOS: tuple[Modulo, ...] = (
     Modulo("F1", "Operacion", "#1D4E6F", ("HU-VTA-01 a 07", "HU-CAJ-01 a 04"), True),
     Modulo("F2", "Catalogo", "#8A5A17", ("HU-PRD-01 a 10",), True),
-    Modulo("F3", "Inventario", "#5B3E7E", ("HU-INV-01 a 08",)),
+    Modulo("F3", "Inventario", "#5B3E7E", ("HU-INV-01 a 08",), True),
     Modulo("F4", "Clientes", "#2E6B3E", ("HU-CLI-01 a 05",)),
     Modulo("F5", "Compras", "#7A4A2E", ("HU-CMP-01 a 03",)),
     Modulo("F6", "Reportes", "#1E5F63", ("HU-REP-01 a 05",)),
@@ -123,7 +124,11 @@ def construir_aplicacion() -> VentanaPrincipal:
     """Arma la app completa: repositorios SQLite, casos de uso, sincronizacion y pantallas."""
     from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
     from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
+    from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import (
+        ConsultarAlertasVencimiento,
+    )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
+    from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
     from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
     from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
     from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
@@ -133,6 +138,7 @@ def construir_aplicacion() -> VentanaPrincipal:
     from pos.infraestructura.sqlite.esquema import crear_esquema
     from pos.infraestructura.sqlite.repositorio_existencias import RepositorioExistenciasSQLite
     from pos.infraestructura.sqlite.repositorio_historial import RepositorioHistorialSQLite
+    from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
     from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
     from pos.infraestructura.sqlite.repositorio_turnos_caja import RepositorioTurnosCajaSQLite
     from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite
@@ -147,6 +153,7 @@ def construir_aplicacion() -> VentanaPrincipal:
     repo_turnos = RepositorioTurnosCajaSQLite(conexion)
     repo_ventas = RepositorioVentasSQLite(conexion)
     repo_historial = RepositorioHistorialSQLite(conexion)
+    repo_lotes = RepositorioLotesSQLite(conexion)
     cola = ColaSincronizacionSQLite(conexion)
     # Sin SUPABASE_DB_URL la app vende igual y deja lo pendiente en la cola.
     publicador = AdaptadorSupabase(config.supabase_db_url) if config.supabase_db_url else None
@@ -159,7 +166,12 @@ def construir_aplicacion() -> VentanaPrincipal:
                 repo_productos,
                 repo_ventas,
                 RegistrarVenta(
-                    repo_ventas, repo_turnos, repo_productos, repo_existencias, cola=cola
+                    repo_ventas,
+                    repo_turnos,
+                    repo_productos,
+                    repo_existencias,
+                    cola=cola,
+                    repositorio_lotes=repo_lotes,
                 ),
                 AbrirTurnoCaja(repo_turnos, cola=cola),
                 CerrarTurnoCaja(repo_turnos, repo_ventas, cola=cola),
@@ -172,6 +184,12 @@ def construir_aplicacion() -> VentanaPrincipal:
                 repo_productos,
                 RegistrarProducto(repo_productos, cola=cola),
                 EditarProducto(repo_productos, repo_historial),
+            ),
+            "F3": lambda padre: VentanaInventario(
+                padre,
+                repo_productos,
+                IngresarStock(repo_productos, repo_existencias, repo_lotes, cola=cola),
+                ConsultarAlertasVencimiento(repo_lotes, repo_productos),
             ),
         }
     )

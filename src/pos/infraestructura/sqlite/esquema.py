@@ -120,6 +120,15 @@ CREATE TABLE IF NOT EXISTS venta_pagos (
     composicion_entregada  TEXT,
     FOREIGN KEY (venta_id) REFERENCES ventas(id)
 );
+
+CREATE TABLE IF NOT EXISTS lotes (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid               TEXT NOT NULL UNIQUE,
+    codigo_producto    TEXT NOT NULL,
+    fecha_vencimiento  TEXT NOT NULL,
+    saldo              TEXT NOT NULL,
+    FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
+);
 """
 
 

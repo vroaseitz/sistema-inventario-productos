@@ -11,6 +11,7 @@ from typing import Protocol, runtime_checkable
 
 from pos.dominio.caja import MovimientoCaja, TurnoCaja
 from pos.dominio.inventario import AjusteInventario, Existencia
+from pos.dominio.lotes import Lote
 from pos.dominio.productos import Producto, RegistroCambioPrecio
 from pos.dominio.ventas import Venta
 
@@ -78,3 +79,12 @@ class RepositorioAjustes(Protocol):
     """Puerto para persistir el historial de ajustes (HU mermas y ajustes)."""
 
     def guardar_ajuste(self, ajuste: AjusteInventario) -> None: ...
+
+
+@runtime_checkable
+class RepositorioLotes(Protocol):
+    """Puerto de lotes con vencimiento (HU-INV-02)."""
+
+    def guardar(self, lote: Lote) -> None: ...
+    def por_producto(self, codigo_producto: str) -> list[Lote]: ...
+    def con_saldo(self) -> list[Lote]: ...

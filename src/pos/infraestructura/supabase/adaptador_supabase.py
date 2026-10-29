@@ -79,6 +79,9 @@ def verificar_efecto(cur: Any, operacion: dict) -> None:
             (d["codigo_producto"],),
         )
         esperado = 1
+    elif entidad == "lote":
+        cur.execute("SELECT count(*) FROM pos.lote WHERE id_cliente = %s", (d["uuid"],))
+        esperado = 1
     elif entidad == "turno_abrir":
         cur.execute("SELECT count(*) FROM pos.turno_caja WHERE id_cliente = %s", (d["uuid"],))
         esperado = 1

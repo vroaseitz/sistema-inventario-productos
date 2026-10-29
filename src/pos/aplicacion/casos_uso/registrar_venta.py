@@ -14,12 +14,14 @@ from decimal import Decimal
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
     RepositorioExistencias,
+    RepositorioLotes,
     RepositorioProductos,
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
-from pos.aplicacion.sincronizacion import encolar_existencia, encolar_venta
+from pos.aplicacion.sincronizacion import encolar_existencia, encolar_lote, encolar_venta
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
+from pos.dominio.lotes import consumir_fefo
 from pos.dominio.pagos import Pago
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.ventas import DetalleVenta, Venta
@@ -32,6 +34,7 @@ class RegistrarVenta:
     repositorio_productos: RepositorioProductos
     repositorio_existencias: RepositorioExistencias
     cola: ColaSincronizacion | None = None
+    repositorio_lotes: RepositorioLotes | None = None
 
     def iniciar(self, usuario_id: int, cliente_id: int | None = None) -> Venta:
         turno = self.repositorio_turnos.obtener_abierto()
@@ -97,9 +100,22 @@ class RegistrarVenta:
             existencia.descontar(detalle.cantidad)
             self.repositorio_existencias.guardar(existencia)
             encolar_existencia(self.cola, existencia)
+            self._consumir_lotes(detalle.producto_codigo, detalle.cantidad)
 
         self.repositorio_ventas.guardar(venta)
         turno = self.repositorio_turnos.obtener_abierto()
         if turno is not None:
             encolar_venta(self.cola, venta, turno.uuid)
         return venta
+
+    def _consumir_lotes(self, codigo: str, cantidad: Decimal) -> None:
+        """Descuenta de los lotes primero el que vence antes (FEFO) y sincroniza lo cambiado."""
+        if self.repositorio_lotes is None:
+            return
+        lotes = [lote for lote in self.repositorio_lotes.por_producto(codigo) if lote.saldo > 0]
+        antes = {lote.uuid: lote.saldo for lote in lotes}
+        consumir_fefo(lotes, cantidad)
+        for lote in lotes:
+            if lote.saldo != antes[lote.uuid]:
+                self.repositorio_lotes.guardar(lote)
+                encolar_lote(self.cola, lote)

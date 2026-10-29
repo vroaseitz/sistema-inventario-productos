@@ -6,7 +6,7 @@ credenciales. El adaptador solo ejecuta lo que este traductor construye.
 Destino: schema `pos` (database/migraciones/002 a 004). Todas las sentencias son
 idempotentes: reintentar una operacion tras un corte no duplica ni corrompe datos.
 
-- producto / existencia: upsert por `producto.codigo` (codigo interno de la tienda).
+- producto / existencia / lote: upsert por `producto.codigo` (codigo interno) o por UUID (lote).
 - turno_abrir / turno_cerrar / movimiento_caja / venta: el UUID generado en el cliente
   se guarda como `id_cliente` (UNIQUE) y `ON CONFLICT DO NOTHING` absorbe el reintento.
   La venta con sus lineas y pagos va en UNA sola sentencia (CTE), asi que o entra
@@ -56,6 +56,14 @@ _SQL_MOVIMIENTO = (
 )
 
 
+_SQL_LOTE = (
+    "INSERT INTO pos.lote (id_cliente, producto_id, fecha_vencimiento, saldo) "
+    "SELECT %s, p.id, %s::date, %s::numeric FROM pos.producto p WHERE p.codigo = %s "
+    "ON CONFLICT (id_cliente) DO UPDATE SET "
+    "saldo = EXCLUDED.saldo, fecha_vencimiento = EXCLUDED.fecha_vencimiento"
+)
+
+
 def _sql_venta(n_lineas: int, n_pagos: int) -> str:
     linea = "(%s::text, %s::numeric, %s::numeric, %s::numeric, %s::numeric)"
     lineas = ", ".join([linea] * n_lineas)
@@ -102,6 +110,9 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
 
     if entidad == "existencia":
         return [(_SQL_EXISTENCIA, (d["cantidad"], d["codigo_producto"]))]
+
+    if entidad == "lote":
+        return [(_SQL_LOTE, (d["uuid"], d["fecha_vencimiento"], d["saldo"], d["codigo_producto"]))]
 
     if entidad == "turno_abrir":
         return [(_SQL_TURNO_ABRIR, (d["uuid"], d["fondo_inicial"], d["abierto_en"]))]

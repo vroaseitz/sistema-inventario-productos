@@ -17,6 +17,7 @@ from uuid import uuid4
 from pos.aplicacion.puertos import ColaSincronizacion
 from pos.dominio.caja import MovimientoCaja, TurnoCaja
 from pos.dominio.inventario import Existencia
+from pos.dominio.lotes import Lote
 from pos.dominio.productos import Producto
 from pos.dominio.ventas import Venta
 
@@ -136,3 +137,20 @@ def encolar_catalogo(
         if existencia.cantidad >= Decimal(0):
             encolar_existencia(cola, existencia)
     return len(productos) + len(existencias)
+
+
+def encolar_lote(cola: ColaSincronizacion | None, lote: Lote) -> None:
+    """Un lote cambia de saldo (ingreso, venta), asi que cada cambio es una operacion nueva."""
+    if cola is None:
+        return
+    cola.encolar(
+        "lote",
+        "upsert",
+        {
+            "uuid": lote.uuid,
+            "codigo_producto": lote.codigo_producto,
+            "fecha_vencimiento": lote.fecha_vencimiento.isoformat(),
+            "saldo": str(lote.saldo),
+        },
+        str(uuid4()),
+    )

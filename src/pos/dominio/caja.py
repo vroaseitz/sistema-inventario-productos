@@ -117,9 +117,7 @@ def calcular_arqueo(
                 efectivo_entregado_total += pago.cobro_efectivo.monto_entregado.monto
         vuelto_total += venta.vuelto_entregado.monto
 
-    ingresos = sum(
-        m.monto.monto for m in turno.movimientos if m.tipo is TipoMovimientoCaja.INGRESO
-    )
+    ingresos = sum(m.monto.monto for m in turno.movimientos if m.tipo is TipoMovimientoCaja.INGRESO)
     retiros = sum(m.monto.monto for m in turno.movimientos if m.tipo is TipoMovimientoCaja.RETIRO)
 
     # El efectivo esperado sigue el flujo de caja real: lo que el cliente entrego
