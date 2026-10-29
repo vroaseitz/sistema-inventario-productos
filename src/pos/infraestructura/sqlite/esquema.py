@@ -13,13 +13,43 @@ CREATE TABLE IF NOT EXISTS productos (
     nombre        TEXT NOT NULL,
     precio        INTEGER NOT NULL CHECK (precio >= 0),
     unidad_venta  TEXT NOT NULL DEFAULT 'unidad',
-    categoria_id  INTEGER,
-    activo        INTEGER NOT NULL DEFAULT 1
+    categoria_id  INTEGER NOT NULL,
+    activo        INTEGER NOT NULL DEFAULT 1,
+    costo_neto    INTEGER,
+    perecible     INTEGER NOT NULL DEFAULT 0,
+    dias_aviso    INTEGER
 );
+
+-- Migracion ligera para bases creadas con un esquema anterior (sin costo/perecible).
+ALTER TABLE productos ADD COLUMN costo_neto INTEGER;
+ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE productos ADD COLUMN dias_aviso INTEGER;
 
 CREATE TABLE IF NOT EXISTS existencias (
     codigo_producto TEXT PRIMARY KEY,
     cantidad        TEXT NOT NULL DEFAULT '0',
+    FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
+);
+
+CREATE TABLE IF NOT EXISTS historial_precios (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo_producto TEXT NOT NULL,
+    precio_anterior INTEGER NOT NULL,
+    precio_nuevo    INTEGER NOT NULL,
+    usuario         TEXT NOT NULL,
+    fecha           TEXT NOT NULL,
+    FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
+);
+
+CREATE TABLE IF NOT EXISTS historial_ajustes_inventario (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo_producto    TEXT NOT NULL,
+    cantidad_anterior  TEXT NOT NULL,
+    cantidad_nueva     TEXT NOT NULL,
+    diferencia_conteo  TEXT NOT NULL,
+    motivo             TEXT NOT NULL,
+    usuario            TEXT NOT NULL,
+    fecha              TEXT NOT NULL,
     FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
 );
 
@@ -38,4 +68,13 @@ CREATE TABLE IF NOT EXISTS cola_sincronizacion (
 
 
 def crear_esquema(conexion: sqlite3.Connection) -> None:
-    conexion.executescript(DDL)
+    """Crea el esquema; tolera migraciones ya aplicadas (columnas duplicadas)."""
+    for sentencia in DDL.strip().split(";"):
+        sentencia = sentencia.strip()
+        if not sentencia:
+            continue
+        try:
+            conexion.execute(sentencia)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
