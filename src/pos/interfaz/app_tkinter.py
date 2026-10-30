@@ -30,6 +30,18 @@ def _normalizar(texto: str) -> str:
     return sin_tildes.lower()
 
 
+def _cargar_nombres_categorias(repo) -> list[str]:
+    """C-02: nombres de categoria desde la BD, no desde una tupla fijada.
+
+    Si el repositorio no expone el catalogo (implementacion vieja), cae a la
+    tupla CATEGORIAS_VALIDAS para no romper la pantalla.
+    """
+    listar = getattr(repo, "listar_categorias", None)
+    if listar is None:
+        return list(CATEGORIAS_VALIDAS)
+    return [c.nombre for c in listar()]
+
+
 class VentanaProductos(tk.Tk):
     def __init__(
         self,
@@ -118,10 +130,10 @@ class VentanaProductos(tk.Tk):
         self._entradas["nombre"].grid(row=0, column=3, padx=4, pady=6)
 
         ttk.Label(marco_form, text="Categoría").grid(row=0, column=4, padx=4, pady=6)
-        # C-02 / C-04: categoria por lista desplegable, no texto libre.
+        # C-02 / C-04: categoria por lista desplegable leida de la BD.
         self._categoria = ttk.Combobox(
             marco_form,
-            values=list(CATEGORIAS_VALIDAS),
+            values=_cargar_nombres_categorias(self._repo),
             width=12,
             state="readonly",
         )

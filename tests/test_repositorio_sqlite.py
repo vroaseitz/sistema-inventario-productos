@@ -48,6 +48,35 @@ def repositorio(conexion_memoria):
     return RepositorioProductosSQLite(conexion_memoria)
 
 
+class TestCategoriasDesdeBD:
+    def test_esquema_crea_tabla_categoria_con_seed(self, conexion_memoria):
+        """La tabla categoria existe y viene sembrada con las 4 categorias."""
+        filas = conexion_memoria.execute("SELECT id, nombre FROM categoria ORDER BY id").fetchall()
+        assert [(f["id"], f["nombre"]) for f in filas] == [
+            (1, "frutas"),
+            (2, "verduras"),
+            (3, "abarrotes"),
+            (4, "limpieza"),
+        ]
+
+    def test_listar_categorias_desde_bd(self, repositorio):
+        # La PO podra agregar una categoria en BD y la GUI la verá sin cambiar codigo.
+        repositorio._con.execute("INSERT INTO categoria (nombre) VALUES ('panaderia')")
+
+        nombres = [c.nombre for c in repositorio.listar_categorias()]
+
+        assert nombres == ["frutas", "verduras", "abarrotes", "limpieza", "panaderia"]
+
+    def test_crear_categoria(self, repositorio):
+        repositorio.crear_categoria("panaderia")
+
+        nombres = [c.nombre for c in repositorio.listar_categorias()]
+        assert "panaderia" in nombres
+        # Idempotente: crear dos veces la misma no duplica.
+        with pytest.raises(Exception):
+            repositorio.crear_categoria("panaderia")
+
+
 class TestGuardadoCompletoProducto:
     def test_persiste_costo_perecible_y_dias_aviso(self, repositorio):
         producto = Producto(

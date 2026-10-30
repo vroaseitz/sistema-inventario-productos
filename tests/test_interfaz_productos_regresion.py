@@ -18,6 +18,7 @@ import pytest
 
 pytest.importorskip("tkinter", reason="Tkinter no disponible en este entorno")
 
+from pos.dominio.categorias import Categoria
 from pos.interfaz.app_tkinter import VentanaProductos, _normalizar
 
 
@@ -121,6 +122,26 @@ class TestColumnaCategoria:
         valores = vista._tabla.insert.call_args.kwargs["values"]
         assert valores[4] == "abarrotes"
         assert not isinstance(valores[4], int)
+
+
+class TestComboboxCategoriasDinamicas:
+    """C-02/C-04: el combobox de categorias se alimenta de la BD, no de una tupla fijada."""
+
+    def test_combo_se_llena_desde_bd(self, vista):
+        # La GUI pide listar_categorias() al repositorio (contrato nuevo).
+        vista._repo.listar_categorias.return_value = [
+            Categoria(id=1, nombre="frutas"),
+            Categoria(id=2, nombre="verduras"),
+            Categoria(id=9, nombre="panaderia"),
+        ]
+
+        # Reproducimos la carga de categorias tal como la hace _construir.
+        from pos.interfaz.app_tkinter import _cargar_nombres_categorias
+
+        nombres = _cargar_nombres_categorias(vista._repo)
+
+        assert nombres == ["frutas", "verduras", "panaderia"]
+        vista._repo.listar_categorias.assert_called_once()
 
 
 # --- QA C-08a/b: busqueda normalizada y disparada con Enter --------------------

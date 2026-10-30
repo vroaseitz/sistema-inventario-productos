@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from pos.dominio.categorias import Categoria
 from pos.dominio.inventario import AjusteInventario, Existencia
 from pos.dominio.productos import Producto, RegistroCambioPrecio
 
@@ -19,6 +20,8 @@ class RepositorioProductos(Protocol):
     def obtener_por_codigo(self, codigo: str) -> Producto | None: ...
     def listar(self) -> list[Producto]: ...
     def buscar(self, termino: str) -> list[Producto]: ...
+
+    def listar_categorias(self) -> list[Categoria]: ...
 
 
 @runtime_checkable

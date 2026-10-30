@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from pos.dominio.categorias import Categoria
 from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
 
@@ -60,6 +61,21 @@ class RepositorioProductosSQLite:
     def listar(self) -> list[Producto]:
         filas = self._con.execute("SELECT * FROM productos ORDER BY nombre").fetchall()
         return [self._a_producto(f) for f in filas]
+
+    # --- Catalogo de categorias (C-02/C-04) ---------------------------------
+
+    def listar_categorias(self) -> list[Categoria]:
+        """Categorias desde la BD: la lista la define el negocio, no el codigo."""
+        filas = self._con.execute("SELECT id, nombre FROM categoria ORDER BY id").fetchall()
+        return [Categoria(id=f["id"], nombre=f["nombre"]) for f in filas]
+
+    def crear_categoria(self, nombre: str) -> Categoria:
+        """Agrega una categoria nueva. Falla si ya existe (nombre UNIQUE)."""
+        nombre = nombre.strip().lower()
+        if not nombre:
+            raise ValueError("El nombre de categoria no puede estar vacio")
+        cursor = self._con.execute("INSERT INTO categoria (nombre) VALUES (?)", (nombre,))
+        return Categoria(id=cursor.lastrowid, nombre=nombre)
 
     @staticmethod
     def _a_producto(fila: sqlite3.Row) -> Producto:

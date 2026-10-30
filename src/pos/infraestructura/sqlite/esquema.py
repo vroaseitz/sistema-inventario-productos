@@ -8,6 +8,19 @@ from __future__ import annotations
 import sqlite3
 
 DDL = """
+CREATE TABLE IF NOT EXISTS categoria (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre  TEXT NOT NULL UNIQUE
+);
+
+-- Seed inicial: las 4 categorias de siempre, con los mismos ids que usa
+-- CATEGORIAS_VALIDAS. La lista definitiva la carga el negocio con
+-- scripts/cargar_categorias.py cuando la Product Owner la valide.
+INSERT OR IGNORE INTO categoria (id, nombre) VALUES (1, 'frutas');
+INSERT OR IGNORE INTO categoria (id, nombre) VALUES (2, 'verduras');
+INSERT OR IGNORE INTO categoria (id, nombre) VALUES (3, 'abarrotes');
+INSERT OR IGNORE INTO categoria (id, nombre) VALUES (4, 'limpieza');
+
 CREATE TABLE IF NOT EXISTS productos (
     codigo        TEXT PRIMARY KEY,
     nombre        TEXT NOT NULL,
