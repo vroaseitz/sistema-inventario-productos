@@ -10,7 +10,9 @@
 # Uso (dentro de la VM Win 8.1, con el venv activado):
 #   pip install pyinstaller
 #   pyinstaller build/pos.spec
-# El resultado queda en dist/pos-naturalsur/.
+# El resultado queda en dist/pos-naturalsur/. Punto de entrada: pantalla de venta y caja
+# (app_ventas.py). Junto al .exe se coloca un .env con SUPABASE_DB_URL (config/.env.example);
+# sin el, la app vende igual y deja las operaciones pendientes de sincronizar.
 
 block_cipher = None
 
@@ -19,7 +21,7 @@ a = Analysis(
     pathex=["../src"],
     binaries=[],
     datas=[],
-    hiddenimports=["psycopg2"],
+    hiddenimports=["psycopg2", "dotenv", "bcrypt"],
     hookspath=[],
     runtime_hooks=[],
     excludes=[],

@@ -217,12 +217,19 @@ erDiagram
 | Restricción | Error que previene |
 | --- | --- |
 | `CHECK (precio_venta > 0)` | Productos con precio cero |
-| `CHECK (NOT costo_cargado OR precio_venta >= costo_total)` | Vender bajo costo por error de dato (9 casos detectados; las liquidaciones reales quedan fuera de este check y se manejan como excepción explícita, ver HU-INV-06) |
 | `CHECK (cantidad > 0)` en `venta_detalle` | Líneas de importe negativo |
 | `CHECK (estado <> 'anulada' OR motivo_anulacion IS NOT NULL)` | Anulaciones sin motivo ni autor (2.781 casos en el sistema legado) |
 | `UNIQUE INDEX ... WHERE cerrado_en IS NULL` en `turno_caja` | Dos turnos de caja abiertos a la vez |
 | `motivo_id NOT NULL` en `movimiento_inventario` | Ajustes de inventario sin causa (29.715 casos) |
 | `categoria_id NOT NULL` en `producto` | Productos sin categoría (3.300 de 4.109 en el catálogo legado) |
+
+**Retirado:** `CHECK (NOT costo_cargado OR precio_venta >= costo_total)` sobre
+`producto`. HU-INV-06 (Product Backlog v4.3) precisó que de los 9 casos detectados,
+5 son liquidaciones reales (producto próximo a vencer) y 4 errores de dato — un
+CHECK de base de datos no distingue entre ambos, así que bloquearía exactamente
+las liquidaciones legítimas. El control pasa al formulario de la aplicación, como
+advertencia y no como bloqueo. Ver
+`database/migraciones/003_retirar_check_precio_bajo_costo.sql`.
 
 La cantidad anómala en ventas a granel (ej. 705 kg de salmón en vez de 0,705 kg,
 que distorsionó un tercio de la venta de un período) **no se resuelve con un CHECK

@@ -7,10 +7,16 @@ implementa. Se usa typing.Protocol para no obligar a heredar.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Protocol, runtime_checkable
 
-from pos.dominio.inventario import Existencia
-from pos.dominio.productos import Producto
+from pos.dominio.caja import MovimientoCaja, TurnoCaja
+from pos.dominio.categorias import Categoria
+from pos.dominio.inventario import AjusteInventario, Existencia
+from pos.dominio.lotes import Lote
+from pos.dominio.productos import Producto, RegistroCambioPrecio
+from pos.dominio.usuarios import Usuario
+from pos.dominio.ventas import Venta
 
 
 @runtime_checkable
@@ -18,6 +24,7 @@ class RepositorioProductos(Protocol):
     def guardar(self, producto: Producto) -> None: ...
     def obtener_por_codigo(self, codigo: str) -> Producto | None: ...
     def listar(self) -> list[Producto]: ...
+    def buscar(self, termino: str) -> list[Producto]: ...
 
 
 @runtime_checkable
@@ -36,6 +43,24 @@ class ColaSincronizacion(Protocol):
 
 
 @runtime_checkable
+class RepositorioTurnosCaja(Protocol):
+    """Puerto para persistir el turno de caja y sus movimientos (HU-CAJ-01/04)."""
+
+    def guardar(self, turno: TurnoCaja) -> None: ...
+    def obtener_abierto(self) -> TurnoCaja | None: ...
+    def registrar_movimiento(self, turno_id: int, movimiento: MovimientoCaja) -> None: ...
+
+
+@runtime_checkable
+class RepositorioVentas(Protocol):
+    """Puerto para persistir la venta, sus lineas y sus pagos (HU-VTA-01/03/04)."""
+
+    def guardar(self, venta: Venta) -> None: ...
+    def obtener_por_turno(self, turno_caja_id: int) -> list[Venta]: ...
+    def por_periodo(self, desde: date, hasta: date) -> list[Venta]: ...
+
+
+@runtime_checkable
 class PublicadorRemoto(Protocol):
     """Publica una operacion en el destino remoto (Supabase/PostgreSQL).
 
@@ -44,3 +69,53 @@ class PublicadorRemoto(Protocol):
     """
 
     def publicar(self, operacion: dict) -> None: ...
+
+
+@runtime_checkable
+class RepositorioHistorial(Protocol):
+    """Puerto para persistir el historial de cambios de precio (HU-PRD-05)."""
+
+    def guardar_registro_precio(self, registro: RegistroCambioPrecio) -> None: ...
+
+
+@runtime_checkable
+class RepositorioAjustes(Protocol):
+    """Puerto para persistir el historial de ajustes (HU mermas y ajustes)."""
+
+    def guardar_ajuste(self, ajuste: AjusteInventario) -> None: ...
+
+
+@runtime_checkable
+class RepositorioLotes(Protocol):
+    """Puerto de lotes con vencimiento (HU-INV-02)."""
+
+    def guardar(self, lote: Lote) -> None: ...
+    def por_producto(self, codigo_producto: str) -> list[Lote]: ...
+    def con_saldo(self) -> list[Lote]: ...
+
+
+@runtime_checkable
+class RepositorioUsuarios(Protocol):
+    """Puerto de usuarios para el acceso local (HU-USR-01)."""
+
+    def guardar(self, usuario: Usuario) -> None: ...
+    def obtener_por_nombre(self, nombre: str) -> Usuario | None: ...
+    def hay_usuarios(self) -> bool: ...
+
+
+@runtime_checkable
+class RepositorioTicketsEspera(Protocol):
+    """Puerto para conservar los tickets sin cobrar al cerrar la ventana (O-25)."""
+
+    def guardar(self, tickets: list[dict]) -> None: ...
+    def cargar(self) -> list[dict]: ...
+
+
+@runtime_checkable
+class RepositorioCategorias(Protocol):
+    """Puerto de categorias de producto (C-02, HU-PRD-10)."""
+
+    def listar(self) -> list[Categoria]: ...
+    def nombre_de(self, categoria_id: int | None) -> str | None: ...
+    def agregar(self, nombre: str) -> tuple[Categoria, bool]: ...
+    def sembrar(self, nombres: list[str] | tuple[str, ...]) -> int: ...

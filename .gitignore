@@ -187,8 +187,13 @@ dist/
 *.sqlite3
 *.FDB
 *.fdb
+pos_local.db
+pos_local.db-shm
+pos_local.db-wal
 # Variables de entorno con credenciales
 .env
+pos_local.db-shm
+pos_local.db-wal
 
 # Llaves SSH y credenciales de la VM de migracion (NUNCA versionar)
 llaves-equipo/
