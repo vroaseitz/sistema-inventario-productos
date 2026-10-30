@@ -160,20 +160,42 @@ class VentanaVentas(ttk.Frame):
         ttk.Button(marco_venta, text="Nueva venta", command=self._nueva_venta).grid(
             row=0, column=7, padx=4, pady=6
         )
+        # O-04: con una linea seleccionada, + suma 1 y - resta 1. I-03: F5 cambia el lote.
+        ttk.Button(marco_venta, text="+", width=3, command=lambda: self._ajustar_cantidad(1)).grid(
+            row=1, column=4, padx=2, pady=2
+        )
+        ttk.Button(marco_venta, text="−", width=3, command=lambda: self._ajustar_cantidad(-1)).grid(
+            row=1, column=5, padx=2, pady=2, sticky="w"
+        )
+        ttk.Button(marco_venta, text="Cambiar lote (F5)", command=self._cambiar_lote_ui).grid(
+            row=1, column=6, columnspan=2, padx=4, pady=2
+        )
         # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
         self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")
+        self.winfo_toplevel().bind("<F5>", self._atajo_cambiar_lote, add="+")
 
-        columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal")
-        anchos = {"codigo": 90, "nombre": 260, "cantidad": 90, "precio": 110, "subtotal": 120}
+        columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal", "lote")
+        anchos = {
+            "codigo": 90,
+            "nombre": 220,
+            "cantidad": 80,
+            "precio": 100,
+            "subtotal": 110,
+            "lote": 190,
+        }
         self._tabla = ttk.Treeview(tab_venta, columns=columnas, show="headings", height=8)
         for col, titulo in zip(
-            columnas, ("Codigo", "Nombre", "Cantidad", "Precio", "Subtotal"), strict=True
+            columnas, ("Codigo", "Nombre", "Cantidad", "Precio", "Subtotal", "Lote"), strict=True
         ):
             self._tabla.heading(col, text=titulo)
             self._tabla.column(col, width=anchos[col], anchor="w")
         self._tabla.pack(fill="both", expand=True, padx=12, pady=4)
         self._tabla.bind("<Delete>", lambda _e: self._quitar_linea())
         self._tabla.bind("<BackSpace>", lambda _e: self._quitar_linea())
+        for tecla in ("<plus>", "<KP_Add>"):
+            self._tabla.bind(tecla, lambda _e: self._ajustar_cantidad(1))
+        for tecla in ("<minus>", "<KP_Subtract>"):
+            self._tabla.bind(tecla, lambda _e: self._ajustar_cantidad(-1))
 
         # D-15: el numero grande es lo que hay que cobrar (ya redondeado si hay
         # efectivo), no el total crudo. La barra de abajo deja el resto siempre
@@ -366,6 +388,10 @@ class VentanaVentas(ttk.Frame):
             )
             entrada = ttk.Entry(dialogo, width=8)
             entrada.insert(0, "0")
+            # O-22: al entrar a la casilla se selecciona el 0 y lo escrito lo reemplaza.
+            entrada.bind(
+                "<FocusIn>", lambda e: e.widget.after(1, e.widget.selection_range, 0, "end")
+            )
             entrada.grid(row=fila, column=1, padx=8, pady=3)
             entradas[denominacion] = entrada
 
@@ -657,6 +683,7 @@ class VentanaVentas(ttk.Frame):
                     detalle.cantidad,
                     _formatear_clp(detalle.precio_unitario.monto),
                     _formatear_clp(detalle.subtotal.monto),
+                    self._texto_lote(venta, detalle.producto_codigo),
                 ),
             )
 
@@ -694,6 +721,82 @@ class VentanaVentas(ttk.Frame):
         por_nombre = {nombre: medio for medio, nombre in NOMBRES_MEDIO_PAGO.items()}
         self._medio.set(por_nombre[self._medio_nombre.get()].value)
         self._refrescar_ticket()
+
+    def _texto_lote(self, venta: Venta, codigo: str) -> str:
+        """I-03: lote que sale con la linea (el que vence antes, o el elegido con F5)."""
+        lote = self._registrar_venta.lote_para(venta, codigo)
+        if lote is None:
+            return "-"
+        elegido = "* " if venta.lote_elegido.get(codigo) == lote.uuid else ""
+        return f"{elegido}L{lote.id} · vence {lote.fecha_vencimiento.isoformat()}"
+
+    def _linea_seleccionada(self) -> str | None:
+        seleccion = self._tabla.selection()
+        if not seleccion:
+            messagebox.showwarning("Sin seleccion", "Selecciona una linea del ticket")
+            return None
+        return str(self._tabla.item(seleccion[0], "values")[0])
+
+    def _ajustar_cantidad(self, delta: int) -> None:
+        """O-04: + suma 1 y - resta 1 sobre la linea seleccionada; en 0 pregunta si quitarla."""
+        venta = self._venta_actual()
+        codigo = self._linea_seleccionada() if venta is not None else None
+        if venta is None or codigo is None:
+            return
+        detalle = next(d for d in venta.detalles if d.producto_codigo == codigo)
+        try:
+            if delta < 0 and detalle.cantidad + delta <= 0:
+                if messagebox.askyesno(
+                    "Quitar linea", f"La cantidad llegaria a 0. Quitar {codigo}?"
+                ):
+                    venta.quitar_detalle(codigo)
+            else:
+                self._registrar_venta.agregar_producto(venta, codigo, delta)
+        except ErrorDominio as exc:
+            messagebox.showerror("No se pudo cambiar la cantidad", str(exc))
+        self._refrescar_ticket()
+        for fila in self._tabla.get_children():  # mantiene la seleccion para seguir con +/-
+            if self._tabla.item(fila, "values")[0] == codigo:
+                self._tabla.selection_set(fila)
+
+    def _atajo_cambiar_lote(self, _evento: object = None) -> None:
+        if self.winfo_ismapped() and self._subpestanas.index("current") == 0:
+            self._cambiar_lote_ui()
+
+    def _cambiar_lote_ui(self) -> None:
+        """I-03: F5 Cambiar lote. Lista los lotes con saldo y deja elegir de cual sale."""
+        venta = self._venta_actual()
+        codigo = self._linea_seleccionada() if venta is not None else None
+        if venta is None or codigo is None:
+            return
+        lotes = self._registrar_venta.lotes_de(codigo)
+        if not lotes:
+            messagebox.showinfo("Lotes", "Este producto no tiene lotes con vencimiento")
+            return
+        dialogo = Toplevel(self)
+        dialogo.title(f"Cambiar lote - {codigo}")
+        dialogo.transient(self.winfo_toplevel())
+        dialogo.grab_set()
+        lista = Listbox(dialogo, height=min(8, len(lotes)), width=48, exportselection=False)
+        for lote in lotes:
+            lista.insert("end", f"L{lote.id} · vence {lote.fecha_vencimiento} · saldo {lote.saldo}")
+        lista.selection_set(0)
+        lista.pack(padx=12, pady=10)
+
+        def elegir() -> None:
+            seleccion = lista.curselection()
+            if not seleccion:
+                return
+            try:
+                self._registrar_venta.elegir_lote(venta, codigo, lotes[seleccion[0]].uuid)
+            except ErrorDominio as exc:
+                messagebox.showerror("No se pudo cambiar el lote", str(exc))
+                return
+            dialogo.destroy()
+            self._refrescar_ticket()
+
+        lista.bind("<Double-Button-1>", lambda _e: elegir())
+        ttk.Button(dialogo, text="Usar este lote", command=elegir).pack(pady=(0, 10))
 
     def _atajo_buscar(self, _evento: object = None) -> None:
         """O-17: F10 abre la busqueda de producto si esta pantalla esta a la vista."""

@@ -12,7 +12,7 @@ from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import ConsultarAlertasVencimiento
 from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
-from pos.aplicacion.puertos import RepositorioProductos
+from pos.aplicacion.puertos import RepositorioLotes, RepositorioProductos
 from pos.dominio.errores import ErrorDominio
 
 
@@ -27,11 +27,13 @@ class VentanaInventario(ttk.Frame):
         repo_productos: RepositorioProductos,
         ingresar_stock: IngresarStock,
         consultar_alertas: ConsultarAlertasVencimiento,
+        repo_lotes: RepositorioLotes | None = None,
     ) -> None:
         super().__init__(parent, padding=12)
         self._productos = repo_productos
         self._ingresar = ingresar_stock
         self._alertas = consultar_alertas
+        self._repo_lotes = repo_lotes
 
         self._codigo = tk.StringVar()
         self._cantidad = tk.StringVar()
@@ -75,6 +77,21 @@ class VentanaInventario(ttk.Frame):
             self._tabla.column(clave, width=ancho, anchor="w")
         self._tabla.tag_configure("vencido", foreground="#a11")
         self._tabla.pack(fill="both", expand=True, pady=4)
+        self._tabla_lotes = None
+        if self._repo_lotes is not None:
+            ttk.Label(self, text="Lotes", font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
+            self._tabla_lotes = ttk.Treeview(
+                self, columns=("lote", "producto", "vence", "saldo"), show="headings", height=6
+            )
+            for clave, titulo, ancho in (
+                ("lote", "Lote", 80),
+                ("producto", "Producto", 260),
+                ("vence", "Vence", 110),
+                ("saldo", "Saldo", 80),
+            ):
+                self._tabla_lotes.heading(clave, text=titulo)
+                self._tabla_lotes.column(clave, width=ancho, anchor="w")
+            self._tabla_lotes.pack(fill="x", pady=4)
         ttk.Label(
             self,
             text="El descuento es una sugerencia (politica propuesta); no modifica el precio.",
@@ -103,7 +120,26 @@ class VentanaInventario(ttk.Frame):
         self._vence.set("")
         self.refrescar()
 
+    def _refrescar_lotes(self) -> None:
+        """I-02: lotes con saldo por vencimiento, con su codigo de lote."""
+        if self._tabla_lotes is None or self._repo_lotes is None:
+            return
+        self._tabla_lotes.delete(*self._tabla_lotes.get_children())
+        for lote in sorted(self._repo_lotes.con_saldo(), key=lambda x: x.fecha_vencimiento):
+            producto = self._productos.obtener_por_codigo(lote.codigo_producto)
+            self._tabla_lotes.insert(
+                "",
+                "end",
+                values=(
+                    f"L{lote.id}",
+                    producto.nombre if producto else lote.codigo_producto,
+                    lote.fecha_vencimiento.isoformat(),
+                    lote.saldo,
+                ),
+            )
+
     def refrescar(self) -> None:
+        self._refrescar_lotes()
         self._tabla.delete(*self._tabla.get_children())
         for alerta in self._alertas.ejecutar(date.today()):
             self._tabla.insert(

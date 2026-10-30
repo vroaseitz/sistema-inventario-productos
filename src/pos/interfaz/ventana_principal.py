@@ -202,6 +202,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 repo_productos,
                 IngresarStock(repo_productos, repo_existencias, repo_lotes, cola=cola),
                 ConsultarAlertasVencimiento(repo_lotes, repo_productos),
+                repo_lotes,
             ),
         }
     )

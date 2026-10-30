@@ -72,3 +72,19 @@ def test_precio_sugerido_aplica_el_descuento_y_redondea_a_pesos():
 
 def test_alerta_vencida_se_marca():
     assert AlertaVencimiento(_lote(-2), "x", Dinero(100), -2, 0).vencido
+
+
+def test_proponer_lote_es_el_que_vence_antes_o_el_elegido():
+    from pos.dominio.lotes import proponer_lote
+
+    pronto, tarde, agotado = _lote(3), _lote(20), _lote(1, "0")
+    assert proponer_lote([tarde, pronto, agotado]) is pronto  # FEFO, ignora el agotado
+    assert proponer_lote([tarde, pronto], tarde.uuid) is tarde  # F5 Cambiar lote
+    assert proponer_lote([agotado]) is None
+    assert proponer_lote([tarde, pronto], "no-existe") is pronto
+
+
+def test_fefo_consume_primero_el_lote_elegido():
+    tarde, pronto = _lote(20, "10"), _lote(3, "10")
+    assert consumir_fefo([tarde, pronto], Decimal("4"), tarde.uuid) == 0
+    assert tarde.saldo == 6 and pronto.saldo == 10

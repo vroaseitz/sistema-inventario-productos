@@ -117,6 +117,14 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         ingresar("YOG", "10", (date.today() + timedelta(days=2)).isoformat())
         assert len(inventario._tabla.get_children()) == 1  # alerta con descuento sugerido
         assert "30%" in inventario._tabla.item(inventario._tabla.get_children()[0], "values")
+        ingresar("YOG", "5", (date.today() + timedelta(days=5)).isoformat())  # segundo lote
+        # I-02: la lista de lotes muestra ambos, el que vence antes primero
+        filas = [
+            inventario._tabla_lotes.item(f, "values")
+            for f in inventario._tabla_lotes.get_children()
+        ]
+        assert [(f[1], str(f[3])) for f in filas] == [("Yogurt", "10"), ("Yogurt", "5")]
+        assert filas[0][2] < filas[1][2]
 
         # --- 4) F1: abrir turno y vender (efectivo parcial + tarjeta) ----------------------
         ventas._abrir_turno_ui()
@@ -129,8 +137,26 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
             ventas._entrada_cantidad.insert(0, cantidad)
             ventas._agregar_producto()
 
-        agregar("ARR", "2")  # 3.000
+        agregar("ARR", "3")
+        # O-04: con la linea seleccionada, "-" resta 1 (3 -> 2 = $3.000)
+        ventas._tabla.selection_set(ventas._tabla.get_children()[0])
+        ventas._ajustar_cantidad(-1)
+        assert ventas._tabla.item(ventas._tabla.get_children()[0], "values")[2] == "2"
         agregar("YOG", "1")  # 2.000  -> total 5.000
+        # I-03: la linea muestra el lote que vence antes (FEFO)...
+        fila_yog = ventas._tabla.get_children()[1]
+        assert (
+            "vence " + (date.today() + timedelta(days=2)).isoformat()
+            in ventas._tabla.item(fila_yog, "values")[5]
+        )
+        # ...y F5 "Cambiar lote" permite elegir el otro
+        repo_lotes = ventas._registrar_venta.repositorio_lotes
+        segundo = repo_lotes.por_producto("YOG")[1]
+        ventas._registrar_venta.elegir_lote(ventas._venta, "YOG", segundo.uuid)
+        ventas._refrescar_ticket()
+        assert ventas._tabla.item(ventas._tabla.get_children()[1], "values")[5].startswith(
+            f"* L{segundo.id}"
+        )
         ventas._medio.set("efectivo")
         ventas._entrada_monto_pago.delete(0, "end")
         ventas._entrada_monto_pago.insert(0, "2000")  # efectivo PARCIAL
@@ -160,8 +186,8 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
 
         # --- 5) stock descontado y FEFO sobre el lote ---------------------------------------
         assert str(ventas._registrar_venta.repositorio_existencias.obtener("ARR").cantidad) == "18"
-        lote = ventas._registrar_venta.repositorio_lotes.por_producto("YOG")[0]
-        assert str(lote.saldo) == "9"
+        saldos = sorted(x.saldo for x in repo_lotes.por_producto("YOG"))
+        assert [str(x) for x in saldos] == ["4", "10"]  # salio del lote elegido, no del FEFO
 
         # --- 6) cerrar turno con el arqueo ---------------------------------------------------
         ventas._cerrar_turno_ui()
@@ -180,8 +206,8 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         assert cur.fetchone()[0] == 2
         cur.execute("SELECT coalesce(sum(monto), 0) FROM pos.venta_pago")
         assert int(cur.fetchone()[0]) == 20300
-        cur.execute("SELECT saldo FROM pos.lote")
-        assert int(cur.fetchone()[0]) == 9
+        cur.execute("SELECT saldo FROM pos.lote ORDER BY saldo")
+        assert [int(r[0]) for r in cur.fetchall()] == [4, 10]
         cur.execute("SELECT count(*) FROM pos.producto WHERE codigo IN ('ARR','YOG','CAF')")
         assert cur.fetchone()[0] == 3
     finally:

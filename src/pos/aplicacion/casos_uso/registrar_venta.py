@@ -21,7 +21,7 @@ from pos.aplicacion.puertos import (
 )
 from pos.aplicacion.sincronizacion import encolar_existencia, encolar_lote, encolar_venta
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
-from pos.dominio.lotes import consumir_fefo
+from pos.dominio.lotes import Lote, consumir_fefo, proponer_lote
 from pos.dominio.pagos import Pago
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.ventas import DetalleVenta, Venta
@@ -100,7 +100,11 @@ class RegistrarVenta:
             existencia.descontar(detalle.cantidad)
             self.repositorio_existencias.guardar(existencia)
             encolar_existencia(self.cola, existencia)
-            self._consumir_lotes(detalle.producto_codigo, detalle.cantidad)
+            self._consumir_lotes(
+                detalle.producto_codigo,
+                detalle.cantidad,
+                venta.lote_elegido.get(detalle.producto_codigo),
+            )
 
         self.repositorio_ventas.guardar(venta)
         turno = self.repositorio_turnos.obtener_abierto()
@@ -108,13 +112,29 @@ class RegistrarVenta:
             encolar_venta(self.cola, venta, turno.uuid)
         return venta
 
-    def _consumir_lotes(self, codigo: str, cantidad: Decimal) -> None:
+    def lotes_de(self, codigo: str) -> list[Lote]:
+        """Lotes con saldo del producto, el que vence antes primero."""
+        if self.repositorio_lotes is None:
+            return []
+        lotes = [x for x in self.repositorio_lotes.por_producto(codigo) if x.saldo > 0]
+        return sorted(lotes, key=lambda x: x.fecha_vencimiento)
+
+    def lote_para(self, venta: Venta, codigo: str) -> Lote | None:
+        """Lote que se propone en la linea (I-03): el elegido o el que vence antes."""
+        return proponer_lote(self.lotes_de(codigo), venta.lote_elegido.get(codigo))
+
+    def elegir_lote(self, venta: Venta, codigo: str, lote_uuid: str) -> None:
+        if all(x.uuid != lote_uuid for x in self.lotes_de(codigo)):
+            raise ReglaVentaInvalida("Ese lote no tiene saldo para este producto")
+        venta.lote_elegido[codigo] = lote_uuid
+
+    def _consumir_lotes(self, codigo: str, cantidad: Decimal, preferido: str | None = None) -> None:
         """Descuenta de los lotes primero el que vence antes (FEFO) y sincroniza lo cambiado."""
         if self.repositorio_lotes is None:
             return
         lotes = [lote for lote in self.repositorio_lotes.por_producto(codigo) if lote.saldo > 0]
         antes = {lote.uuid: lote.saldo for lote in lotes}
-        consumir_fefo(lotes, cantidad)
+        consumir_fefo(lotes, cantidad, preferido)
         for lote in lotes:
             if lote.saldo != antes[lote.uuid]:
                 self.repositorio_lotes.guardar(lote)

@@ -41,8 +41,22 @@ class Lote:
         return self.dias_para_vencer(hoy) < 0
 
 
-def consumir_fefo(lotes: list[Lote], cantidad: Decimal) -> Decimal:
+def proponer_lote(lotes: list[Lote], preferido_uuid: str | None = None) -> Lote | None:
+    """Lote del que saldra el producto: el elegido a mano o, si no, el que vence antes (FEFO)."""
+    con_saldo = sorted((x for x in lotes if x.saldo > 0), key=lambda x: x.fecha_vencimiento)
+    if preferido_uuid is not None:
+        for lote in con_saldo:
+            if lote.uuid == preferido_uuid:
+                return lote
+    return con_saldo[0] if con_saldo else None
+
+
+def consumir_fefo(
+    lotes: list[Lote], cantidad: Decimal, preferido_uuid: str | None = None
+) -> Decimal:
     """Descuenta `cantidad` de los lotes, primero el que vence antes (FEFO).
+
+    Si la cajera eligio otro lote (`preferido_uuid`, F5 Cambiar lote) se consume ese primero.
 
     Modifica los saldos en su lugar y devuelve lo que NO pudo cubrir con lotes (stock sin
     lote asociado, p. ej. mercaderia ingresada antes de que existieran los lotes).
@@ -50,7 +64,8 @@ def consumir_fefo(lotes: list[Lote], cantidad: Decimal) -> Decimal:
     pendiente = Decimal(str(cantidad))
     if pendiente <= 0:
         raise ReglaInventarioInvalida("La cantidad a consumir debe ser mayor que cero")
-    for lote in sorted(lotes, key=lambda x: x.fecha_vencimiento):
+    orden = sorted(lotes, key=lambda x: (x.uuid != preferido_uuid, x.fecha_vencimiento))
+    for lote in orden:
         if pendiente == 0:
             break
         tomado = min(lote.saldo, pendiente)

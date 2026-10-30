@@ -70,6 +70,8 @@ class Venta:
     creado_en: datetime = field(default_factory=datetime.now)
     id: int | None = None
     uuid: str = field(default_factory=lambda: str(uuid4()))
+    # Lote elegido a mano por producto (F5 Cambiar lote); solo vive durante la venta.
+    lote_elegido: dict[str, str] = field(default_factory=dict, repr=False)
 
     def agregar_detalle(
         self,
