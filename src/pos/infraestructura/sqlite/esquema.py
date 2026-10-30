@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS usuarios (
     activo     INTEGER NOT NULL DEFAULT 1
 );
 
+-- Tickets abiertos sin cobrar (O-25): solo productos y lote elegido, nunca pagos.
+CREATE TABLE IF NOT EXISTS tickets_en_espera (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    datos_json  TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS turnos_caja (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id         INTEGER NOT NULL,

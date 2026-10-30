@@ -184,6 +184,29 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         ventas._cerrar_venta()
         assert "$32.300" in ventas._lbl_en_caja.cget("text")  # O-23: fondo 15.000 + 2.000 + 15.300
 
+        # --- 4c) O-01b / O-25: varios tickets a la vez y ticket en espera que se conserva ---
+        ventas._nuevo_ticket()
+        assert len(ventas._tickets) == 2 and ventas._indice == 1
+        agregar("ARR", "1")
+        ventas._nb_tickets.select(0)
+        ventas.update()
+        assert ventas._indice == 0 and not ventas._venta.detalles  # el Ticket 1 sigue vacio
+        ventas._nb_tickets.select(1)
+        ventas.update()
+        assert ventas._indice == 1 and ventas._venta.detalles  # el Ticket 2 sigue en espera
+        guardados = ventas._repo_tickets.cargar()
+        assert guardados == [{"productos": [["ARR", "1"]], "lotes": {}}]
+        n_preguntas = len(mensajes)
+        ventas._eliminar_ticket()  # tiene productos: pregunta (askyesno -> si)
+        ventas._eliminar_ticket()  # el Ticket 1 vacio: ya no queda otro, se reinicia sin preguntar
+        assert len(ventas._tickets) == 1 and ventas._repo_tickets.cargar() == []
+        # al "reabrir" la aplicacion el ticket en espera vuelve con sus productos
+        ventas._repo_tickets.guardar(guardados)
+        ventas._restaurar_espera()
+        assert [d.producto_codigo for d in ventas._venta.detalles] == ["ARR"]
+        ventas._eliminar_ticket()
+        assert len(mensajes) == n_preguntas
+
         # --- 5) stock descontado y FEFO sobre el lote ---------------------------------------
         assert str(ventas._registrar_venta.repositorio_existencias.obtener("ARR").cantidad) == "18"
         saldos = sorted(x.saldo for x in repo_lotes.por_producto("YOG"))

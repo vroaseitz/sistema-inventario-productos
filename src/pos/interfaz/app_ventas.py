@@ -28,6 +28,7 @@ from pos.aplicacion.puertos import (
     ColaSincronizacion,
     PublicadorRemoto,
     RepositorioProductos,
+    RepositorioTicketsEspera,
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
@@ -88,6 +89,7 @@ class VentanaVentas(ttk.Frame):
         cola: ColaSincronizacion | None = None,
         publicador: PublicadorRemoto | None = None,
         sesion: Sesion | None = None,
+        repo_tickets: RepositorioTicketsEspera | None = None,
     ) -> None:
         super().__init__(parent)
         self._sesion = sesion or Sesion(USUARIO_DEMO)
@@ -101,12 +103,26 @@ class VentanaVentas(ttk.Frame):
         self._cerrar_turno = cerrar_turno
         self._registrar_movimiento = registrar_movimiento
 
-        self._venta: Venta | None = None
+        self._repo_tickets = repo_tickets
+        # O-01b: varios tickets abiertos a la vez; el activo es `_venta`.
+        self._tickets: list[Venta | None] = [None]
+        self._indice = 0
+        self._contador_tickets = 1
+        self._cambiando_ticket = False
 
         self._construir()
         self._refrescar_turno()
         self._refrescar_sync()
         self._nueva_venta(forzar=True)  # D-01a: siempre hay una venta abierta
+        self._restaurar_espera()  # O-25
+
+    @property
+    def _venta(self) -> Venta | None:
+        return self._tickets[self._indice]
+
+    @_venta.setter
+    def _venta(self, venta: Venta | None) -> None:
+        self._tickets[self._indice] = venta
 
     # ------------------------------------------------------------------ UI --
 
@@ -134,6 +150,12 @@ class VentanaVentas(ttk.Frame):
         self._construir_caja(tab_caja)
         self._construir_resumen(tab_resumen)
 
+        # O-01b: pestanas de tickets (Ticket 1, Ticket 2...); su contenido es el de abajo.
+        self._nb_tickets = ttk.Notebook(tab_venta, height=1)
+        self._nb_tickets.add(ttk.Frame(self._nb_tickets), text="Ticket 1")
+        self._nb_tickets.pack(fill="x", padx=12, pady=(8, 0))
+        self._nb_tickets.bind("<<NotebookTabChanged>>", self._al_cambiar_ticket)
+
         marco_venta = ttk.LabelFrame(tab_venta, text="Venta en curso")
         marco_venta.pack(fill="x", padx=12, pady=8)
 
@@ -157,8 +179,11 @@ class VentanaVentas(ttk.Frame):
         ttk.Button(marco_venta, text="Quitar linea", command=self._quitar_linea).grid(
             row=0, column=6, padx=4, pady=6
         )
-        ttk.Button(marco_venta, text="Nueva venta", command=self._nueva_venta).grid(
+        ttk.Button(marco_venta, text="Nuevo ticket (Ins)", command=self._nuevo_ticket).grid(
             row=0, column=7, padx=4, pady=6
+        )
+        ttk.Button(marco_venta, text="Eliminar ticket", command=self._eliminar_ticket).grid(
+            row=1, column=8, padx=4, pady=2
         )
         # O-04: con una linea seleccionada, + suma 1 y - resta 1. I-03: F5 cambia el lote.
         ttk.Button(marco_venta, text="+", width=3, command=lambda: self._ajustar_cantidad(1)).grid(
@@ -173,6 +198,7 @@ class VentanaVentas(ttk.Frame):
         # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
         self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")
         self.winfo_toplevel().bind("<F5>", self._atajo_cambiar_lote, add="+")
+        self.winfo_toplevel().bind("<Insert>", self._atajo_nuevo_ticket, add="+")
 
         columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal", "lote")
         anchos = {
@@ -572,6 +598,111 @@ class VentanaVentas(ttk.Frame):
         self._refrescar_ticket()
         self._entrada_codigo.focus_set()
 
+    # ---------------------------------------------------------- Tickets (O-01b) --
+
+    def _reiniciar_medio(self) -> None:
+        self._entrada_cantidad.delete(0, "end")
+        self._entrada_cantidad.insert(0, "1")
+        self._medio.set(MedioPago.EFECTIVO.value)  # O-27: cada ticket parte con Efectivo
+        self._medio_nombre.set(NOMBRES_MEDIO_PAGO[MedioPago.EFECTIVO])
+
+    def _atajo_nuevo_ticket(self, _evento: object = None) -> None:
+        if self.winfo_ismapped() and self._subpestanas.index("current") == 0:
+            self._nuevo_ticket()
+
+    def _nuevo_ticket(self) -> None:
+        """Abre otro ticket; el anterior queda en espera en su pestana."""
+        try:
+            venta = self._registrar_venta.iniciar(usuario_id=self._sesion.usuario_id)
+        except ErrorDominio as exc:
+            messagebox.showerror("No se pudo iniciar el ticket", str(exc))
+            return
+        self._tickets.append(venta)
+        self._contador_tickets += 1
+        marco = ttk.Frame(self._nb_tickets)
+        self._nb_tickets.add(marco, text=f"Ticket {self._contador_tickets}")
+        self._cambiando_ticket = True
+        self._nb_tickets.select(marco)
+        self._cambiando_ticket = False
+        self._indice = len(self._tickets) - 1
+        self._reiniciar_medio()
+        self._refrescar_ticket()
+        self._entrada_codigo.focus_set()
+
+    def _al_cambiar_ticket(self, _evento: object = None) -> None:
+        if self._cambiando_ticket:
+            return
+        self._indice = self._nb_tickets.index("current")
+        self._reiniciar_medio()
+        self._refrescar_ticket()
+        self._entrada_codigo.focus_set()
+
+    def _quitar_ticket_actual(self) -> None:
+        """Quita el ticket activo; si era el unico, queda uno nuevo y vacio."""
+        if len(self._tickets) == 1:
+            self._nueva_venta(forzar=True)
+            return
+        indice = self._indice
+        self._cambiando_ticket = True
+        self._nb_tickets.forget(indice)
+        del self._tickets[indice]
+        self._indice = min(indice, len(self._tickets) - 1)
+        self._nb_tickets.select(self._indice)
+        self._cambiando_ticket = False
+        self._reiniciar_medio()
+        self._refrescar_ticket()
+
+    def _eliminar_ticket(self) -> None:
+        """Solo se pregunta al eliminar un ticket que tiene productos o pagos."""
+        venta = self._venta
+        if (
+            venta is not None
+            and (venta.detalles or venta.pagos)
+            and not messagebox.askyesno(
+                "Eliminar ticket", "El ticket tiene productos o pagos sin cobrar. ¿Eliminarlo?"
+            )
+        ):
+            return
+        self._quitar_ticket_actual()
+
+    def _guardar_espera(self) -> None:
+        """O-25: conserva los tickets con productos para reabrirlos (nunca los pagos)."""
+        if self._repo_tickets is None:
+            return
+        self._repo_tickets.guardar(
+            [
+                {
+                    "productos": [[d.producto_codigo, str(d.cantidad)] for d in venta.detalles],
+                    "lotes": dict(venta.lote_elegido),
+                }
+                for venta in self._tickets
+                if venta is not None and venta.detalles
+            ]
+        )
+
+    def _restaurar_espera(self) -> None:
+        if self._repo_tickets is None or self._repo_turnos.obtener_abierto() is None:
+            return
+        guardados = self._repo_tickets.cargar()
+        for posicion, ticket in enumerate(guardados):
+            if posicion > 0:
+                self._nuevo_ticket()
+            venta = self._venta
+            if venta is None:
+                continue
+            for codigo, cantidad in ticket["productos"]:
+                try:
+                    self._registrar_venta.agregar_producto(venta, codigo, Decimal(cantidad))
+                except ErrorDominio:
+                    continue  # el stock o el producto cambiaron: se omite la linea
+            venta.lote_elegido.update(ticket.get("lotes", {}))
+        if guardados:
+            self._cambiando_ticket = True
+            self._nb_tickets.select(0)
+            self._cambiando_ticket = False
+            self._indice = 0
+            self._refrescar_ticket()
+
     def _venta_actual(self) -> Venta | None:
         if self._venta is None:
             messagebox.showwarning("Sin venta", "Primero inicia una venta nueva")
@@ -709,6 +840,7 @@ class VentanaVentas(ttk.Frame):
         self._entrada_monto_pago.delete(0, "end")
         if saldo:
             self._entrada_monto_pago.insert(0, str(saldo))
+        self._guardar_espera()
 
     def _a_cobrar_visible(self, venta: Venta) -> int:
         """O-27: con efectivo (el medio por defecto) se muestra desde el inicio el total
@@ -861,4 +993,4 @@ class VentanaVentas(ttk.Frame):
         messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con exito")
         self._refrescar_sync()
         self._refrescar_turno()
-        self._nueva_venta(forzar=True)  # D-01a: queda lista para la siguiente
+        self._quitar_ticket_actual()  # D-01a: queda lista para la siguiente
