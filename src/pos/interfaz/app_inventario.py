@@ -14,6 +14,7 @@ from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import ConsultarAler
 from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
 from pos.aplicacion.puertos import RepositorioLotes, RepositorioProductos
 from pos.dominio.errores import ErrorDominio
+from pos.interfaz.campo_fecha import CampoFecha
 
 
 def _clp(monto: int) -> str:
@@ -37,20 +38,24 @@ class VentanaInventario(ttk.Frame):
 
         self._codigo = tk.StringVar()
         self._cantidad = tk.StringVar()
-        self._vence = tk.StringVar()
         self._motivo = tk.StringVar(value="Compra a proveedor")
         self._mensaje = tk.StringVar()
 
         formulario = ttk.LabelFrame(self, text="Entrada de stock", padding=10)
         formulario.pack(fill="x")
+        # R-01: "Vence" tiene calendario desplegable (tambien se puede escribir AAAA-MM-DD).
+        self._vence = CampoFecha(formulario, width=14)
         campos = (
             ("Codigo de producto", self._codigo),
             ("Cantidad", self._cantidad),
-            ("Vence (AAAA-MM-DD)", self._vence),
+            ("Vence (calendario o AAAA-MM-DD)", self._vence),
             ("Motivo", self._motivo),
         )
         for columna, (etiqueta, variable) in enumerate(campos):
             ttk.Label(formulario, text=etiqueta).grid(row=0, column=columna, sticky="w", padx=4)
+            if variable is self._vence:
+                self._vence.grid(row=1, column=columna, padx=4, pady=(2, 0), sticky="w")
+                continue
             ttk.Entry(formulario, textvariable=variable, width=22).grid(
                 row=1, column=columna, padx=4, pady=(2, 0)
             )

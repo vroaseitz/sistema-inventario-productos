@@ -7,6 +7,7 @@ from datetime import date, datetime
 from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.reporte_ventas import SIN_CATEGORIA, ReporteVentas
+from pos.interfaz.campo_fecha import CampoFecha
 
 
 def _clp(monto: int) -> str:
@@ -17,18 +18,18 @@ class VentanaReportes(ttk.Frame):
     def __init__(self, parent: tk.Misc, reporte_ventas: ReporteVentas) -> None:
         super().__init__(parent, padding=12)
         self._reporte = reporte_ventas
-        hoy = date.today().isoformat()
-        self._desde = tk.StringVar(value=hoy)
-        self._hasta = tk.StringVar(value=hoy)
+        # R-01: fechas con calendario desplegable (tambien se puede escribir AAAA-MM-DD).
+        self._desde: CampoFecha
+        self._hasta: CampoFecha
         self._resumen = tk.StringVar()
 
         filtros = ttk.LabelFrame(self, text="Ventas por periodo y categoria", padding=10)
         filtros.pack(fill="x")
-        for columna, (texto, variable) in enumerate(
-            (("Desde (AAAA-MM-DD)", self._desde), ("Hasta (AAAA-MM-DD)", self._hasta))
-        ):
+        self._desde = CampoFecha(filtros, date.today(), width=14)
+        self._hasta = CampoFecha(filtros, date.today(), width=14)
+        for columna, (texto, campo) in enumerate((("Desde", self._desde), ("Hasta", self._hasta))):
             ttk.Label(filtros, text=texto).grid(row=0, column=columna, sticky="w", padx=4)
-            ttk.Entry(filtros, textvariable=variable, width=20).grid(row=1, column=columna, padx=4)
+            campo.grid(row=1, column=columna, padx=4, sticky="w")
         ttk.Button(filtros, text="Generar", command=self.generar).grid(row=1, column=2, padx=8)
         ttk.Label(self, textvariable=self._resumen, font=("TkDefaultFont", 11, "bold")).pack(
             anchor="w", pady=8

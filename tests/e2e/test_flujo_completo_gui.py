@@ -217,6 +217,18 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         assert any(m[1] == "Arqueo de cierre" for m in mensajes)
         assert ventas._repo_turnos.obtener_abierto() is None
 
+        # --- 6b) R-01: calendario desplegable en las fechas ---------------------------------
+        campo = reportes._desde
+        campo.abrir()
+        assert campo.abierto
+        campo._mover(-1)  # mes anterior
+        campo._mover(1)
+        campo._elegir(date.today())
+        assert not campo.abierto and campo.get() == date.today().isoformat()
+        inventario._vence.abrir()
+        inventario._vence.cerrar()
+        assert not inventario._vence.abierto
+
         # --- 7) reporte F6 ----------------------------------------------------------------------
         reportes.generar()
         assert "2 ventas" in reportes._resumen.get() and "$20.300" in reportes._resumen.get()
