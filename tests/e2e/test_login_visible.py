@@ -10,7 +10,10 @@ import pytest
 pytest.importorskip("tkinter")
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "verificar_login_visible.py"
-SIN_PANTALLA = sys.platform.startswith("linux") and not os.environ.get("DISPLAY")
+SIN_PANTALLA = (sys.platform.startswith("linux") and not os.environ.get("DISPLAY")) or (
+    # SSH en Windows corre en la sesion 0 (sin escritorio): las ventanas nunca quedan visibles.
+    sys.platform == "win32" and os.environ.get("SESSIONNAME") in (None, "", "Services")
+)
 
 
 @pytest.mark.skipif(SIN_PANTALLA, reason="sin entorno grafico")
