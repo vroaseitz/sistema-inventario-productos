@@ -117,3 +117,14 @@ def test_la_venta_consume_primero_el_lote_que_vence_antes(app):
     assert saldos[HOY + timedelta(days=3)] == 0  # el que vence antes se agoto
     assert saldos[HOY + timedelta(days=30)] == Decimal("3")
     assert app.existencias.obtener("YOG").cantidad == Decimal("3")  # coherente con los lotes
+
+
+def test_producto_con_aviso_corto_no_alerta_un_lote_lejano(app):
+    # QA 29-10: un cafe con "Dias aviso: 1" no deberia aparecer con 8 dias para vencer.
+    app.productos.guardar(
+        Producto("CAF", "Cafe", Dinero(3000), categoria_id=1, perecible=True, dias_aviso=1)
+    )
+    app.ingresar.ejecutar("CAF", 5, "Compra", fecha_vencimiento=HOY + timedelta(days=8))
+    assert app.alertas.ejecutar(HOY) == []
+    app.ingresar.ejecutar("CAF", 5, "Compra", fecha_vencimiento=HOY + timedelta(days=1))
+    assert [a.dias_restantes for a in app.alertas.ejecutar(HOY)] == [1]  # solo el que vence ya

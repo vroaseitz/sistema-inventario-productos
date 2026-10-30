@@ -230,14 +230,18 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 return AutenticarUsuario(repo_usuarios, hasheador).ejecutar(nombre, clave)
         else:
             accion = AutenticarUsuario(repo_usuarios, hasheador).ejecutar
-        ventana.withdraw()
+        # A-03: la ventana principal NO se oculta (en Windows un cuadro asociado a una ventana
+        # oculta tampoco se ve y queda todo en negro). Se tapa con una cubierta lisa hasta entrar.
+        cubierta = tk.Frame(ventana, bg="#f3f5f4")
+        cubierta.place(x=0, y=0, relwidth=1, relheight=1)
+        ventana.update()
         usuario = pedir_acceso(ventana, accion, primer_uso)
         if usuario is None:
             ventana.destroy()
             raise SystemExit(0)
+        cubierta.destroy()
         sesion.usuario_id, sesion.nombre = usuario.id, usuario.nombre
         ventana.title(f"NaturalSur - Emporio ({usuario.nombre})")
-        ventana.deiconify()
     return ventana
 
 
