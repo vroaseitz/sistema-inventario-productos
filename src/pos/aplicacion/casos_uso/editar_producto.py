@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pos.aplicacion.puertos import RepositorioHistorial, RepositorioProductos
+from pos.aplicacion.puertos import (
+    ColaSincronizacion,
+    RepositorioCategorias,
+    RepositorioHistorial,
+    RepositorioProductos,
+)
+from pos.aplicacion.sincronizacion import encolar_producto
 from pos.dominio.errores import DatosProductoInvalidos
 from pos.dominio.productos import RegistroCambioPrecio
 from pos.dominio.value_objects import Costo, Dinero
@@ -14,6 +20,8 @@ from pos.dominio.value_objects import Costo, Dinero
 class EditarProducto:
     repositorio_productos: RepositorioProductos
     repositorio_historial: RepositorioHistorial
+    cola: ColaSincronizacion | None = None
+    repositorio_categorias: RepositorioCategorias | None = None
 
     def ejecutar(
         self,
@@ -46,6 +54,13 @@ class EditarProducto:
 
         # 3. Guardar PRIMERO el producto
         self.repositorio_productos.guardar(producto)
+        # Antes un cambio de precio o categoria quedaba solo en la base local.
+        nombre_categoria = (
+            self.repositorio_categorias.nombre_de(nueva_categoria_id)
+            if self.repositorio_categorias
+            else None
+        )
+        encolar_producto(self.cola, producto, nombre_categoria)
 
         # 4. SOLO DESPUÉS (si no hay error y si el precio cambió), registrar en historial
         if hubo_cambio_precio:

@@ -32,6 +32,17 @@ _SQL_PRODUCTO = (
     "precio_venta = EXCLUDED.precio_venta, activo = EXCLUDED.activo"
 )
 
+_SQL_CATEGORIA = "INSERT INTO pos.categoria (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING"
+
+_SQL_PRODUCTO_CON_CATEGORIA = (
+    "INSERT INTO pos.producto (codigo, nombre, categoria_id, unidad_venta, precio_venta, activo) "
+    "VALUES (%s, %s, (SELECT id FROM pos.categoria WHERE nombre = %s), %s, %s, %s) "
+    "ON CONFLICT (codigo) DO UPDATE SET "
+    "nombre = EXCLUDED.nombre, categoria_id = EXCLUDED.categoria_id, "
+    "unidad_venta = EXCLUDED.unidad_venta, "
+    "precio_venta = EXCLUDED.precio_venta, activo = EXCLUDED.activo"
+)
+
 _SQL_EXISTENCIA = (
     "INSERT INTO pos.existencia (producto_id, cantidad) "
     "SELECT p.id, %s::numeric FROM pos.producto p WHERE p.codigo = %s "
@@ -93,6 +104,22 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
     """
     entidad = operacion["entidad"]
     d = operacion["datos"]
+
+    if entidad == "producto" and d.get("categoria"):
+        return [
+            (_SQL_CATEGORIA, (d["categoria"],)),
+            (
+                _SQL_PRODUCTO_CON_CATEGORIA,
+                (
+                    d["codigo"],
+                    d["nombre"],
+                    d["categoria"],
+                    str(d["unidad_venta"]).upper(),
+                    d["precio"],
+                    d.get("activo", True),
+                ),
+            ),
+        ]
 
     if entidad == "producto":
         return [

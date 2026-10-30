@@ -143,6 +143,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
     from pos.infraestructura.sqlite.conexion import crear_conexion
     from pos.infraestructura.sqlite.esquema import crear_esquema
+    from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
     from pos.infraestructura.sqlite.repositorio_existencias import RepositorioExistenciasSQLite
     from pos.infraestructura.sqlite.repositorio_historial import RepositorioHistorialSQLite
     from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
@@ -165,6 +166,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     repo_ventas = RepositorioVentasSQLite(conexion)
     repo_historial = RepositorioHistorialSQLite(conexion)
     repo_lotes = RepositorioLotesSQLite(conexion)
+    repo_categorias = RepositorioCategoriasSQLite(conexion)
     repo_usuarios = RepositorioUsuariosSQLite(conexion)
     cola = ColaSincronizacionSQLite(conexion)
     sesion = Sesion()
@@ -197,8 +199,16 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
             "F2": lambda padre: VentanaProductos(
                 padre,
                 repo_productos,
-                RegistrarProducto(repo_productos, cola=cola),
-                EditarProducto(repo_productos, repo_historial),
+                RegistrarProducto(
+                    repo_productos, cola=cola, repositorio_categorias=repo_categorias
+                ),
+                EditarProducto(
+                    repo_productos,
+                    repo_historial,
+                    cola=cola,
+                    repositorio_categorias=repo_categorias,
+                ),
+                repo_categorias,
             ),
             "F6": lambda padre: VentanaReportes(padre, ReporteVentas(repo_ventas, repo_productos)),
             "F3": lambda padre: VentanaInventario(

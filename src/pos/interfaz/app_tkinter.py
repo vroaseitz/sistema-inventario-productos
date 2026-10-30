@@ -17,7 +17,8 @@ from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.editar_producto import EditarProducto
 from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
-from pos.aplicacion.puertos import RepositorioProductos
+from pos.aplicacion.puertos import RepositorioCategorias, RepositorioProductos
+from pos.dominio.categorias import Categoria
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.productos import CATEGORIAS_VALIDAS, Producto, UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
@@ -33,14 +34,19 @@ def _normalizar(texto: str) -> str:
 class VentanaProductos(ttk.Frame):
     """Pantalla de Catalogo (F2). Es un marco: la ventana la aporta VentanaPrincipal."""
 
+    # Valor por defecto a nivel de clase: las pruebas de regresion crean la vista con `__new__`.
+    _categorias: RepositorioCategorias | None = None
+
     def __init__(
         self,
         parent: tk.Misc,
         repositorio: RepositorioProductos,
         registrar_producto: RegistrarProducto,
         editar_producto: EditarProducto,
+        repo_categorias: RepositorioCategorias | None = None,
     ) -> None:
         super().__init__(parent)
+        self._categorias = repo_categorias
         self._repo = repositorio
         self._registrar = registrar_producto
         self._editar = editar_producto
@@ -48,6 +54,25 @@ class VentanaProductos(ttk.Frame):
         self._construir_busqueda()
         self._construir()
         self._refrescar()
+
+    # --- Categorias (C-02): salen de la tabla `categorias`, no de una lista fija ---
+
+    def _lista_categorias(self) -> list[Categoria]:
+        if self._categorias is not None:
+            return self._categorias.listar()
+        return [Categoria(i + 1, n) for i, n in enumerate(CATEGORIAS_VALIDAS)]
+
+    def _id_categoria(self, nombre: str) -> int:
+        for categoria in self._lista_categorias():
+            if categoria.nombre == nombre:
+                return categoria.id
+        raise ValueError(f"La categoria {nombre!r} no existe.")
+
+    def _nombre_categoria(self, categoria_id: int | None) -> str | None:
+        for categoria in self._lista_categorias():
+            if categoria.id == categoria_id:
+                return categoria.nombre
+        return None
 
     # --- Barra de busqueda (HU-PRD-07) -------------------------------------
 
@@ -122,8 +147,8 @@ class VentanaProductos(ttk.Frame):
         # C-02 / C-04: categoria por lista desplegable, no texto libre.
         self._categoria = ttk.Combobox(
             marco_form,
-            values=list(CATEGORIAS_VALIDAS),
-            width=12,
+            values=[c.nombre for c in self._lista_categorias()],
+            width=18,
             state="readonly",
         )
         self._categoria.grid(row=0, column=5, padx=4, pady=6)
@@ -252,7 +277,7 @@ class VentanaProductos(ttk.Frame):
             cat_str = self._categoria.get().strip()
             if not cat_str:
                 raise ValueError("La categoria es obligatoria (C-04).")
-            cat_id = CATEGORIAS_VALIDAS.index(cat_str) + 1
+            cat_id = self._id_categoria(cat_str)
             costo_str = self._costo_var.get().strip()
             costo_val = int(costo_str) if costo_str else None
             perecible = self._perecible.get()
@@ -325,10 +350,9 @@ class VentanaProductos(ttk.Frame):
             self._dias_aviso.insert(0, str(producto.dias_aviso))
         self._granel.set(producto.es_granel)
         self._perecible.set(producto.perecible)
-        if producto.categoria_id is not None and 1 <= producto.categoria_id <= len(
-            CATEGORIAS_VALIDAS
-        ):
-            self._categoria.set(CATEGORIAS_VALIDAS[producto.categoria_id - 1])
+        nombre_categoria = self._nombre_categoria(producto.categoria_id)
+        if nombre_categoria is not None:
+            self._categoria.set(nombre_categoria)
 
         # Cambiar a modo edicion.
         self._producto_en_edicion = producto.codigo
@@ -349,7 +373,7 @@ class VentanaProductos(ttk.Frame):
             cat_str = self._categoria.get().strip()
             if not cat_str:
                 raise ValueError("La categoria es obligatoria (C-04).")
-            cat_id = CATEGORIAS_VALIDAS.index(cat_str) + 1
+            cat_id = self._id_categoria(cat_str)
             costo_str = self._costo_var.get().strip()
             costo_val = int(costo_str) if costo_str else None
             dias_str = self._dias_aviso.get().strip()
@@ -397,10 +421,7 @@ class VentanaProductos(ttk.Frame):
 
     def _insertar_fila(self, p: Producto) -> None:
         # C-02: mostrar el NOMBRE de la categoria, no su id numerico.
-        if p.categoria_id is not None and 1 <= p.categoria_id <= len(CATEGORIAS_VALIDAS):
-            categoria = CATEGORIAS_VALIDAS[p.categoria_id - 1]
-        else:
-            categoria = "Sin categoría"
+        categoria = self._nombre_categoria(p.categoria_id) or "Sin categoría"
         self._tabla.insert(
             "",
             "end",

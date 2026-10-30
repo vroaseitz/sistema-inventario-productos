@@ -11,6 +11,7 @@ from datetime import date
 from typing import Protocol, runtime_checkable
 
 from pos.dominio.caja import MovimientoCaja, TurnoCaja
+from pos.dominio.categorias import Categoria
 from pos.dominio.inventario import AjusteInventario, Existencia
 from pos.dominio.lotes import Lote
 from pos.dominio.productos import Producto, RegistroCambioPrecio
@@ -108,3 +109,13 @@ class RepositorioTicketsEspera(Protocol):
 
     def guardar(self, tickets: list[dict]) -> None: ...
     def cargar(self) -> list[dict]: ...
+
+
+@runtime_checkable
+class RepositorioCategorias(Protocol):
+    """Puerto de categorias de producto (C-02, HU-PRD-10)."""
+
+    def listar(self) -> list[Categoria]: ...
+    def nombre_de(self, categoria_id: int | None) -> str | None: ...
+    def agregar(self, nombre: str) -> tuple[Categoria, bool]: ...
+    def sembrar(self, nombres: list[str] | tuple[str, ...]) -> int: ...

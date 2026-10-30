@@ -22,7 +22,9 @@ from pos.dominio.productos import Producto
 from pos.dominio.ventas import Venta
 
 
-def encolar_producto(cola: ColaSincronizacion | None, producto: Producto) -> None:
+def encolar_producto(
+    cola: ColaSincronizacion | None, producto: Producto, categoria: str | None = None
+) -> None:
     if cola is None:
         return
     cola.encolar(
@@ -34,6 +36,8 @@ def encolar_producto(cola: ColaSincronizacion | None, producto: Producto) -> Non
             "precio": producto.precio.monto,
             "unidad_venta": producto.unidad_venta.value,
             "activo": producto.activo,
+            # Nombre (no id local): el id de la categoria cambia entre la base local y la remota.
+            "categoria": categoria,
         },
         str(uuid4()),
     )

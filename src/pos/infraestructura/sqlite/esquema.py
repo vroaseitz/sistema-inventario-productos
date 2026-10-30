@@ -8,6 +8,12 @@ from __future__ import annotations
 import sqlite3
 
 DDL = """
+-- Categorias de producto (C-02): tabla propia, ya no una lista fija en el codigo.
+CREATE TABLE IF NOT EXISTS categorias (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre  TEXT NOT NULL UNIQUE
+);
+
 CREATE TABLE IF NOT EXISTS productos (
     codigo        TEXT PRIMARY KEY,
     nombre        TEXT NOT NULL,
@@ -167,3 +173,13 @@ def crear_esquema(conexion: sqlite3.Connection) -> None:
         except sqlite3.OperationalError as exc:
             if "duplicate column" not in str(exc).lower():
                 raise
+    _sembrar_categorias(conexion)
+
+
+def _sembrar_categorias(conexion: sqlite3.Connection) -> None:
+    """Base nueva: deja las 4 categorias iniciales con los ids 1 a 4 (los de siempre)."""
+    from pos.dominio.categorias import CATEGORIAS_INICIALES
+
+    if conexion.execute("SELECT 1 FROM categorias LIMIT 1").fetchone() is None:
+        for nombre in CATEGORIAS_INICIALES:
+            conexion.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
