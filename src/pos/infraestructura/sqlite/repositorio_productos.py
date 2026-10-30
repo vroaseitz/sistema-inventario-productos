@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from decimal import Decimal
 
 from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
@@ -66,14 +65,13 @@ class RepositorioProductosSQLite:
     def _a_producto(fila: sqlite3.Row) -> Producto:
         """Reconstruye la entidad desde la fila, incluidos costo/perecible (C-05b).
 
-        El costo se persiste como neto; al reconstruir se recalcula el IVA (19%)
-        para que `Costo.total` refleje el valor real de adquisicion.
+        Solo se restaura el neto almacenado: el IVA y el impuesto adicional son
+        datos de factura que se capturan tal cual, no se recalculan aqui para no
+        inflar el costo al leerlo desde la BD.
         """
         costo = None
         if fila["costo_neto"] is not None:
-            neto = int(fila["costo_neto"])
-            iva = int(Decimal(neto) * Decimal("0.19"))
-            costo = Costo(neto=Dinero(neto), iva=Dinero(iva))
+            costo = Costo(neto=Dinero(int(fila["costo_neto"])), iva=Dinero(0))
         return Producto(
             codigo=fila["codigo"],
             nombre=fila["nombre"],
@@ -106,11 +104,28 @@ class RepositorioProductosSQLite:
                     replace(nombre, 'á','a'), 'é','e'), 'í','i'), 'ó','o'), 'ú','u'),
                     'ñ','n')) LIKE ?
                 OR LOWER(replace(replace(replace(replace(replace(
+                    replace(nombre, 'á','a'), 'é','e'), 'í','i'), 'ó','o'), 'ú','u'),
+                    'ñ','n')) LIKE ?
+                OR LOWER(replace(replace(replace(replace(replace(
                     replace(codigo, 'á','a'), 'é','e'), 'í','i'), 'ó','o'), 'ú','u'),
                     'ñ','n')) = ?
             )
-            ORDER BY nombre
+            ORDER BY
+                -- C-15: los que EMPIEZAN con el termino van primero.
+                CASE WHEN LOWER(replace(replace(replace(replace(replace(
+                        replace(nombre, 'á','a'), 'é','e'), 'í','i'), 'ó','o'), 'ú','u'),
+                        'ñ','n')) LIKE ? THEN 1 ELSE 2 END,
+                nombre
         """
 
-        filas = self._con.execute(query, (f"%{patron}%", patron)).fetchall()
+        patron_norm = _normalizar_sql(patron)
+        filas = self._con.execute(
+            query,
+            (
+                f"%{patron}%",
+                f"{patron_norm}%",
+                patron,
+                f"{patron_norm}%",
+            ),
+        ).fetchall()
         return [self._a_producto(fila) for fila in filas]

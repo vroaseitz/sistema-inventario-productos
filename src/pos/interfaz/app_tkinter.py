@@ -164,10 +164,6 @@ class VentanaProductos(ttk.Frame):
         self._dias_aviso = ttk.Entry(marco_form, width=6)
         self._dias_aviso.grid(row=2, column=4, sticky="w", padx=4)
 
-        ttk.Button(marco_form, text="Agregar", command=self._agregar).grid(
-            row=2, column=7, padx=4, pady=6, sticky="e"
-        )
-
         # Tabla de productos
         columnas = ("codigo", "nombre", "precio", "unidad", "categoria", "costo")
         self._tabla = ttk.Treeview(self, columns=columnas, show="headings")
@@ -177,15 +173,30 @@ class VentanaProductos(ttk.Frame):
             strict=True,
         ):
             self._tabla.heading(col, text=titulo)
+
+        # C-14: la columna Nombre necesita mas ancho para no cortar nombres
+        # largos; se estira junto con la ventana.
+        self._tabla.column("nombre", width=250, stretch=tk.YES)
+        self._tabla.column("codigo", width=100, minwidth=80)
+        self._tabla.column("precio", width=90, anchor="e")
+        self._tabla.column("unidad", width=90, anchor="center")
+        self._tabla.column("categoria", width=100)
+        self._tabla.column("costo", width=100, anchor="e")
         self._tabla.pack(fill="both", expand=True, padx=12, pady=8)
 
         # C-10: doble clic sobre la tabla abre la edicion.
         self._tabla.bind("<Double-1>", lambda e: self._editar_seleccionado())
 
-        self._boton_guardar = ttk.Button(
-            self, text="Agregar", command=self._guardar_desde_formulario
+        # C-13: botón para cancelar la edicion y volver al modo alta.
+        # Ambos botones viven en marco_form, agrupados abajo a la derecha.
+        ttk.Button(marco_form, text="Cancelar", command=self._cancelar_edicion).grid(
+            row=3, column=6, padx=4, pady=10, sticky="e"
         )
-        self._boton_guardar.pack(pady=(0, 8))
+
+        self._boton_guardar = ttk.Button(
+            marco_form, text="Agregar", command=self._guardar_desde_formulario
+        )
+        self._boton_guardar.grid(row=3, column=7, padx=4, pady=10, sticky="e")
 
         self._entradas["codigo"].focus_set()
 
@@ -203,6 +214,13 @@ class VentanaProductos(ttk.Frame):
         try:
             costo = int(costo_str)
             precio = int(precio_str) if precio_str else 0
+
+            # C-06: el markup sobre costo neto 0 no esta definido y el margen
+            # con costo 0 es 100% falso: ambos se reportan como dato faltante.
+            if costo == 0:
+                self._margen_var.set("falta costo")
+                self._markup_var.set("falta costo")
+                return
 
             costo_vo = Costo(neto=Dinero(costo), iva=Dinero(0))
             producto = Producto(
@@ -363,9 +381,26 @@ class VentanaProductos(ttk.Frame):
         self._boton_guardar.config(text="Agregar")
         self._limpiar_formulario()
 
+    def _cancelar_edicion(self) -> None:
+        """C-13: cancela la edicion en curso y restaura el modo alta.
+
+        Sirve tanto si hay un producto en edicion como si no: deja el
+        formulario limpio, el codigo re-habilitado y el boton de guardado
+        de vuelta en "Agregar".
+        """
+        self._producto_en_edicion = None
+        self._entradas["codigo"].config(state="normal")
+        self._boton_guardar.config(text="Agregar")
+        self._limpiar_formulario()
+
     # --- Tabla ----------------------------------------------------------------
 
     def _insertar_fila(self, p: Producto) -> None:
+        # C-02: mostrar el NOMBRE de la categoria, no su id numerico.
+        if p.categoria_id is not None and 1 <= p.categoria_id <= len(CATEGORIAS_VALIDAS):
+            categoria = CATEGORIAS_VALIDAS[p.categoria_id - 1]
+        else:
+            categoria = "Sin categoría"
         self._tabla.insert(
             "",
             "end",
@@ -374,7 +409,7 @@ class VentanaProductos(ttk.Frame):
                 p.nombre,
                 p.precio.monto,
                 p.unidad_venta.value,
-                p.categoria_id,
+                categoria,
                 p.costo.neto.monto if p.costo else "",
             ),
         )
