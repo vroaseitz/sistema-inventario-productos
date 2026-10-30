@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from .errores import ReglaVentaInvalida
+from .formato import formatear_clp
 from .value_objects import Dinero
 
 # Denominaciones de curso vigente en Chile (billetes y monedas de uso habitual;
@@ -104,8 +105,8 @@ def calcular_cobro_efectivo(
     redondeado = redondear_a_decena(total.monto)
     if entregado.monto < redondeado:
         raise ReglaVentaInvalida(
-            f"El monto entregado (${entregado.monto}) es menor "
-            f"que el total a cobrar (${redondeado})"
+            f"El monto entregado ({formatear_clp(entregado.monto)}) es menor "
+            f"que el total a cobrar ({formatear_clp(redondeado)})"
         )
 
     return CobroEfectivo(

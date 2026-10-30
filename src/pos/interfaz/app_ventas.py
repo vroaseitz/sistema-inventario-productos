@@ -31,9 +31,16 @@ from pos.aplicacion.puertos import (
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
-from pos.dominio.caja import TipoMovimientoCaja
+from pos.dominio.caja import TipoMovimientoCaja, calcular_arqueo
 from pos.dominio.errores import ErrorDominio
-from pos.dominio.pagos import DENOMINACIONES_CLP, ConteoDenominaciones, MedioPago, Pago
+from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.dominio.pagos import (
+    DENOMINACIONES_CLP,
+    ConteoDenominaciones,
+    MedioPago,
+    Pago,
+    redondear_a_decena,
+)
 from pos.dominio.value_objects import Dinero
 from pos.dominio.ventas import EstadoVenta, Venta
 from pos.interfaz.sesion import Sesion
@@ -52,13 +59,11 @@ NOMBRES_MEDIO_PAGO = {
     MedioPago.EFECTIVO: "Efectivo",
     MedioPago.TARJETA: "Tarjeta",
     MedioPago.TRANSFERENCIA: "Transferencia",
-    MedioPago.CREDITO_CLIENTE: "Credito cliente",
+    MedioPago.CREDITO_CLIENTE: "Crédito cliente",
 }
 
 
-def _formatear_clp(monto: int) -> str:
-    """Formatea un entero CLP con punto de miles (hallazgo D-10): $26.074."""
-    return f"${monto:,}".replace(",", ".")
+_formatear_clp = formatear_clp  # funcion unica de formato (O-07)
 
 
 def _normalizar(texto: str) -> str:
@@ -106,35 +111,30 @@ class VentanaVentas(ttk.Frame):
     # ------------------------------------------------------------------ UI --
 
     def _construir(self) -> None:
-        marco_turno = ttk.LabelFrame(self, text="Turno de caja")
-        marco_turno.pack(fill="x", padx=12, pady=8)
-
-        self._lbl_turno = ttk.Label(marco_turno, text="Sin turno abierto")
-        self._lbl_turno.pack(side="left", padx=8, pady=6)
-
-        ttk.Button(marco_turno, text="Abrir turno", command=self._abrir_turno_ui).pack(
-            side="right", padx=4, pady=6
-        )
-        ttk.Button(marco_turno, text="Movimiento de caja", command=self._movimiento_ui).pack(
-            side="right", padx=4, pady=6
-        )
-        ttk.Button(marco_turno, text="Cerrar turno (arqueo)", command=self._cerrar_turno_ui).pack(
-            side="right", padx=4, pady=6
-        )
-        ttk.Button(marco_turno, text="Ver ventas del turno", command=self._ver_ventas_turno).pack(
-            side="right", padx=4, pady=6
-        )
+        # Barra superior siempre visible: estado del turno y de la sincronizacion.
+        barra = ttk.Frame(self)
+        barra.pack(fill="x", padx=12, pady=(8, 0))
+        self._lbl_turno = ttk.Label(barra, text="Sin turno abierto")
+        self._lbl_turno.pack(side="left", padx=8)
         # HU-VTA-07: la pantalla indica de forma visible si hay operaciones pendientes.
-        # Va en su propia fila: en la barra del turno ya no cabe sin cortarse.
-        fila_sync = ttk.Frame(self)
-        fila_sync.pack(fill="x", padx=12)
-        ttk.Button(fila_sync, text="Sincronizar", command=self._sincronizar).pack(
-            side="right", padx=4
-        )
-        self._lbl_sync = ttk.Label(fila_sync, text="")
+        ttk.Button(barra, text="Sincronizar", command=self._sincronizar).pack(side="right", padx=4)
+        self._lbl_sync = ttk.Label(barra, text="")
         self._lbl_sync.pack(side="right", padx=8)
 
-        marco_venta = ttk.LabelFrame(self, text="Venta en curso")
+        # O-21: subpestanas del prototipo v3: Venta, Caja y corte, Resumen del dia.
+        self._subpestanas = ttk.Notebook(self)
+        self._subpestanas.pack(fill="both", expand=True, padx=4, pady=4)
+        tab_venta = ttk.Frame(self._subpestanas)
+        tab_caja = ttk.Frame(self._subpestanas)
+        tab_resumen = ttk.Frame(self._subpestanas)
+        self._subpestanas.add(tab_venta, text="Venta")
+        self._subpestanas.add(tab_caja, text="Caja y corte")
+        self._subpestanas.add(tab_resumen, text="Resumen del día")
+        self._tab_resumen = tab_resumen
+        self._construir_caja(tab_caja)
+        self._construir_resumen(tab_resumen)
+
+        marco_venta = ttk.LabelFrame(tab_venta, text="Venta en curso")
         marco_venta.pack(fill="x", padx=12, pady=8)
 
         ttk.Label(marco_venta, text="Codigo").grid(row=0, column=0, padx=4, pady=6)
@@ -151,19 +151,21 @@ class VentanaVentas(ttk.Frame):
         ttk.Button(marco_venta, text="Agregar", command=self._agregar_producto).grid(
             row=0, column=4, padx=8, pady=6
         )
-        ttk.Button(marco_venta, text="Buscar producto", command=self._buscar_producto_ui).grid(
-            row=0, column=5, padx=4, pady=6
-        )
+        ttk.Button(
+            marco_venta, text="Buscar producto (F10)", command=self._buscar_producto_ui
+        ).grid(row=0, column=5, padx=4, pady=6)
         ttk.Button(marco_venta, text="Quitar linea", command=self._quitar_linea).grid(
             row=0, column=6, padx=4, pady=6
         )
         ttk.Button(marco_venta, text="Nueva venta", command=self._nueva_venta).grid(
             row=0, column=7, padx=4, pady=6
         )
+        # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
+        self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")
 
         columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal")
         anchos = {"codigo": 90, "nombre": 260, "cantidad": 90, "precio": 110, "subtotal": 120}
-        self._tabla = ttk.Treeview(self, columns=columnas, show="headings", height=8)
+        self._tabla = ttk.Treeview(tab_venta, columns=columnas, show="headings", height=8)
         for col, titulo in zip(
             columnas, ("Codigo", "Nombre", "Cantidad", "Precio", "Subtotal"), strict=True
         ):
@@ -177,26 +179,29 @@ class VentanaVentas(ttk.Frame):
         # efectivo), no el total crudo. La barra de abajo deja el resto siempre
         # visible, no solo en un mensaje que se cierra.
         self._lbl_a_cobrar = ttk.Label(
-            self, text="A cobrar: $0", font=("TkDefaultFont", 16, "bold")
+            tab_venta, text="A cobrar: $0", font=("TkDefaultFont", 16, "bold")
         )
         self._lbl_a_cobrar.pack(anchor="e", padx=16)
-        self._lbl_resumen = ttk.Label(self, text="Total: $0  ·  Pagado: $0  ·  Vuelto: $0")
+        self._lbl_resumen = ttk.Label(tab_venta, text="Total: $0  ·  Pagado: $0  ·  Vuelto: $0")
         self._lbl_resumen.pack(anchor="e", padx=16)
 
-        marco_pago = ttk.LabelFrame(self, text="Pago")
+        marco_pago = ttk.LabelFrame(tab_venta, text="Pago")
         marco_pago.pack(fill="both", padx=12, pady=8)
 
         fila_pago = ttk.Frame(marco_pago)
         fila_pago.pack(fill="x")
 
         self._medio = StringVar(value=MedioPago.EFECTIVO.value)
-        ttk.Combobox(
+        self._medio_nombre = StringVar(value=NOMBRES_MEDIO_PAGO[MedioPago.EFECTIVO])
+        combo_medio = ttk.Combobox(
             fila_pago,
-            textvariable=self._medio,
-            values=[m.value for m in MedioPago],
+            textvariable=self._medio_nombre,
+            values=[NOMBRES_MEDIO_PAGO[m] for m in MedioPago],
             width=16,
             state="readonly",
-        ).grid(row=0, column=0, padx=4, pady=6)
+        )
+        combo_medio.grid(row=0, column=0, padx=4, pady=6)
+        combo_medio.bind("<<ComboboxSelected>>", self._al_cambiar_medio)
 
         ttk.Label(fila_pago, text="Monto").grid(row=0, column=1, padx=4, pady=6)
         self._entrada_monto_pago = ttk.Entry(fila_pago, width=10)
@@ -249,13 +254,99 @@ class VentanaVentas(ttk.Frame):
 
     def _refrescar_turno(self) -> None:
         turno = self._repo_turnos.obtener_abierto()
+        for fila in self._tabla_movimientos.get_children():
+            self._tabla_movimientos.delete(fila)
         if turno is None:
             self._lbl_turno.config(text="Sin turno abierto")
+            self._lbl_en_caja.config(text="En caja: -")
         else:
             self._lbl_turno.config(
                 text=f"Turno #{turno.id} abierto - fondo inicial "
                 f"{_formatear_clp(turno.fondo_inicial.monto)}"
             )
+            # O-23: fondo + ventas en efectivo - vueltos + ingresos - retiros.
+            ventas = self._repo_ventas.obtener_por_turno(turno.id)
+            esperado = calcular_arqueo(turno, ventas, Dinero(0)).efectivo_esperado
+            self._lbl_en_caja.config(text=f"En caja: {_formatear_clp(esperado)}")
+            for movimiento in turno.movimientos:  # O-24
+                self._tabla_movimientos.insert(
+                    "",
+                    "end",
+                    values=(
+                        movimiento.creado_en.strftime("%H:%M"),
+                        movimiento.tipo.value.capitalize(),
+                        _formatear_clp(movimiento.monto.monto),
+                        movimiento.motivo,
+                        self._sesion.nombre or f"usuario {turno.usuario_id}",
+                    ),
+                )
+        self._refrescar_resumen()
+
+    def _construir_caja(self, padre: ttk.Frame) -> None:
+        marco = ttk.LabelFrame(padre, text="Jornada de caja")
+        marco.pack(fill="x", padx=12, pady=8)
+        self._lbl_en_caja = ttk.Label(marco, text="En caja: -", font=("TkDefaultFont", 14, "bold"))
+        self._lbl_en_caja.pack(side="left", padx=8, pady=6)
+        ttk.Button(marco, text="Abrir turno", command=self._abrir_turno_ui).pack(
+            side="right", padx=4, pady=6
+        )
+        ttk.Button(marco, text="Movimiento de caja", command=self._movimiento_ui).pack(
+            side="right", padx=4, pady=6
+        )
+        ttk.Button(marco, text="Cerrar turno (arqueo)", command=self._cerrar_turno_ui).pack(
+            side="right", padx=4, pady=6
+        )
+        ttk.Label(padre, text="Movimientos del turno").pack(anchor="w", padx=14)
+        columnas = ("hora", "tipo", "monto", "motivo", "usuario")
+        self._tabla_movimientos = ttk.Treeview(padre, columns=columnas, show="headings", height=10)
+        for col, titulo, ancho in (
+            ("hora", "Hora", 70),
+            ("tipo", "Tipo", 90),
+            ("monto", "Monto", 110),
+            ("motivo", "Motivo", 360),
+            ("usuario", "Usuario", 120),
+        ):
+            self._tabla_movimientos.heading(col, text=titulo)
+            self._tabla_movimientos.column(col, width=ancho, anchor="w")
+        self._tabla_movimientos.pack(fill="both", expand=True, padx=12, pady=4)
+
+    def _construir_resumen(self, padre: ttk.Frame) -> None:
+        self._lbl_resumen_dia = ttk.Label(padre, text="", font=("TkDefaultFont", 12, "bold"))
+        self._lbl_resumen_dia.pack(anchor="w", padx=14, pady=(12, 4))
+        self._tabla_resumen = ttk.Treeview(
+            padre, columns=("medio", "monto"), show="headings", height=6
+        )
+        self._tabla_resumen.heading("medio", text="Medio de pago")
+        self._tabla_resumen.heading("monto", text="Vendido")
+        self._tabla_resumen.pack(fill="x", padx=12, pady=4)
+        ttk.Button(padre, text="Actualizar", command=self._refrescar_resumen).pack(
+            anchor="w", padx=12, pady=4
+        )
+
+    def _refrescar_resumen(self) -> None:
+        """Resumen del dia = ventas del turno abierto, por medio de pago."""
+        for fila in self._tabla_resumen.get_children():
+            self._tabla_resumen.delete(fila)
+        turno = self._repo_turnos.obtener_abierto()
+        if turno is None:
+            self._lbl_resumen_dia.config(text="Sin turno abierto")
+            return
+        ventas = [
+            v
+            for v in self._repo_ventas.obtener_por_turno(turno.id)
+            if v.estado is EstadoVenta.PAGADA
+        ]
+        totales: dict[MedioPago, int] = dict.fromkeys(MedioPago, 0)
+        for venta in ventas:
+            for pago in venta.pagos:
+                totales[pago.medio] += pago.monto.monto
+        for medio, monto in totales.items():
+            self._tabla_resumen.insert(
+                "", "end", values=(NOMBRES_MEDIO_PAGO[medio], _formatear_clp(monto))
+            )
+        self._lbl_resumen_dia.config(
+            text=f"{len(ventas)} venta(s) · total {_formatear_clp(sum(totales.values()))}"
+        )
 
     def _contar_denominaciones_ui(self, titulo: str) -> ConteoDenominaciones | None:
         """Dialogo de conteo por billete/moneda (HU-CAJ-01/02, hallazgo E-06).
@@ -395,7 +486,7 @@ class VentanaVentas(ttk.Frame):
 
         def confirmar() -> None:
             try:
-                monto = int(entrada_monto.get().strip())
+                monto = parsear_monto(entrada_monto.get())
                 if monto <= 0:
                     raise ValueError
             except ValueError:
@@ -410,6 +501,7 @@ class VentanaVentas(ttk.Frame):
                 messagebox.showerror("No se pudo registrar el movimiento", str(exc))
                 return
             dialogo.destroy()
+            self._refrescar_turno()
             messagebox.showinfo(
                 "Movimiento registrado",
                 f"{tipo_var.get().capitalize()} de {_formatear_clp(monto)} registrado",
@@ -420,30 +512,9 @@ class VentanaVentas(ttk.Frame):
         )
 
     def _ver_ventas_turno(self) -> None:
-        # E-08: poder ver la venta de la jornada sin tener que cerrar el turno.
-        turno = self._repo_turnos.obtener_abierto()
-        if turno is None:
-            messagebox.showwarning("Sin turno", "No hay un turno de caja abierto")
-            return
-        ventas = [
-            v
-            for v in self._repo_ventas.obtener_por_turno(turno.id)
-            if v.estado is EstadoVenta.PAGADA
-        ]
-        totales: dict[MedioPago, int] = dict.fromkeys(MedioPago, 0)
-        for venta in ventas:
-            for pago in venta.pagos:
-                totales[pago.medio] += pago.monto.monto
-        detalle = "\n".join(
-            f"{NOMBRES_MEDIO_PAGO[medio]}: {_formatear_clp(monto)}"
-            for medio, monto in totales.items()
-        )
-        total_general = sum(totales.values())
-        messagebox.showinfo(
-            "Ventas del turno",
-            f"{len(ventas)} venta(s) registrada(s)\n\n{detalle}\n\n"
-            f"Total: {_formatear_clp(total_general)}",
-        )
+        # E-08: la venta de la jornada se ve sin cerrar el turno (subpestana Resumen del dia).
+        self._refrescar_resumen()
+        self._subpestanas.select(self._tab_resumen)
 
     # -------------------------------------------------------------- Venta --
 
@@ -469,6 +540,9 @@ class VentanaVentas(ttk.Frame):
                 messagebox.showerror("No se pudo iniciar la venta", str(exc))
         self._entrada_cantidad.delete(0, "end")
         self._entrada_cantidad.insert(0, "1")
+        # O-27: cada venta nueva parte con Efectivo, el medio por defecto.
+        self._medio.set(MedioPago.EFECTIVO.value)
+        self._medio_nombre.set(NOMBRES_MEDIO_PAGO[MedioPago.EFECTIVO])
         self._refrescar_ticket()
         self._entrada_codigo.focus_set()
 
@@ -593,7 +667,7 @@ class VentanaVentas(ttk.Frame):
                 f"{_formatear_clp(pago.monto.monto)}",
             )
 
-        a_cobrar = venta.total_a_cobrar.monto
+        a_cobrar = self._a_cobrar_visible(venta)
         pagado = venta.total_pagado.monto
         self._lbl_a_cobrar.config(text=f"A cobrar: {_formatear_clp(a_cobrar)}")
         self._lbl_resumen.config(
@@ -609,12 +683,29 @@ class VentanaVentas(ttk.Frame):
         if saldo:
             self._entrada_monto_pago.insert(0, str(saldo))
 
+    def _a_cobrar_visible(self, venta: Venta) -> int:
+        """O-27: con efectivo (el medio por defecto) se muestra desde el inicio el total
+        redondeado a la decena, el mismo que despues exige el cierre de la venta."""
+        if venta.tiene_pago_en_efectivo or self._medio.get() == MedioPago.EFECTIVO.value:
+            return redondear_a_decena(venta.total.monto)
+        return venta.total.monto
+
+    def _al_cambiar_medio(self, _evento: object = None) -> None:
+        por_nombre = {nombre: medio for medio, nombre in NOMBRES_MEDIO_PAGO.items()}
+        self._medio.set(por_nombre[self._medio_nombre.get()].value)
+        self._refrescar_ticket()
+
+    def _atajo_buscar(self, _evento: object = None) -> None:
+        """O-17: F10 abre la busqueda de producto si esta pantalla esta a la vista."""
+        if self.winfo_ismapped() and self._subpestanas.index("current") == 0:
+            self._buscar_producto_ui()
+
     def _agregar_pago(self) -> None:
         venta = self._venta_actual()
         if venta is None:
             return
         try:
-            monto = int(self._entrada_monto_pago.get().strip())
+            monto = parsear_monto(self._entrada_monto_pago.get())
         except ValueError:
             messagebox.showerror("Monto invalido", "El monto debe ser un numero entero")
             return
@@ -666,4 +757,5 @@ class VentanaVentas(ttk.Frame):
             return
         messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con exito")
         self._refrescar_sync()
+        self._refrescar_turno()
         self._nueva_venta(forzar=True)  # D-01a: queda lista para la siguiente

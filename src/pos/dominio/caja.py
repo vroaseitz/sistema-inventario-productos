@@ -115,6 +115,10 @@ def calcular_arqueo(
             totales_por_medio[pago.medio] += pago.monto.monto
             if pago.cobro_efectivo is not None:
                 efectivo_entregado_total += pago.cobro_efectivo.monto_entregado.monto
+            elif pago.medio is MedioPago.EFECTIVO:
+                # Pago parcial en efectivo (D-18b): no lleva cobro ni vuelto, pero el dinero
+                # entro igual a la gaveta. Sin esto el arqueo esperaba menos efectivo del real.
+                efectivo_entregado_total += pago.monto.monto
         vuelto_total += venta.vuelto_entregado.monto
 
     ingresos = sum(m.monto.monto for m in turno.movimientos if m.tipo is TipoMovimientoCaja.INGRESO)

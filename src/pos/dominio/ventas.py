@@ -14,6 +14,7 @@ from enum import Enum
 from uuid import uuid4
 
 from .errores import ReglaVentaInvalida
+from .formato import formatear_clp
 from .pagos import (
     ConteoDenominaciones,
     MedioPago,
@@ -133,8 +134,8 @@ class Venta:
             saldo = max(0, self.total_a_cobrar.monto - self.total_pagado.monto)
             if pago.monto.monto > saldo:
                 raise ReglaVentaInvalida(
-                    f"El pago en {pago.medio.value} (${pago.monto.monto}) supera "
-                    f"lo que falta por cobrar (${saldo})"
+                    f"El pago en {pago.medio.value} ({formatear_clp(pago.monto.monto)}) supera "
+                    f"lo que falta por cobrar ({formatear_clp(saldo)})"
                 )
         self.pagos.append(pago)
 
@@ -193,6 +194,6 @@ class Venta:
             raise ReglaVentaInvalida("No se puede cerrar una venta sin pagos registrados")
         if self.total_pagado.monto != self.total_a_cobrar.monto:
             raise ReglaVentaInvalida(
-                f"La suma de los pagos (${self.total_pagado.monto}) no cubre "
-                f"el total a cobrar (${self.total_a_cobrar.monto})"
+                f"La suma de los pagos ({formatear_clp(self.total_pagado.monto)}) no cubre "
+                f"el total a cobrar ({formatear_clp(self.total_a_cobrar.monto)})"
             )

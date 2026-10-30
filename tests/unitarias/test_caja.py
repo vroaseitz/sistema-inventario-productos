@@ -115,3 +115,15 @@ def test_arqueo_no_cuenta_tarjeta_como_efectivo():
     assert arqueo.totales_por_medio[MedioPago.TARJETA] == Dinero(5000)
     assert arqueo.totales_por_medio[MedioPago.EFECTIVO] == Dinero(0)
     assert arqueo.efectivo_esperado == 0
+
+
+def test_arqueo_cuenta_el_efectivo_de_un_pago_parcial():
+    # Un pago parcial en efectivo no lleva cobro ni vuelto, pero el dinero entro a la gaveta:
+    # antes el efectivo esperado quedaba corto por ese monto (falso sobrante al contar).
+    turno = TurnoCaja(usuario_id=1, fondo_inicial=Dinero(15000))
+    venta = Venta(turno_caja_id=1, usuario_id=1)
+    venta.agregar_detalle("A", 1, Dinero(5000))
+    venta.agregar_pago(Pago(medio=MedioPago.EFECTIVO, monto=Dinero(2000)))
+    venta.agregar_pago(Pago(medio=MedioPago.TARJETA, monto=Dinero(3000)))
+
+    assert calcular_arqueo(turno, [venta], Dinero(17000)).efectivo_esperado == 17000

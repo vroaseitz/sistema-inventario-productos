@@ -19,9 +19,15 @@ from pos.infraestructura.sqlite.repositorio_productos import RepositorioProducto
 class TestOrdenBusqueda:
     def test_orden_busqueda_prioriza_inicio(self, repositorio):
         """QA C-15: los que EMPIEZAN con el termino van primero, luego los que solo lo contienen."""
-        repositorio.guardar(Producto(codigo="A-1", nombre="Aceite", precio=Dinero(2000), categoria_id=1))
-        repositorio.guardar(Producto(codigo="T-1", nombre="Té verde", precio=Dinero(1500), categoria_id=1))
-        repositorio.guardar(Producto(codigo="B-1", nombre="Botella de vidrio", precio=Dinero(3000), categoria_id=1))
+        repositorio.guardar(
+            Producto(codigo="A-1", nombre="Aceite", precio=Dinero(2000), categoria_id=1)
+        )
+        repositorio.guardar(
+            Producto(codigo="T-1", nombre="Té verde", precio=Dinero(1500), categoria_id=1)
+        )
+        repositorio.guardar(
+            Producto(codigo="B-1", nombre="Botella de vidrio", precio=Dinero(3000), categoria_id=1)
+        )
 
         resultados = repositorio.buscar("te")
 

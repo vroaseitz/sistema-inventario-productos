@@ -65,7 +65,15 @@ def pedir_acceso(
     parent: tk.Misc, accion: Callable[[str, str], Usuario], primer_uso: bool
 ) -> Usuario | None:
     dialogo = DialogoAcceso(parent, accion, primer_uso)
-    dialogo.transient(parent)  # type: ignore[arg-type]
+    # A-03: en Windows un dialogo transient de una ventana oculta (withdraw) tampoco se ve.
+    # Solo se asocia a la ventana principal si esta visible; si no, va al frente por su cuenta.
+    if parent.winfo_viewable():
+        dialogo.transient(parent)  # type: ignore[arg-type]
+    dialogo.deiconify()
+    dialogo.lift()
+    dialogo.attributes("-topmost", True)
+    dialogo.after(300, lambda: dialogo.attributes("-topmost", False))
+    dialogo.focus_force()
     dialogo.grab_set()
     parent.wait_window(dialogo)
     return dialogo.resultado

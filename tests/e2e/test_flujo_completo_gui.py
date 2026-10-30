@@ -100,6 +100,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         repo_productos = ventas._repo_productos
         registrar = RegistrarProducto(repo_productos, cola=ventas._cola)
         registrar.ejecutar("ARR", "Arroz 1 kg", 1500, categoria_id=1)
+        registrar.ejecutar("CAF", "Cafe premium", 15296, categoria_id=1)
         registrar.ejecutar("YOG", "Yogurt", 2000, categoria_id=1, perecible=True, dias_aviso=7)
 
         # --- 3) F3: ingreso por la pantalla real; el perecible exige vencimiento -----------
@@ -110,6 +111,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
             inventario._registrar()
 
         ingresar("ARR", "20")
+        ingresar("CAF", "5")
         ingresar("YOG", "10")  # sin fecha: debe rechazarse
         assert mensajes[-1][0] == "showerror" and "vencimiento" in mensajes[-1][2].lower()
         ingresar("YOG", "10", (date.today() + timedelta(days=2)).isoformat())
@@ -130,14 +132,31 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         agregar("ARR", "2")  # 3.000
         agregar("YOG", "1")  # 2.000  -> total 5.000
         ventas._medio.set("efectivo")
-        ventas._entrada_monto_pago.insert(0, "2000")
+        ventas._entrada_monto_pago.delete(0, "end")
+        ventas._entrada_monto_pago.insert(0, "2000")  # efectivo PARCIAL
         ventas._agregar_pago()
+        assert ventas._lista_pagos.size() == 1  # el parcial quedo registrado, sin vuelto
         ventas._medio.set("tarjeta")
         ventas._entrada_monto_pago.delete(0, "end")
         ventas._entrada_monto_pago.insert(0, "3000")
         ventas._agregar_pago()
         ventas._cerrar_venta()
         assert any("registrada con exito" in m[2] for m in mensajes)
+
+        # --- 4b) O-27: con efectivo el total se ve redondeado desde el inicio ------------------
+        assert [ventas._subpestanas.tab(i, "text") for i in (0, 1, 2)] == [
+            "Venta",
+            "Caja y corte",
+            "Resumen del día",
+        ]
+        agregar("CAF", "1")  # $15.296 -> a la decena: $15.300
+        assert ventas._lbl_a_cobrar.cget("text") == "A cobrar: $15.300"
+        assert ventas._entrada_monto_pago.get() == "15300"
+        ventas._entrada_monto_pago.delete(0, "end")
+        ventas._entrada_monto_pago.insert(0, "15.300")  # con punto de miles tambien
+        ventas._agregar_pago()
+        ventas._cerrar_venta()
+        assert "$32.300" in ventas._lbl_en_caja.cget("text")  # O-23: fondo 15.000 + 2.000 + 15.300
 
         # --- 5) stock descontado y FEFO sobre el lote ---------------------------------------
         assert str(ventas._registrar_venta.repositorio_existencias.obtener("ARR").cantidad) == "18"
@@ -151,20 +170,20 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
 
         # --- 7) reporte F6 ----------------------------------------------------------------------
         reportes.generar()
-        assert "1 ventas" in reportes._resumen.get() and "$5.000" in reportes._resumen.get()
+        assert "2 ventas" in reportes._resumen.get() and "$20.300" in reportes._resumen.get()
 
         # --- 8) sincronizar a PostgreSQL y verificar en el destino --------------------------
         assert len(ventas._cola.pendientes()) > 0
         ventas._sincronizar()
         assert ventas._cola.pendientes() == []
         cur.execute("SELECT count(*) FROM pos.venta")
-        assert cur.fetchone()[0] == 1
+        assert cur.fetchone()[0] == 2
         cur.execute("SELECT coalesce(sum(monto), 0) FROM pos.venta_pago")
-        assert int(cur.fetchone()[0]) == 5000
+        assert int(cur.fetchone()[0]) == 20300
         cur.execute("SELECT saldo FROM pos.lote")
         assert int(cur.fetchone()[0]) == 9
-        cur.execute("SELECT count(*) FROM pos.producto WHERE codigo IN ('ARR','YOG')")
-        assert cur.fetchone()[0] == 2
+        cur.execute("SELECT count(*) FROM pos.producto WHERE codigo IN ('ARR','YOG','CAF')")
+        assert cur.fetchone()[0] == 3
     finally:
         ventana.destroy()
         cur.execute("DROP SCHEMA IF EXISTS pos CASCADE;")
