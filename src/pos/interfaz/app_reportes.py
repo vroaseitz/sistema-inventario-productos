@@ -7,6 +7,8 @@ from datetime import date, datetime
 from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.reporte_ventas import SIN_CATEGORIA, ReporteVentas
+from pos.aplicacion.puertos import RepositorioCategorias
+from pos.dominio.pagos import MedioPago
 from pos.interfaz.campo_fecha import CampoFecha
 
 
@@ -14,10 +16,29 @@ def _clp(monto: int) -> str:
     return "$" + f"{monto:,}".replace(",", ".")
 
 
+_NOMBRES_MEDIO = {
+    MedioPago.EFECTIVO.value: "Efectivo",
+    MedioPago.TARJETA.value: "Tarjeta",
+    MedioPago.TRANSFERENCIA.value: "Transferencia",
+    MedioPago.CREDITO_CLIENTE.value: "Crédito cliente",
+}
+
+
+def _nombre_medio(valor: str) -> str:
+    return _NOMBRES_MEDIO.get(valor, valor.replace("_", " ").capitalize())
+
+
 class VentanaReportes(ttk.Frame):
-    def __init__(self, parent: tk.Misc, reporte_ventas: ReporteVentas) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        reporte_ventas: ReporteVentas,
+        repo_categorias: RepositorioCategorias | None = None,
+    ) -> None:
         super().__init__(parent, padding=12)
         self._reporte = reporte_ventas
+        self._categorias = repo_categorias
+        self._hoy_al_generar = date.today()
         # R-01: fechas con calendario desplegable (tambien se puede escribir AAAA-MM-DD).
         self._desde: CampoFecha
         self._hasta: CampoFecha
@@ -37,6 +58,25 @@ class VentanaReportes(ttk.Frame):
 
         self._por_categoria = self._tabla("Por categoria", ("Categoria", "Vendido"))
         self._por_medio = self._tabla("Por medio de pago", ("Medio", "Cobrado"))
+        self.generar()
+
+    def _nombre_categoria(self, categoria_id: int) -> str:
+        if categoria_id == SIN_CATEGORIA:
+            return "Sin categoría"
+        nombre = self._categorias.nombre_de(categoria_id) if self._categorias else None
+        return nombre or "Sin categoría"
+
+    def al_mostrar(self) -> None:
+        """R-02: el reporte se armaba solo al abrir la app y quedaba vacio; ahora se regenera.
+
+        Si el dia cambio desde la ultima vez y las fechas seguian en «hoy», se actualizan.
+        """
+        hoy = date.today()
+        if hoy != self._hoy_al_generar:
+            for campo in (self._desde, self._hasta):
+                if campo.get().strip() == self._hoy_al_generar.isoformat():
+                    campo.set(hoy.isoformat())
+            self._hoy_al_generar = hoy
         self.generar()
 
     def _tabla(self, titulo: str, columnas: tuple[str, str]) -> ttk.Treeview:
@@ -63,11 +103,16 @@ class VentanaReportes(ttk.Frame):
             (
                 self._por_categoria,
                 [
-                    ("Sin categoria" if c == SIN_CATEGORIA else f"Categoria {c}", _clp(m))
-                    for c, m in sorted(datos.por_categoria.items())
+                    (self._nombre_categoria(c), _clp(m))
+                    for c, m in sorted(
+                        datos.por_categoria.items(), key=lambda x: self._nombre_categoria(x[0])
+                    )
                 ],
             ),
-            (self._por_medio, [(k, _clp(m)) for k, m in sorted(datos.por_medio_pago.items())]),
+            (
+                self._por_medio,
+                [(_nombre_medio(k), _clp(m)) for k, m in sorted(datos.por_medio_pago.items())],
+            ),
         ):
             tabla.delete(*tabla.get_children())
             for fila in filas:
