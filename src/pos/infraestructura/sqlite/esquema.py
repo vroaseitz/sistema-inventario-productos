@@ -83,6 +83,16 @@ CREATE TABLE IF NOT EXISTS tickets_en_espera (
     datos_json  TEXT NOT NULL
 );
 
+-- Registro de cambios y descartes (HU-USR-03). La pantalla de auditoria (F7) se construye
+-- despues; por ahora se guarda para no perder el rastro (p. ej. tickets descartados al cerrar).
+CREATE TABLE IF NOT EXISTS auditoria (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha      TEXT NOT NULL,
+    usuario    TEXT NOT NULL,
+    accion     TEXT NOT NULL,
+    detalle    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS turnos_caja (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id         INTEGER NOT NULL,
@@ -158,6 +168,7 @@ CREATE TABLE IF NOT EXISTS lotes (
 # tolera "duplicate column" (la base ya estaba migrada).
 _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
+    "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
     "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",
@@ -177,9 +188,14 @@ def crear_esquema(conexion: sqlite3.Connection) -> None:
 
 
 def _sembrar_categorias(conexion: sqlite3.Connection) -> None:
-    """Base nueva: deja las 4 categorias iniciales con los ids 1 a 4 (los de siempre)."""
-    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    """Deja las 20 categorias validadas por la PO (CA-02) y retira las 4 antiguas.
 
-    if conexion.execute("SELECT 1 FROM categorias LIMIT 1").fetchone() is None:
-        for nombre in CATEGORIAS_INICIALES:
-            conexion.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
+    Base nueva: quedan con los ids 1 a 20. Base existente: se agregan las que falten y las
+    antiguas sin productos se eliminan (las de frutas/verduras mueven antes sus productos).
+    """
+    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
+
+    repo = RepositorioCategoriasSQLite(conexion)
+    repo.sembrar(CATEGORIAS_INICIALES)
+    repo.depurar_antiguas()

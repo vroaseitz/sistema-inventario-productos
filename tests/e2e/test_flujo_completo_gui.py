@@ -177,7 +177,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         ]
         agregar("CAF", "1")  # $15.296 -> a la decena: $15.300
         assert ventas._lbl_a_cobrar.cget("text") == "A cobrar: $15.300"
-        assert ventas._entrada_monto_pago.get() == "15300"
+        assert ventas._entrada_monto_pago.get() == "15.300"  # O-07: con punto de miles
         ventas._entrada_monto_pago.delete(0, "end")
         ventas._entrada_monto_pago.insert(0, "15.300")  # con punto de miles tambien
         ventas._agregar_pago()

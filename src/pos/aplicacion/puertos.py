@@ -112,6 +112,14 @@ class RepositorioTicketsEspera(Protocol):
 
 
 @runtime_checkable
+class RepositorioAuditoria(Protocol):
+    """Puerto del registro de auditoria (HU-USR-03): quien hizo que y cuando."""
+
+    def registrar(self, usuario: str, accion: str, detalle: dict) -> None: ...
+    def listar(self, accion: str | None = None) -> list[dict]: ...
+
+
+@runtime_checkable
 class RepositorioCategorias(Protocol):
     """Puerto de categorias de producto (C-02, HU-PRD-10)."""
 
