@@ -187,9 +187,14 @@ def crear_esquema(conexion: sqlite3.Connection) -> None:
 
 
 def _sembrar_categorias(conexion: sqlite3.Connection) -> None:
-    """Base nueva: deja las 4 categorias iniciales con los ids 1 a 4 (los de siempre)."""
-    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    """Deja las 20 categorias validadas por la PO (CA-02) y retira las 4 antiguas.
 
-    if conexion.execute("SELECT 1 FROM categorias LIMIT 1").fetchone() is None:
-        for nombre in CATEGORIAS_INICIALES:
-            conexion.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
+    Base nueva: quedan con los ids 1 a 20. Base existente: se agregan las que falten y las
+    antiguas sin productos se eliminan (las de frutas/verduras mueven antes sus productos).
+    """
+    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
+
+    repo = RepositorioCategoriasSQLite(conexion)
+    repo.sembrar(CATEGORIAS_INICIALES)
+    repo.depurar_antiguas()

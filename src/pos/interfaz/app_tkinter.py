@@ -18,9 +18,9 @@ from tkinter import messagebox, ttk
 from pos.aplicacion.casos_uso.editar_producto import EditarProducto
 from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
 from pos.aplicacion.puertos import RepositorioCategorias, RepositorioProductos
-from pos.dominio.categorias import Categoria
+from pos.dominio.categorias import CATEGORIAS_INICIALES, Categoria
 from pos.dominio.errores import ErrorDominio
-from pos.dominio.productos import CATEGORIAS_VALIDAS, Producto, UnidadVenta
+from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
 
 
@@ -60,7 +60,7 @@ class VentanaProductos(ttk.Frame):
     def _lista_categorias(self) -> list[Categoria]:
         if self._categorias is not None:
             return self._categorias.listar()
-        return [Categoria(i + 1, n) for i, n in enumerate(CATEGORIAS_VALIDAS)]
+        return [Categoria(i + 1, n) for i, n in enumerate(CATEGORIAS_INICIALES)]
 
     def _id_categoria(self, nombre: str) -> int:
         for categoria in self._lista_categorias():
@@ -148,7 +148,7 @@ class VentanaProductos(ttk.Frame):
         self._categoria = ttk.Combobox(
             marco_form,
             values=[c.nombre for c in self._lista_categorias()],
-            width=18,
+            width=34,  # CA-02: la lista desplegable no corta los nombres largos
             state="readonly",
         )
         self._categoria.grid(row=0, column=5, padx=4, pady=6)
@@ -205,7 +205,7 @@ class VentanaProductos(ttk.Frame):
         self._tabla.column("codigo", width=100, minwidth=80)
         self._tabla.column("precio", width=90, anchor="e")
         self._tabla.column("unidad", width=90, anchor="center")
-        self._tabla.column("categoria", width=100)
+        self._tabla.column("categoria", width=210)
         self._tabla.column("costo", width=100, anchor="e")
         self._tabla.pack(fill="both", expand=True, padx=12, pady=8)
 
