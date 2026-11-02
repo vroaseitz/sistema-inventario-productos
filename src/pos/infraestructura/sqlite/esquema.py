@@ -83,6 +83,16 @@ CREATE TABLE IF NOT EXISTS tickets_en_espera (
     datos_json  TEXT NOT NULL
 );
 
+-- Registro de cambios y descartes (HU-USR-03). La pantalla de auditoria (F7) se construye
+-- despues; por ahora se guarda para no perder el rastro (p. ej. tickets descartados al cerrar).
+CREATE TABLE IF NOT EXISTS auditoria (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha      TEXT NOT NULL,
+    usuario    TEXT NOT NULL,
+    accion     TEXT NOT NULL,
+    detalle    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS turnos_caja (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     usuario_id         INTEGER NOT NULL,

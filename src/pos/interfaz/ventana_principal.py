@@ -143,6 +143,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
     from pos.infraestructura.sqlite.conexion import crear_conexion
     from pos.infraestructura.sqlite.esquema import crear_esquema
+    from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite
     from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
     from pos.infraestructura.sqlite.repositorio_existencias import RepositorioExistenciasSQLite
     from pos.infraestructura.sqlite.repositorio_historial import RepositorioHistorialSQLite
@@ -195,6 +196,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 publicador=publicador,
                 sesion=sesion,
                 repo_tickets=RepositorioTicketsEsperaSQLite(conexion),
+                auditoria=RepositorioAuditoriaSQLite(conexion),
             ),
             "F2": lambda padre: VentanaProductos(
                 padre,
