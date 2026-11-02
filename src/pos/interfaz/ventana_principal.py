@@ -137,6 +137,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
     from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
+    from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
     from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
     from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
     from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
@@ -149,7 +150,10 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.infraestructura.sqlite.esquema import crear_esquema
     from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite
     from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
-    from pos.infraestructura.sqlite.repositorio_existencias import RepositorioExistenciasSQLite
+    from pos.infraestructura.sqlite.repositorio_existencias import (
+        RepositorioAjustesSQLite,
+        RepositorioExistenciasSQLite,
+    )
     from pos.infraestructura.sqlite.repositorio_historial import RepositorioHistorialSQLite
     from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
     from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
@@ -225,6 +229,14 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 IngresarStock(repo_productos, repo_existencias, repo_lotes, cola=cola),
                 ConsultarAlertasVencimiento(repo_lotes, repo_productos),
                 repo_lotes,
+                registrar_merma=RegistrarMerma(
+                    repo_existencias,
+                    RepositorioAjustesSQLite(conexion),
+                    repositorio_lotes=repo_lotes,
+                    cola=cola,
+                ),
+                repo_existencias=repo_existencias,
+                sesion=sesion,
             ),
         }
     )

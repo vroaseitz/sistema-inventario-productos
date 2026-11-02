@@ -155,3 +155,44 @@ def test_una_base_con_lotes_anteriores_recibe_la_columna_del_codigo():
     crear_esquema(con)
     lote = RepositorioLotesSQLite(con).por_producto("YOG")[0]
     assert lote.codigo_lote == "" and lote.etiqueta == "L1"
+
+
+def test_merma_da_de_baja_stock_y_lotes_y_deja_registro(app):
+    """HU-INV-04: motivo obligatorio, descuenta del lote que vence antes y no se edita."""
+    from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
+    from pos.dominio.inventario import MotivoAjuste
+    from pos.infraestructura.sqlite.repositorio_existencias import RepositorioAjustesSQLite
+
+    ajustes = RepositorioAjustesSQLite(app.productos._con)
+    pronto = app.ingresar.ejecutar("YOG", 6, "Compra", fecha_vencimiento=HOY + timedelta(days=2))
+    app.ingresar.ejecutar("YOG", 4, "Compra", fecha_vencimiento=HOY + timedelta(days=20))
+    merma = RegistrarMerma(app.existencias, ajustes, app.lotes, cola=app.cola)
+
+    ajuste = merma.ejecutar(
+        "YOG", "3,5".replace(",", "."), MotivoAjuste.VENCIMIENTO, "ana", " retirado "
+    )
+    assert ajuste.cantidad_anterior == 10 and ajuste.cantidad_nueva == Decimal("6.5")
+    assert app.existencias.obtener("YOG").cantidad == Decimal("6.5")
+    saldos = {x.uuid: x.saldo for x in app.lotes.por_producto("YOG")}
+    assert saldos[pronto.uuid] == Decimal("2.5")  # salio del lote que vence antes
+    fila = app.productos._con.execute(
+        "SELECT motivo, observacion, usuario FROM historial_ajustes_inventario"
+    ).fetchone()
+    assert (fila["motivo"], fila["observacion"], fila["usuario"]) == (
+        "vencimiento",
+        "retirado",
+        "ana",
+    )
+
+
+def test_merma_rechaza_cantidades_invalidas_sin_tocar_el_stock(app):
+    from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
+    from pos.dominio.inventario import MotivoAjuste
+    from pos.infraestructura.sqlite.repositorio_existencias import RepositorioAjustesSQLite
+
+    app.ingresar.ejecutar("ARR", 5, "Compra")
+    merma = RegistrarMerma(app.existencias, RepositorioAjustesSQLite(app.productos._con), app.lotes)
+    for cantidad in ("0", "-1", "abc", "6"):
+        with pytest.raises(ReglaInventarioInvalida):
+            merma.ejecutar("ARR", cantidad, MotivoAjuste.ROTURA, "ana")
+    assert app.existencias.obtener("ARR").cantidad == 5

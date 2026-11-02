@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS historial_ajustes_inventario (
     motivo             TEXT NOT NULL,
     usuario            TEXT NOT NULL,
     fecha              TEXT NOT NULL,
+    observacion        TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
 );
 
@@ -169,6 +170,7 @@ CREATE TABLE IF NOT EXISTS lotes (
 _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
     "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE historial_ajustes_inventario ADD COLUMN observacion TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
     "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",

@@ -287,12 +287,17 @@ con3 = crear_conexion(ruta)
 lotes3 = RepositorioLotesSQLite(con3)
 productos3 = RepositorioProductosSQLite(con3)
 existencias3 = RepositorioExistenciasSQLite(con3)
+from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_existencias import RepositorioAjustesSQLite  # noqa: E402
+
 inventario = VentanaInventario(
     raiz,
     productos3,
     IngresarStock(productos3, existencias3, lotes3),
     ConsultarAlertasVencimiento(lotes3, productos3),
     lotes3,
+    registrar_merma=RegistrarMerma(existencias3, RepositorioAjustesSQLite(con3), lotes3),
+    repo_existencias=existencias3,
 )
 inventario.pack()
 raiz.update()
@@ -328,6 +333,43 @@ filas = [
     inventario._tabla_lotes.item(i, "values")[0] for i in inventario._tabla_lotes.get_children()
 ]
 verificar(filas == ["L. 26089 A"], f"I-02: F3 lista el lote por su codigo {filas}")
+
+
+# --- HU-INV-04: registrar merma con motivo obligatorio --------------------------------------
+def merma(codigo, cantidad, motivo=""):
+    mensajes.clear()
+    inventario._merma_codigo.set(codigo)
+    inventario._merma_cantidad.set(cantidad)
+    inventario._merma_motivo.set(motivo)
+    inventario._registrar_merma()
+    return [m for tipo, m in mensajes if tipo == "showerror"]
+
+
+verificar(
+    merma("NUE", "1") == ["Falta el motivo (es obligatorio)"], "HU-INV-04: el motivo es obligatorio"
+)
+verificar(
+    merma("", "1", "Rotura") == ["Falta el código del producto"], "HU-INV-04: falta el codigo"
+)
+verificar(
+    merma("NUE", "", "Rotura") == ["Falta la cantidad a dar de baja"],
+    "HU-INV-04: falta la cantidad",
+)
+verificar(
+    len(merma("NUE", "99", "Rotura")) == 1, "HU-INV-04: no se puede dar de baja mas de lo que hay"
+)
+inventario._merma_codigo.set("NUE")
+inventario._merma_cantidad.set("0,5")
+verificar(
+    inventario._merma_estado.get() == "Existencia actual: 52  ·  Resultante: 51.5",
+    f"HU-INV-04: muestra existencia actual y resultante ({inventario._merma_estado.get()})",
+)
+verificar(merma("NUE", "0,5", "Vencimiento") == [], "HU-INV-04: merma valida")
+verificar(existencias3.obtener("NUE").cantidad == Decimal("51.5"), "HU-INV-04: baja el stock")
+verificar(
+    [x.saldo for x in lotes3.por_producto("NUE")] == [Decimal("1.5")],
+    "HU-INV-04: baja tambien el lote",
+)
 inventario.destroy()
 
 # --- R-02: F6 con nombres legibles y al mostrarse se regenera -------------------------------

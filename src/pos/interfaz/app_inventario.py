@@ -13,13 +13,26 @@ from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import ConsultarAlertasVencimiento
 from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
-from pos.aplicacion.puertos import RepositorioLotes, RepositorioProductos
+from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
+from pos.aplicacion.puertos import RepositorioExistencias, RepositorioLotes, RepositorioProductos
 from pos.dominio.errores import ErrorDominio
+from pos.dominio.inventario import MotivoAjuste
 from pos.interfaz.campo_fecha import CampoFecha
+from pos.interfaz.sesion import Sesion
 
 
 def _clp(monto: int) -> str:
     return "$" + f"{monto:,}".replace(",", ".")
+
+
+# HU-INV-04: motivos del prototipo v3 (la lista final la define la PO con las propietarias).
+MOTIVOS_MERMA = {
+    "Vencimiento": MotivoAjuste.VENCIMIENTO,
+    "Rotura": MotivoAjuste.ROTURA,
+    "Pérdida": MotivoAjuste.PERDIDA,
+    "Consumo interno": MotivoAjuste.CONSUMO_INTERNO,
+    "Devolución": MotivoAjuste.DEVOLUCION,
+}
 
 
 class VentanaInventario(ttk.Frame):
@@ -30,12 +43,18 @@ class VentanaInventario(ttk.Frame):
         ingresar_stock: IngresarStock,
         consultar_alertas: ConsultarAlertasVencimiento,
         repo_lotes: RepositorioLotes | None = None,
+        registrar_merma: RegistrarMerma | None = None,
+        repo_existencias: RepositorioExistencias | None = None,
+        sesion: Sesion | None = None,
     ) -> None:
         super().__init__(parent, padding=12)
         self._productos = repo_productos
         self._ingresar = ingresar_stock
         self._alertas = consultar_alertas
         self._repo_lotes = repo_lotes
+        self._merma = registrar_merma
+        self._existencias = repo_existencias
+        self._sesion = sesion or Sesion()
 
         self._codigo = tk.StringVar()
         self._cantidad = tk.StringVar()
@@ -65,6 +84,8 @@ class VentanaInventario(ttk.Frame):
         ttk.Button(formulario, text="Ingresar", command=self._registrar).grid(
             row=1, column=len(campos), padx=8
         )
+        if self._merma is not None:
+            self._construir_merma()
         ttk.Label(self, textvariable=self._mensaje, foreground="#5B3E7E").pack(anchor="w", pady=6)
 
         ttk.Label(self, text="Alertas de vencimiento", font=("TkDefaultFont", 12, "bold")).pack(
@@ -105,6 +126,96 @@ class VentanaInventario(ttk.Frame):
             text="El descuento es una sugerencia (politica propuesta); no modifica el precio.",
             foreground="#666",
         ).pack(anchor="w")
+        self.refrescar()
+
+    # ------------------------------------------- Registrar merma o ajuste (HU-INV-04) --
+
+    def _construir_merma(self) -> None:
+        marco = ttk.LabelFrame(self, text="Registrar merma o ajuste", padding=10)
+        marco.pack(fill="x", pady=(8, 0))
+        self._merma_codigo = tk.StringVar()
+        self._merma_cantidad = tk.StringVar()
+        self._merma_motivo = tk.StringVar()
+        self._merma_obs = tk.StringVar()
+        self._merma_estado = tk.StringVar(value="Existencia actual: -  ·  Resultante: -")
+        campos = (
+            ("Codigo de producto", ttk.Entry(marco, textvariable=self._merma_codigo, width=18)),
+            (
+                "Cantidad a dar de baja",
+                ttk.Entry(marco, textvariable=self._merma_cantidad, width=14),
+            ),
+            (
+                "Motivo (obligatorio)",
+                ttk.Combobox(
+                    marco,
+                    textvariable=self._merma_motivo,
+                    values=list(MOTIVOS_MERMA),
+                    state="readonly",
+                    width=18,
+                ),
+            ),
+            ("Observacion", ttk.Entry(marco, textvariable=self._merma_obs, width=26)),
+        )
+        for columna, (titulo, widget) in enumerate(campos):
+            ttk.Label(marco, text=titulo).grid(row=0, column=columna, sticky="w", padx=4)
+            widget.grid(row=1, column=columna, padx=4, pady=(2, 0), sticky="w")
+        for variable in (self._merma_codigo, self._merma_cantidad):
+            variable.trace_add("write", lambda *_a: self._actualizar_estado_merma())
+        ttk.Button(marco, text="Registrar merma", command=self._registrar_merma).grid(
+            row=1, column=len(campos), padx=8
+        )
+        ttk.Label(marco, textvariable=self._merma_estado, foreground="#666").grid(
+            row=2, column=0, columnspan=len(campos), sticky="w", padx=4, pady=(6, 0)
+        )
+        for _titulo, widget in campos:
+            widget.bind("<Return>", lambda _e: self._registrar_merma())
+
+    def _existencia_actual(self, codigo: str) -> Decimal | None:
+        if self._existencias is None or not codigo:
+            return None
+        existencia = self._existencias.obtener(codigo)
+        return existencia.cantidad if existencia is not None else None
+
+    def _actualizar_estado_merma(self) -> None:
+        actual = self._existencia_actual(self._merma_codigo.get().strip())
+        if actual is None:
+            self._merma_estado.set("Existencia actual: -  ·  Resultante: -")
+            return
+        try:
+            baja = Decimal(self._merma_cantidad.get().strip().replace(",", ".") or "0")
+        except InvalidOperation:
+            baja = Decimal("0")
+        self._merma_estado.set(f"Existencia actual: {actual}  ·  Resultante: {actual - baja}")
+
+    def _registrar_merma(self) -> None:
+        codigo = self._merma_codigo.get().strip()
+        if not codigo:
+            messagebox.showerror("Merma", "Falta el código del producto")
+            return
+        if not self._merma_cantidad.get().strip():
+            messagebox.showerror("Merma", "Falta la cantidad a dar de baja")
+            return
+        motivo = MOTIVOS_MERMA.get(self._merma_motivo.get())
+        if motivo is None:
+            messagebox.showerror("Merma", "Falta el motivo (es obligatorio)")
+            return
+        try:
+            ajuste = self._merma.ejecutar(
+                codigo,
+                self._merma_cantidad.get().strip().replace(",", "."),
+                motivo,
+                self._sesion.nombre or str(self._sesion.usuario_id),
+                self._merma_obs.get(),
+            )
+        except ErrorDominio as error:
+            messagebox.showerror("Merma", str(error))
+            return
+        self._mensaje.set(
+            f"Merma registrada: {codigo} −{-ajuste.diferencia_conteo} ({self._merma_motivo.get()})"
+        )
+        for variable in (self._merma_codigo, self._merma_cantidad, self._merma_obs):
+            variable.set("")
+        self._merma_motivo.set("")
         self.refrescar()
 
     def _registrar(self) -> None:
