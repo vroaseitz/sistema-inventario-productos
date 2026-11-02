@@ -114,6 +114,10 @@ class VentanaPrincipal(tk.Tk):
             self._pestanas[self._activo].config(bg="#f3f5f4", fg="#1b2220")
         modulo = next(m for m in MODULOS if m.clave == clave)
         self._marcos[clave].pack(fill="both", expand=True)
+        # R-02: las pantallas que dependen de lo que pasa en otras se refrescan al entrar.
+        al_mostrar = getattr(self._marcos[clave], "al_mostrar", None)
+        if callable(al_mostrar):
+            al_mostrar()
         self._pestanas[clave].config(bg=modulo.color, fg="#ffffff")
         self._franja.config(bg=modulo.color)
         self._activo = clave
@@ -212,7 +216,9 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 ),
                 repo_categorias,
             ),
-            "F6": lambda padre: VentanaReportes(padre, ReporteVentas(repo_ventas, repo_productos)),
+            "F6": lambda padre: VentanaReportes(
+                padre, ReporteVentas(repo_ventas, repo_productos), repo_categorias
+            ),
             "F3": lambda padre: VentanaInventario(
                 padre,
                 repo_productos,

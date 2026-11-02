@@ -265,5 +265,97 @@ verificar(
     "al reabrir no vuelve nada descartado",
 )
 
+
+# --- O-28 / O-07 / «Cambio»: F11 cambia el lote, monto con punto de miles, rotulos del prototipo --
+ventana._abrir_turno_ui()
+verificar(bool(raiz.bind("<F11>")), "O-28: F11 esta asignada a Cambiar lote")
+verificar(not raiz.bind("<F5>"), "O-28: F5 ya no es de Cambiar lote (es el modulo Compras)")
+escribir_y_esperar(ventana, "78012")
+ventana._entrada_codigo.delete(0, "end")
+verificar("Cambio:" in ventana._lbl_resumen.cget("text"), "la barra dice «Pagó con» y «Cambio»")
+verificar(
+    ventana._entrada_monto_pago.get() == "1.500", "O-07: el monto propuesto lleva punto de miles"
+)
+
+# --- I-03 / I-02 en F3 ---------------------------------------------------------------------
+from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import ConsultarAlertasVencimiento  # noqa: E402
+from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite  # noqa: E402
+from pos.interfaz.app_inventario import VentanaInventario  # noqa: E402
+
+con3 = crear_conexion(ruta)
+lotes3 = RepositorioLotesSQLite(con3)
+productos3 = RepositorioProductosSQLite(con3)
+existencias3 = RepositorioExistenciasSQLite(con3)
+inventario = VentanaInventario(
+    raiz,
+    productos3,
+    IngresarStock(productos3, existencias3, lotes3),
+    ConsultarAlertasVencimiento(lotes3, productos3),
+    lotes3,
+)
+inventario.pack()
+raiz.update()
+
+
+def intentar(codigo, cantidad, vence="", codigo_lote=""):
+    mensajes.clear()
+    inventario._codigo.set(codigo)
+    inventario._cantidad.set(cantidad)
+    inventario._vence.set(vence)
+    inventario._codigo_lote.set(codigo_lote)
+    inventario._registrar()
+    return [m for tipo, m in mensajes if tipo == "showerror"]
+
+
+verificar(intentar("", "5") == ["Falta el código del producto"], "I-03: nombra el codigo faltante")
+verificar(intentar("NUE", "") == ["Falta la cantidad"], "I-03: «Falta la cantidad»")
+verificar(
+    intentar("NUE", "abc") == ["La cantidad debe ser un número, por ejemplo 12"],
+    "I-03: cantidad que no es numero",
+)
+verificar(intentar("NUE", "-2") == ["La cantidad debe ser mayor que cero"], "I-03: cantidad <= 0")
+verificar(
+    intentar("NUE", "5", "31/12/2030") == ["La fecha de vencimiento debe ser AAAA-MM-DD"],
+    "I-03: fecha mal escrita",
+)
+verificar(intentar("NUE", "2", "2031-01-31", "L. 26089 A") == [], "ingreso valido sin errores")
+verificar(
+    [x.etiqueta for x in lotes3.por_producto("NUE")] == ["L. 26089 A"],
+    "I-02: el lote lleva el codigo impreso",
+)
+filas = [
+    inventario._tabla_lotes.item(i, "values")[0] for i in inventario._tabla_lotes.get_children()
+]
+verificar(filas == ["L. 26089 A"], f"I-02: F3 lista el lote por su codigo {filas}")
+inventario.destroy()
+
+# --- R-02: F6 con nombres legibles y al mostrarse se regenera -------------------------------
+from pos.aplicacion.casos_uso.reporte_ventas import ReporteVentas  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_categorias import (  # noqa: E402
+    RepositorioCategoriasSQLite,
+)
+from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite as RV  # noqa: E402
+from pos.interfaz.app_reportes import VentanaReportes  # noqa: E402
+
+reporte = VentanaReportes(
+    raiz, ReporteVentas(RV(con3), productos3), RepositorioCategoriasSQLite(con3)
+)
+reporte.pack()
+raiz.update()
+ventana._agregar_pago()
+ventana._cerrar_venta()  # una venta pagada con efectivo, despues de armar el reporte
+reporte.al_mostrar()
+categorias = [
+    reporte._por_categoria.item(i, "values")[0] for i in reporte._por_categoria.get_children()
+]
+medios = [reporte._por_medio.item(i, "values")[0] for i in reporte._por_medio.get_children()]
+verificar(categorias == ["Frutos secos y semillas"], f"R-02: categoria con su nombre {categorias}")
+verificar(medios == ["Efectivo"], f"R-02: medio de pago legible {medios}")
+verificar(
+    "1 ventas" in reporte._resumen.get(), "R-02: al mostrarse el reporte ya trae la venta nueva"
+)
+reporte.destroy()
+
 print("TODO OK")
 raiz.destroy()

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import ConsultarAlertasVencimiento
@@ -38,6 +39,7 @@ class VentanaInventario(ttk.Frame):
 
         self._codigo = tk.StringVar()
         self._cantidad = tk.StringVar()
+        self._codigo_lote = tk.StringVar()  # I-02: codigo impreso en el envase
         self._motivo = tk.StringVar(value="Compra a proveedor")
         self._mensaje = tk.StringVar()
 
@@ -49,6 +51,7 @@ class VentanaInventario(ttk.Frame):
             ("Codigo de producto", self._codigo),
             ("Cantidad", self._cantidad),
             ("Vence (calendario o AAAA-MM-DD)", self._vence),
+            ("Codigo de lote (impreso)", self._codigo_lote),
             ("Motivo", self._motivo),
         )
         for columna, (etiqueta, variable) in enumerate(campos):
@@ -56,7 +59,7 @@ class VentanaInventario(ttk.Frame):
             if variable is self._vence:
                 self._vence.grid(row=1, column=columna, padx=4, pady=(2, 0), sticky="w")
                 continue
-            ttk.Entry(formulario, textvariable=variable, width=22).grid(
+            ttk.Entry(formulario, textvariable=variable, width=20).grid(
                 row=1, column=columna, padx=4, pady=(2, 0)
             )
         ttk.Button(formulario, text="Ingresar", command=self._registrar).grid(
@@ -105,24 +108,51 @@ class VentanaInventario(ttk.Frame):
         self.refrescar()
 
     def _registrar(self) -> None:
+        # I-03: cada dato faltante o mal escrito se nombra en el mensaje.
+        codigo = self._codigo.get().strip()
+        if not codigo:
+            messagebox.showerror("Inventario", "Falta el código del producto")
+            return
+        texto_cantidad = self._cantidad.get().strip().replace(",", ".")
+        if not texto_cantidad:
+            messagebox.showerror("Inventario", "Falta la cantidad")
+            return
         try:
-            vence = self._vence.get().strip()
+            cantidad = Decimal(texto_cantidad)
+        except InvalidOperation:
+            messagebox.showerror("Inventario", "La cantidad debe ser un número, por ejemplo 12")
+            return
+        if cantidad <= 0:
+            messagebox.showerror("Inventario", "La cantidad debe ser mayor que cero")
+            return
+        if not self._motivo.get().strip():
+            messagebox.showerror("Inventario", "Falta el motivo")
+            return
+        vence = self._vence.get().strip()
+        try:
             fecha = datetime.strptime(vence, "%Y-%m-%d").date() if vence else None
+        except ValueError:
+            messagebox.showerror("Inventario", "La fecha de vencimiento debe ser AAAA-MM-DD")
+            return
+        try:
             self._ingresar.ejecutar(
-                self._codigo.get().strip(),
-                self._cantidad.get().strip().replace(",", "."),
+                codigo,
+                cantidad,
                 self._motivo.get(),
                 fecha_vencimiento=fecha,
+                codigo_lote=self._codigo_lote.get(),
             )
-        except ValueError:
-            messagebox.showerror("Inventario", "Revisa cantidad y fecha (AAAA-MM-DD).")
-            return
         except ErrorDominio as error:
             messagebox.showerror("Inventario", str(error))
             return
-        self._mensaje.set(f"Stock ingresado: {self._codigo.get().strip()}")
+        self._mensaje.set(f"Stock ingresado: {codigo}")
         self._cantidad.set("")
+        self._codigo_lote.set("")
         self._vence.set("")
+        self.refrescar()
+
+    def al_mostrar(self) -> None:
+        """Se llama al entrar a F3: las ventas y productos nuevos cambian las alertas."""
         self.refrescar()
 
     def _refrescar_lotes(self) -> None:
@@ -136,7 +166,7 @@ class VentanaInventario(ttk.Frame):
                 "",
                 "end",
                 values=(
-                    f"L{lote.id}",
+                    lote.etiqueta,
                     producto.nombre if producto else lote.codigo_producto,
                     lote.fecha_vencimiento.isoformat(),
                     lote.saldo,

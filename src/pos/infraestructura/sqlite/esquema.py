@@ -168,6 +168,7 @@ CREATE TABLE IF NOT EXISTS lotes (
 # tolera "duplicate column" (la base ya estaba migrada).
 _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
+    "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
     "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",

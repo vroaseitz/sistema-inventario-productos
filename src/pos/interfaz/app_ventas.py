@@ -197,19 +197,19 @@ class VentanaVentas(ttk.Frame):
         ttk.Button(marco_venta, text="Eliminar ticket", command=self._eliminar_ticket).grid(
             row=1, column=8, padx=4, pady=2
         )
-        # O-04: con una linea seleccionada, + suma 1 y - resta 1. I-03: F5 cambia el lote.
+        # O-04: con una linea seleccionada, + suma 1 y - resta 1. O-28: F11 cambia el lote.
         ttk.Button(marco_venta, text="+", width=3, command=lambda: self._ajustar_cantidad(1)).grid(
             row=1, column=4, padx=2, pady=2
         )
         ttk.Button(marco_venta, text="−", width=3, command=lambda: self._ajustar_cantidad(-1)).grid(
             row=1, column=5, padx=2, pady=2, sticky="w"
         )
-        ttk.Button(marco_venta, text="Cambiar lote (F5)", command=self._cambiar_lote_ui).grid(
+        ttk.Button(marco_venta, text="Cambiar lote (F11)", command=self._cambiar_lote_ui).grid(
             row=1, column=6, columnspan=2, padx=4, pady=2
         )
         # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
         self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")
-        self.winfo_toplevel().bind("<F5>", self._atajo_cambiar_lote, add="+")
+        self.winfo_toplevel().bind("<F11>", self._atajo_cambiar_lote, add="+")
         self.winfo_toplevel().bind("<Insert>", self._atajo_nuevo_ticket, add="+")
 
         columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal", "lote")
@@ -242,7 +242,7 @@ class VentanaVentas(ttk.Frame):
             tab_venta, text="A cobrar: $0", font=("TkDefaultFont", 16, "bold")
         )
         self._lbl_a_cobrar.pack(anchor="e", padx=16)
-        self._lbl_resumen = ttk.Label(tab_venta, text="Total: $0  ·  Pagado: $0  ·  Vuelto: $0")
+        self._lbl_resumen = ttk.Label(tab_venta, text="Total: $0  ·  Pagó con: $0  ·  Cambio: $0")
         self._lbl_resumen.pack(anchor="e", padx=16)
 
         marco_pago = ttk.LabelFrame(tab_venta, text="Pago")
@@ -462,6 +462,8 @@ class VentanaVentas(ttk.Frame):
             resultado["valor"] = ConteoDenominaciones(_leer_conteo())
             dialogo.destroy()
 
+        dialogo.bind("<Return>", lambda _e: confirmar())  # O-29
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
         ttk.Button(dialogo, text="Confirmar", command=confirmar).grid(
             row=fila_total + 1, column=0, pady=8
         )
@@ -554,6 +556,9 @@ class VentanaVentas(ttk.Frame):
         ttk.Label(dialogo, text="Monto (CLP)").grid(row=3, column=0, padx=8, pady=6, sticky="w")
         entrada_monto = ttk.Entry(dialogo, width=16)
         entrada_monto.grid(row=3, column=1, padx=8, pady=6)
+
+        dialogo.bind("<Return>", lambda _e: confirmar())  # O-29
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
 
         def confirmar() -> None:
             try:
@@ -966,8 +971,15 @@ class VentanaVentas(ttk.Frame):
             dialogo.destroy()
             self._entrada_cantidad.focus_set()
 
+        def elegir_con_enter(_evento: object = None) -> None:
+            if not lista.curselection() and lista.size():
+                lista.selection_set(0)  # Enter sin elegir toma el primero de la lista
+            elegir()
+
         entrada.bind("<KeyRelease>", refrescar_lista)
         lista.bind("<Double-Button-1>", elegir)
+        dialogo.bind("<Return>", elegir_con_enter)  # O-29
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
         refrescar_lista()
 
         ttk.Button(dialogo, text="Seleccionar", command=elegir).pack(pady=(0, 8))
@@ -989,7 +1001,7 @@ class VentanaVentas(ttk.Frame):
 
         if venta is None:
             self._lbl_a_cobrar.config(text="A cobrar: $0")
-            self._lbl_resumen.config(text="Total: $0  ·  Pagado: $0  ·  Vuelto: $0")
+            self._lbl_resumen.config(text="Total: $0  ·  Pagó con: $0  ·  Cambio: $0")
             self._guardar_espera()
             return
 
@@ -1021,8 +1033,8 @@ class VentanaVentas(ttk.Frame):
         self._lbl_a_cobrar.config(text=f"A cobrar: {_formatear_clp(a_cobrar)}")
         self._lbl_resumen.config(
             text=f"Total: {_formatear_clp(venta.total.monto)}  ·  "
-            f"Pagado: {_formatear_clp(pagado)}  ·  "
-            f"Vuelto: {_formatear_clp(venta.vuelto_entregado.monto)}"
+            f"Pagó con: {_formatear_clp(pagado)}  ·  "
+            f"Cambio: {_formatear_clp(venta.vuelto_entregado.monto)}"
         )
 
         # D-19: proponer el saldo pendiente como monto por defecto; la cajera
@@ -1030,7 +1042,7 @@ class VentanaVentas(ttk.Frame):
         saldo = max(0, a_cobrar - pagado)
         self._entrada_monto_pago.delete(0, "end")
         if saldo:
-            self._entrada_monto_pago.insert(0, str(saldo))
+            self._entrada_monto_pago.insert(0, _formatear_clp(saldo).lstrip("$"))
         self._guardar_espera()
 
     def _a_cobrar_visible(self, venta: Venta) -> int:
@@ -1051,7 +1063,7 @@ class VentanaVentas(ttk.Frame):
         if lote is None:
             return "-"
         elegido = "* " if venta.lote_elegido.get(codigo) == lote.uuid else ""
-        return f"{elegido}L{lote.id} · vence {lote.fecha_vencimiento.isoformat()}"
+        return f"{elegido}{lote.etiqueta} · vence {lote.fecha_vencimiento.isoformat()}"
 
     def _linea_seleccionada(self) -> str | None:
         seleccion = self._tabla.selection()
@@ -1087,7 +1099,7 @@ class VentanaVentas(ttk.Frame):
             self._cambiar_lote_ui()
 
     def _cambiar_lote_ui(self) -> None:
-        """I-03: F5 Cambiar lote. Lista los lotes con saldo y deja elegir de cual sale."""
+        """O-28: F11 Cambiar lote (F5 es Compras). Lista los lotes con saldo y deja elegir uno."""
         venta = self._venta_actual()
         codigo = self._linea_seleccionada() if venta is not None else None
         if venta is None or codigo is None:
@@ -1102,7 +1114,9 @@ class VentanaVentas(ttk.Frame):
         dialogo.grab_set()
         lista = Listbox(dialogo, height=min(8, len(lotes)), width=48, exportselection=False)
         for lote in lotes:
-            lista.insert("end", f"L{lote.id} · vence {lote.fecha_vencimiento} · saldo {lote.saldo}")
+            lista.insert(
+                "end", f"{lote.etiqueta} · vence {lote.fecha_vencimiento} · saldo {lote.saldo}"
+            )
         lista.selection_set(0)
         lista.pack(padx=12, pady=10)
 
@@ -1119,6 +1133,9 @@ class VentanaVentas(ttk.Frame):
             self._refrescar_ticket()
 
         lista.bind("<Double-Button-1>", lambda _e: elegir())
+        dialogo.bind("<Return>", lambda _e: elegir())  # O-29
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
+        lista.focus_set()
         ttk.Button(dialogo, text="Usar este lote", command=elegir).pack(pady=(0, 10))
 
     def _atajo_buscar(self, _evento: object = None) -> None:
@@ -1148,7 +1165,7 @@ class VentanaVentas(ttk.Frame):
                 pago = venta.construir_pago_efectivo(monto_entregado=monto)
                 if pago.cobro_efectivo is not None and pago.cobro_efectivo.vuelto.monto:
                     vuelto_fmt = _formatear_clp(pago.cobro_efectivo.vuelto.monto)
-                    messagebox.showinfo("Vuelto", f"Vuelto: {vuelto_fmt}")
+                    messagebox.showinfo("Cambio", f"Cambio: {vuelto_fmt}")
             else:
                 pago = Pago(medio=medio, monto=Dinero(monto))
             self._registrar_venta.agregar_pago(venta, pago)
