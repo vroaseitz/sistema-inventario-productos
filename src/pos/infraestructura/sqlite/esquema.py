@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS historial_ajustes_inventario (
     motivo             TEXT NOT NULL,
     usuario            TEXT NOT NULL,
     fecha              TEXT NOT NULL,
+    observacion        TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
 );
 
@@ -81,6 +82,40 @@ CREATE TABLE IF NOT EXISTS usuarios (
 CREATE TABLE IF NOT EXISTS tickets_en_espera (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     datos_json  TEXT NOT NULL
+);
+
+-- Facturas de compra a proveedor (HU-CMP-01/02). Una factura confirmada no se edita.
+CREATE TABLE IF NOT EXISTS facturas_compra (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    proveedor   TEXT NOT NULL,
+    numero      TEXT NOT NULL,
+    fecha       TEXT NOT NULL,
+    neto        INTEGER NOT NULL,
+    impuestos   INTEGER NOT NULL,
+    estado      TEXT NOT NULL,
+    UNIQUE (proveedor, numero)
+);
+
+CREATE TABLE IF NOT EXISTS facturas_compra_lineas (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    factura_id            INTEGER NOT NULL,
+    codigo_producto       TEXT NOT NULL,
+    cantidad              TEXT NOT NULL,
+    costo_unitario_neto   INTEGER NOT NULL,
+    costo_anterior        INTEGER,
+    fecha_vencimiento     TEXT,
+    codigo_lote           TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (factura_id) REFERENCES facturas_compra(id)
+);
+
+-- Registro de cambios y descartes (HU-USR-03). La pantalla de auditoria (F7) se construye
+-- despues; por ahora se guarda para no perder el rastro (p. ej. tickets descartados al cerrar).
+CREATE TABLE IF NOT EXISTS auditoria (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha      TEXT NOT NULL,
+    usuario    TEXT NOT NULL,
+    accion     TEXT NOT NULL,
+    detalle    TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS turnos_caja (
@@ -158,6 +193,8 @@ CREATE TABLE IF NOT EXISTS lotes (
 # tolera "duplicate column" (la base ya estaba migrada).
 _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
+    "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE historial_ajustes_inventario ADD COLUMN observacion TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
     "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",
@@ -177,9 +214,14 @@ def crear_esquema(conexion: sqlite3.Connection) -> None:
 
 
 def _sembrar_categorias(conexion: sqlite3.Connection) -> None:
-    """Base nueva: deja las 4 categorias iniciales con los ids 1 a 4 (los de siempre)."""
-    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    """Deja las 20 categorias validadas por la PO (CA-02) y retira las 4 antiguas.
 
-    if conexion.execute("SELECT 1 FROM categorias LIMIT 1").fetchone() is None:
-        for nombre in CATEGORIAS_INICIALES:
-            conexion.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
+    Base nueva: quedan con los ids 1 a 20. Base existente: se agregan las que falten y las
+    antiguas sin productos se eliminan (las de frutas/verduras mueven antes sus productos).
+    """
+    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
+
+    repo = RepositorioCategoriasSQLite(conexion)
+    repo.sembrar(CATEGORIAS_INICIALES)
+    repo.depurar_antiguas()

@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from tkinter import ttk
 
+from pos.interfaz.app_compras import VentanaCompras
 from pos.interfaz.app_inventario import VentanaInventario
 from pos.interfaz.app_reportes import VentanaReportes
 from pos.interfaz.app_tkinter import VentanaProductos
@@ -40,7 +41,7 @@ MODULOS: tuple[Modulo, ...] = (
     Modulo("F2", "Catalogo", "#8A5A17", ("HU-PRD-01 a 10",), True),
     Modulo("F3", "Inventario", "#5B3E7E", ("HU-INV-01 a 08",), True),
     Modulo("F4", "Clientes", "#2E6B3E", ("HU-CLI-01 a 05",)),
-    Modulo("F5", "Compras", "#7A4A2E", ("HU-CMP-01 a 03",)),
+    Modulo("F5", "Compras", "#7A4A2E", ("HU-CMP-01 a 03",), True),
     Modulo("F6", "Reportes", "#1E5F63", ("HU-REP-01 a 05",), True),
     Modulo("F7", "Administracion", "#4A4F55", ("HU-USR-01, 03",)),
 )
@@ -114,6 +115,10 @@ class VentanaPrincipal(tk.Tk):
             self._pestanas[self._activo].config(bg="#f3f5f4", fg="#1b2220")
         modulo = next(m for m in MODULOS if m.clave == clave)
         self._marcos[clave].pack(fill="both", expand=True)
+        # R-02: las pantallas que dependen de lo que pasa en otras se refrescan al entrar.
+        al_mostrar = getattr(self._marcos[clave], "al_mostrar", None)
+        if callable(al_mostrar):
+            al_mostrar()
         self._pestanas[clave].config(bg=modulo.color, fg="#ffffff")
         self._franja.config(bg=modulo.color)
         self._activo = clave
@@ -133,6 +138,8 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
     from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
+    from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra
+    from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
     from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
     from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
     from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
@@ -143,8 +150,15 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
     from pos.infraestructura.sqlite.conexion import crear_conexion
     from pos.infraestructura.sqlite.esquema import crear_esquema
+    from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite
     from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
-    from pos.infraestructura.sqlite.repositorio_existencias import RepositorioExistenciasSQLite
+    from pos.infraestructura.sqlite.repositorio_existencias import (
+        RepositorioAjustesSQLite,
+        RepositorioExistenciasSQLite,
+    )
+    from pos.infraestructura.sqlite.repositorio_facturas_compra import (
+        RepositorioFacturasCompraSQLite,
+    )
     from pos.infraestructura.sqlite.repositorio_historial import RepositorioHistorialSQLite
     from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
     from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
@@ -168,6 +182,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     repo_lotes = RepositorioLotesSQLite(conexion)
     repo_categorias = RepositorioCategoriasSQLite(conexion)
     repo_usuarios = RepositorioUsuariosSQLite(conexion)
+    repo_facturas = RepositorioFacturasCompraSQLite(conexion)
     cola = ColaSincronizacionSQLite(conexion)
     sesion = Sesion()
     # Sin SUPABASE_DB_URL la app vende igual y deja lo pendiente en la cola.
@@ -195,6 +210,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 publicador=publicador,
                 sesion=sesion,
                 repo_tickets=RepositorioTicketsEsperaSQLite(conexion),
+                auditoria=RepositorioAuditoriaSQLite(conexion),
             ),
             "F2": lambda padre: VentanaProductos(
                 padre,
@@ -210,13 +226,36 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 ),
                 repo_categorias,
             ),
-            "F6": lambda padre: VentanaReportes(padre, ReporteVentas(repo_ventas, repo_productos)),
+            "F5": lambda padre: VentanaCompras(
+                padre,
+                RegistrarFacturaCompra(
+                    repo_facturas,
+                    repo_productos,
+                    repo_existencias,
+                    repo_lotes,
+                    cola=cola,
+                    repositorio_categorias=repo_categorias,
+                ),
+                repo_facturas,
+                repo_productos,
+            ),
+            "F6": lambda padre: VentanaReportes(
+                padre, ReporteVentas(repo_ventas, repo_productos), repo_categorias
+            ),
             "F3": lambda padre: VentanaInventario(
                 padre,
                 repo_productos,
                 IngresarStock(repo_productos, repo_existencias, repo_lotes, cola=cola),
                 ConsultarAlertasVencimiento(repo_lotes, repo_productos),
                 repo_lotes,
+                registrar_merma=RegistrarMerma(
+                    repo_existencias,
+                    RepositorioAjustesSQLite(conexion),
+                    repositorio_lotes=repo_lotes,
+                    cola=cola,
+                ),
+                repo_existencias=repo_existencias,
+                sesion=sesion,
             ),
         }
     )

@@ -12,6 +12,7 @@ from typing import Protocol, runtime_checkable
 
 from pos.dominio.caja import MovimientoCaja, TurnoCaja
 from pos.dominio.categorias import Categoria
+from pos.dominio.compras import FacturaCompra
 from pos.dominio.inventario import AjusteInventario, Existencia
 from pos.dominio.lotes import Lote
 from pos.dominio.productos import Producto, RegistroCambioPrecio
@@ -109,6 +110,25 @@ class RepositorioTicketsEspera(Protocol):
 
     def guardar(self, tickets: list[dict]) -> None: ...
     def cargar(self) -> list[dict]: ...
+
+
+@runtime_checkable
+class RepositorioFacturasCompra(Protocol):
+    """Puerto de facturas de compra a proveedor (HU-CMP-01/02)."""
+
+    def guardar(self, factura: FacturaCompra) -> None: ...
+    def listar(
+        self, desde: date | None = None, hasta: date | None = None
+    ) -> list[FacturaCompra]: ...
+    def proveedores(self) -> list[str]: ...
+
+
+@runtime_checkable
+class RepositorioAuditoria(Protocol):
+    """Puerto del registro de auditoria (HU-USR-03): quien hizo que y cuando."""
+
+    def registrar(self, usuario: str, accion: str, detalle: dict) -> None: ...
+    def listar(self, accion: str | None = None) -> list[dict]: ...
 
 
 @runtime_checkable
