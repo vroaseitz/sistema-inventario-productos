@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from tkinter import ttk
 
+from pos.interfaz.app_compras import VentanaCompras
 from pos.interfaz.app_inventario import VentanaInventario
 from pos.interfaz.app_reportes import VentanaReportes
 from pos.interfaz.app_tkinter import VentanaProductos
@@ -40,7 +41,7 @@ MODULOS: tuple[Modulo, ...] = (
     Modulo("F2", "Catalogo", "#8A5A17", ("HU-PRD-01 a 10",), True),
     Modulo("F3", "Inventario", "#5B3E7E", ("HU-INV-01 a 08",), True),
     Modulo("F4", "Clientes", "#2E6B3E", ("HU-CLI-01 a 05",)),
-    Modulo("F5", "Compras", "#7A4A2E", ("HU-CMP-01 a 03",)),
+    Modulo("F5", "Compras", "#7A4A2E", ("HU-CMP-01 a 03",), True),
     Modulo("F6", "Reportes", "#1E5F63", ("HU-REP-01 a 05",), True),
     Modulo("F7", "Administracion", "#4A4F55", ("HU-USR-01, 03",)),
 )
@@ -137,6 +138,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
     from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
+    from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra
     from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
     from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
     from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
@@ -153,6 +155,9 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.infraestructura.sqlite.repositorio_existencias import (
         RepositorioAjustesSQLite,
         RepositorioExistenciasSQLite,
+    )
+    from pos.infraestructura.sqlite.repositorio_facturas_compra import (
+        RepositorioFacturasCompraSQLite,
     )
     from pos.infraestructura.sqlite.repositorio_historial import RepositorioHistorialSQLite
     from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
@@ -177,6 +182,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     repo_lotes = RepositorioLotesSQLite(conexion)
     repo_categorias = RepositorioCategoriasSQLite(conexion)
     repo_usuarios = RepositorioUsuariosSQLite(conexion)
+    repo_facturas = RepositorioFacturasCompraSQLite(conexion)
     cola = ColaSincronizacionSQLite(conexion)
     sesion = Sesion()
     # Sin SUPABASE_DB_URL la app vende igual y deja lo pendiente en la cola.
@@ -219,6 +225,19 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     repositorio_categorias=repo_categorias,
                 ),
                 repo_categorias,
+            ),
+            "F5": lambda padre: VentanaCompras(
+                padre,
+                RegistrarFacturaCompra(
+                    repo_facturas,
+                    repo_productos,
+                    repo_existencias,
+                    repo_lotes,
+                    cola=cola,
+                    repositorio_categorias=repo_categorias,
+                ),
+                repo_facturas,
+                repo_productos,
             ),
             "F6": lambda padre: VentanaReportes(
                 padre, ReporteVentas(repo_ventas, repo_productos), repo_categorias

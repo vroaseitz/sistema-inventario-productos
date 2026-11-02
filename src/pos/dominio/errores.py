@@ -17,6 +17,10 @@ class ReglaInventarioInvalida(ErrorDominio):
     """Operacion de inventario que viola una regla (p. ej. stock negativo)."""
 
 
+class ReglaCompraInvalida(ErrorDominio):
+    """Factura de compra que viola una regla (neto distinto del detalle, sin lineas, etc.)."""
+
+
 class DatosProductoInvalidos(ErrorDominio):
     """Los datos para construir un producto no son validos."""
 

@@ -399,5 +399,68 @@ verificar(
 )
 reporte.destroy()
 
+# --- F5 Compras: factura con detalle que actualiza costo y crea el lote ---------------------
+from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_facturas_compra import (  # noqa: E402
+    RepositorioFacturasCompraSQLite,
+)
+from pos.interfaz.app_compras import VentanaCompras  # noqa: E402
+
+facturas = RepositorioFacturasCompraSQLite(con3)
+compras = VentanaCompras(
+    raiz,
+    RegistrarFacturaCompra(facturas, productos3, existencias3, lotes3),
+    facturas,
+    productos3,
+)
+compras.pack()
+raiz.update()
+
+
+def linea(codigo, cantidad, costo, vence=""):
+    mensajes.clear()
+    compras._l_codigo.set(codigo)
+    compras._l_cantidad.set(cantidad)
+    compras._l_costo.set(costo)
+    compras._l_vence.set(vence)
+    compras._agregar_linea()
+    return [m for tipo, m in mensajes if tipo == "showerror"]
+
+
+verificar(linea("", "1", "1000") == ["Falta el código del producto"], "F5: falta el codigo")
+verificar(len(linea("XXX", "1", "1000")) == 1, "F5: producto inexistente")
+verificar(linea("7801", "", "1000") == ["Falta la cantidad"], "F5: falta la cantidad")
+verificar(len(linea("7801", "10", "")) == 1, "F5: falta el costo")
+verificar(linea("7801", "10", "1.000") == [], "F5: linea valida con punto de miles")
+verificar(linea("NUE", "2,5", "11.765") == [], "F5: linea a granel con coma")
+verificar(compras._neto.get() == "39.413", f"F5: el neto sigue a la suma {compras._neto.get()}")
+verificar(compras._impuestos.get() == "7.488", f"F5: IVA 19 % {compras._impuestos.get()}")
+verificar(compras._total.get() == "Total: $46.901", "F5: total neto + impuestos")
+compras._proveedor.set("Distribuidora Andes")
+compras._numero.set("F-4519")
+compras._neto.set("39.000")
+compras._al_editar_neto()
+verificar(
+    compras._diferencia.get() == "Diferencia con el neto: -$413",
+    f"F5: muestra la diferencia {compras._diferencia.get()}",
+)
+mensajes.clear()
+compras._confirmar()
+verificar(
+    any("debe ser cero" in m for tipo, m in mensajes if tipo == "showerror"),
+    "F5: no confirma si el neto no coincide con el detalle",
+)
+verificar(facturas.listar() == [], "F5: nada se guardo")
+compras._neto.set("39.413")
+compras._al_editar_neto()
+mensajes.clear()
+compras._confirmar()
+verificar(not [m for tipo, m in mensajes if tipo == "showerror"], f"F5: confirma {mensajes}")
+verificar(len(facturas.listar()) == 1, "F5: la factura queda registrada")
+verificar(productos3.obtener_por_codigo("7801").costo.neto.monto == 1000, "F5: actualiza el costo")
+verificar(existencias3.obtener("7801").cantidad == Decimal("60"), "F5: ingresa el stock (50 + 10)")
+verificar(len(compras._lista.get_children()) == 1, "F5: aparece en la lista de facturas")
+compras.destroy()
+
 print("TODO OK")
 raiz.destroy()

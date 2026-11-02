@@ -195,7 +195,7 @@ class VentanaVentas(ttk.Frame):
             row=0, column=7, padx=4, pady=6
         )
         ttk.Button(marco_venta, text="Eliminar ticket", command=self._eliminar_ticket).grid(
-            row=1, column=8, padx=4, pady=2
+            row=1, column=7, padx=4, pady=2
         )
         # O-04: con una linea seleccionada, + suma 1 y - resta 1. O-28: F11 cambia el lote.
         ttk.Button(marco_venta, text="+", width=3, command=lambda: self._ajustar_cantidad(1)).grid(
@@ -205,7 +205,7 @@ class VentanaVentas(ttk.Frame):
             row=1, column=5, padx=2, pady=2, sticky="w"
         )
         ttk.Button(marco_venta, text="Cambiar lote (F11)", command=self._cambiar_lote_ui).grid(
-            row=1, column=6, columnspan=2, padx=4, pady=2
+            row=1, column=6, padx=4, pady=2
         )
         # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
         self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")

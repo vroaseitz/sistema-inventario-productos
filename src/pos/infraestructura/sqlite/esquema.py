@@ -84,6 +84,30 @@ CREATE TABLE IF NOT EXISTS tickets_en_espera (
     datos_json  TEXT NOT NULL
 );
 
+-- Facturas de compra a proveedor (HU-CMP-01/02). Una factura confirmada no se edita.
+CREATE TABLE IF NOT EXISTS facturas_compra (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    proveedor   TEXT NOT NULL,
+    numero      TEXT NOT NULL,
+    fecha       TEXT NOT NULL,
+    neto        INTEGER NOT NULL,
+    impuestos   INTEGER NOT NULL,
+    estado      TEXT NOT NULL,
+    UNIQUE (proveedor, numero)
+);
+
+CREATE TABLE IF NOT EXISTS facturas_compra_lineas (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    factura_id            INTEGER NOT NULL,
+    codigo_producto       TEXT NOT NULL,
+    cantidad              TEXT NOT NULL,
+    costo_unitario_neto   INTEGER NOT NULL,
+    costo_anterior        INTEGER,
+    fecha_vencimiento     TEXT,
+    codigo_lote           TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (factura_id) REFERENCES facturas_compra(id)
+);
+
 -- Registro de cambios y descartes (HU-USR-03). La pantalla de auditoria (F7) se construye
 -- despues; por ahora se guarda para no perder el rastro (p. ej. tickets descartados al cerrar).
 CREATE TABLE IF NOT EXISTS auditoria (

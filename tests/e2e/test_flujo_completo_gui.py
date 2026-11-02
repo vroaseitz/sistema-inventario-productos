@@ -149,7 +149,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
             "vence " + (date.today() + timedelta(days=2)).isoformat()
             in ventas._tabla.item(fila_yog, "values")[5]
         )
-        # ...y F5 "Cambiar lote" permite elegir el otro
+        # ...y F11 "Cambiar lote" permite elegir el otro
         repo_lotes = ventas._registrar_venta.repositorio_lotes
         segundo = repo_lotes.por_producto("YOG")[1]
         ventas._registrar_venta.elegir_lote(ventas._venta, "YOG", segundo.uuid)
