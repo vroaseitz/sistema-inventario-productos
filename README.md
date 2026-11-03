@@ -19,7 +19,7 @@ Prueba de punta a punta de la aplicación real (11 pasos, 2:41): ingreso, apertu
 
 [![Ver el video de la demo](docs/video/portada.jpg)](docs/video/prueba-punta-a-punta.mp4)
 
-> Si tu visor no muestra el reproductor, haz clic en la imagen: GitHub abre el video en su propio visor, sin salir del repositorio.
+> Si tu visor no muestra el reproductor, haz clic en la imagen: GitHub abre el video en su propio visor, sin salir del repositorio. Versión en calidad completa (1080p, 25 MB): [ver en Drive](https://drive.google.com/file/d/1-z5JVGs8RdMMh5vvEZGA4-wTqX-XX600/view?usp=sharing).
 
 ---
 
