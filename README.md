@@ -11,8 +11,21 @@
 
 ---
 
+## 🎬 Demo en video
+
+Prueba de punta a punta de la aplicación real (11 pasos, 2:41): ingreso, apertura de jornada, venta con granel, cobro mixto, descuento a la línea, catálogo y categorías, inventario con vencimiento, clientes, corte de caja, compras con proveedor nuevo y reportes. Usa una base de prueba y usuarios ficticios.
+
+<video src="docs/video/prueba-punta-a-punta.mp4" poster="docs/video/portada.jpg" controls muted width="100%"></video>
+
+[![Ver el video de la demo](docs/video/portada.jpg)](docs/video/prueba-punta-a-punta.mp4)
+
+> Si tu visor no muestra el reproductor, haz clic en la imagen: GitHub abre el video en su propio visor, sin salir del repositorio.
+
+---
+
 ## 📑 Contenido
 
+- [Demo en video](#-demo-en-video)
 - [1. Descripción del proyecto](#1-descripción-del-proyecto)
 - [2. El sistema actual y su problemática](#2-el-sistema-actual-y-su-problemática)
 - [3. Objetivos](#3-objetivos)
