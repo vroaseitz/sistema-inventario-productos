@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import time
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 from tkinter import Tk, Toplevel, messagebox, ttk
@@ -27,6 +28,7 @@ from pos.dominio.value_objects import Dinero  # noqa: E402
 from pos.infraestructura.sqlite.conexion import crear_conexion  # noqa: E402
 from pos.infraestructura.sqlite.esquema import crear_esquema  # noqa: E402
 from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_clientes import RepositorioClientesSQLite  # noqa: E402
 from pos.infraestructura.sqlite.repositorio_existencias import (  # noqa: E402
     RepositorioExistenciasSQLite,
 )
@@ -69,17 +71,19 @@ def construir() -> tuple:
     productos, existencias = RepositorioProductosSQLite(con), RepositorioExistenciasSQLite(con)
     turnos, ventas = RepositorioTurnosCajaSQLite(con), RepositorioVentasSQLite(con)
     auditoria = RepositorioAuditoriaSQLite(con)
+    clientes = RepositorioClientesSQLite(con)
     ventana = app_ventas.VentanaVentas(
         raiz,
         turnos,
         productos,
         ventas,
-        RegistrarVenta(ventas, turnos, productos, existencias),
+        RegistrarVenta(ventas, turnos, productos, existencias, repositorio_clientes=clientes),
         AbrirTurnoCaja(turnos),
-        CerrarTurnoCaja(turnos, ventas),
+        CerrarTurnoCaja(turnos, ventas, repositorio_clientes=clientes),
         RegistrarMovimientoCaja(turnos),
         repo_tickets=RepositorioTicketsEsperaSQLite(con),
         auditoria=auditoria,
+        repo_clientes=clientes,
     )
     ventana.pack(fill="both", expand=True)
     raiz.update()
@@ -461,6 +465,98 @@ verificar(productos3.obtener_por_codigo("7801").costo.neto.monto == 1000, "F5: a
 verificar(existencias3.obtener("7801").cantidad == Decimal("60"), "F5: ingresa el stock (50 + 10)")
 verificar(len(compras._lista.get_children()) == 1, "F5: aparece en la lista de facturas")
 compras.destroy()
+
+# --- F4 Clientes: cuenta de credito, venta a credito desde F1, abonos y cierre ---------------
+from pos.aplicacion.casos_uso.gestionar_clientes import (  # noqa: E402
+    GestionarClientes,
+    RegistrarAbono,
+)
+from pos.interfaz.app_clientes import VentanaClientes  # noqa: E402
+
+repo_cli = RepositorioClientesSQLite(con3)
+f4 = VentanaClientes(
+    raiz,
+    GestionarClientes(repo_cli),
+    RegistrarAbono(repo_cli, RepositorioTurnosCajaSQLite(con3)),
+    repo_cli,
+)
+f4.pack()
+raiz.update()
+
+
+def errores():
+    return [m for tipo, m in mensajes if tipo == "showerror"]
+
+
+mensajes.clear()
+verificar(f4.guardar_cliente(None, " ", "1", "", "") is False, "F4: rechaza sin nombre")
+verificar(errores() == ["Falta el nombre del cliente"], f"F4: mensaje del nombre {errores()}")
+mensajes.clear()
+f4.guardar_cliente(None, "Cliente A", "", "", "")
+verificar("medio de contacto" in errores()[0], "F4: exige un medio de contacto")
+verificar(
+    f4.guardar_cliente(None, "Cliente A", "+56 9 0000 0001", "", "") is True, "F4: crea cliente"
+)
+mensajes.clear()
+f4.guardar_cliente(None, "cliente a", "2", "", "")
+verificar("Ya existe" in errores()[0], "F4: no duplica el nombre")
+cli_id = repo_cli.listar()[0].id
+verificar(len(f4._tabla_lista.get_children()) == 1, "F4: el cliente aparece en la lista")
+
+# Venta a credito desde F1: pide el cliente y carga la cuenta
+ventana._elegir_cliente_ui = lambda: cli_id
+ventana._registrar_venta.agregar_producto(ventana._venta, "7801", 1)
+ventana._refrescar_ticket()
+ventana._medio.set("credito_cliente")
+ventana._entrada_monto_pago.delete(0, "end")
+ventana._entrada_monto_pago.insert(0, "1.200")
+ventana._agregar_pago()
+verificar(ventana._venta.cliente_id == cli_id, "HU-CLI-02: la venta queda con el cliente elegido")
+ventana._cerrar_venta()
+verificar(sum(m.efecto for m in repo_cli.movimientos(cli_id)) == 1200, "HU-CLI-02: carga $1.200")
+f4.mostrar_cuenta(cli_id)
+filas = [f4._tabla_cuenta.item(i, "values") for i in f4._tabla_cuenta.get_children()]
+verificar(filas[-1][1] == "Consumo" and filas[-1][3] == "$1.200", f"HU-CLI-03: la cuenta {filas}")
+verificar("$1.200" in f4._lbl_saldo.cget("text"), "HU-CLI-03: saldo actual $1.200")
+
+# Abonos: efectivo entra a la gaveta; el saldo no puede quedar negativo
+mensajes.clear()
+verificar(
+    f4.registrar_abono(cli_id, "5.000", date.today().isoformat(), "Transferencia") is False,
+    "abono > saldo",
+)
+verificar("supera el saldo" in errores()[0], f"HU-CLI-03: {errores()}")
+verificar(
+    f4.registrar_abono(cli_id, "500", date.today().isoformat(), "Efectivo") is True,
+    "abono en efectivo",
+)
+verificar(
+    "$700" in f4._lbl_saldo.cget("text"), f"HU-CLI-03: saldo $700 {f4._lbl_saldo.cget('text')}"
+)
+mensajes.clear()
+ventana._cerrar_turno_ui()
+arqueo = [m for tipo, m in mensajes if tipo == "showinfo"][-1]
+verificar(
+    "Abonos de clientes en efectivo: $500" in arqueo,
+    f"HU-CAJ-03: el arqueo muestra el abono {arqueo!r}",
+)
+verificar("Crédito cliente: $1.200" in arqueo, "HU-CAJ-03: el credito va como partida aparte")
+
+# Estado de cuenta y reporte de saldos
+verificar(len(f4._tabla_estado.get_children()) == 1, "HU-CLI-04: el estado lista el consumo")
+f4.refrescar()
+saldos = [f4._tabla_saldos.item(i, "values") for i in f4._tabla_saldos.get_children()]
+verificar(
+    saldos[0][4] == "$700" and "$700" in f4._lbl_total_saldos.cget("text"), f"HU-CLI-05: {saldos}"
+)
+
+# Desactivar conserva el historial y saca al cliente de la lista de activos
+f4.cambiar_estado(cli_id)
+verificar(
+    len(f4._tabla_lista.get_children()) == 0, "HU-CLI-01: inactivo sale de la lista de activos"
+)
+verificar(sum(m.efecto for m in repo_cli.movimientos(cli_id)) == 700, "el historial se conserva")
+f4.destroy()
 
 print("TODO OK")
 raiz.destroy()

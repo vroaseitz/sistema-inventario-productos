@@ -84,6 +84,30 @@ CREATE TABLE IF NOT EXISTS tickets_en_espera (
     datos_json  TEXT NOT NULL
 );
 
+-- Clientes con credito y su cuenta (HU-CLI-01 a 05). El saldo se calcula, nunca se guarda.
+CREATE TABLE IF NOT EXISTS clientes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre         TEXT NOT NULL,
+    telefono       TEXT NOT NULL DEFAULT '',
+    correo         TEXT NOT NULL DEFAULT '',
+    observaciones  TEXT NOT NULL DEFAULT '',
+    activo         INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS movimientos_cliente (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid           TEXT NOT NULL UNIQUE,
+    cliente_id     INTEGER NOT NULL,
+    tipo           TEXT NOT NULL CHECK (tipo IN ('consumo', 'abono')),
+    monto          INTEGER NOT NULL CHECK (monto > 0),
+    fecha          TEXT NOT NULL,
+    detalle        TEXT NOT NULL DEFAULT '',
+    medio          TEXT,
+    venta_uuid     TEXT UNIQUE,
+    turno_caja_id  INTEGER,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+);
+
 -- Facturas de compra a proveedor (HU-CMP-01/02). Una factura confirmada no se edita.
 CREATE TABLE IF NOT EXISTS facturas_compra (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,

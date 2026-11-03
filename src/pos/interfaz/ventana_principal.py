@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from tkinter import ttk
 
+from pos.interfaz.app_clientes import VentanaClientes
 from pos.interfaz.app_compras import VentanaCompras
 from pos.interfaz.app_inventario import VentanaInventario
 from pos.interfaz.app_reportes import VentanaReportes
@@ -40,7 +41,7 @@ MODULOS: tuple[Modulo, ...] = (
     Modulo("F1", "Operacion", "#1D4E6F", ("HU-VTA-01 a 07", "HU-CAJ-01 a 04"), True),
     Modulo("F2", "Catalogo", "#8A5A17", ("HU-PRD-01 a 10",), True),
     Modulo("F3", "Inventario", "#5B3E7E", ("HU-INV-01 a 08",), True),
-    Modulo("F4", "Clientes", "#2E6B3E", ("HU-CLI-01 a 05",)),
+    Modulo("F4", "Clientes", "#2E6B3E", ("HU-CLI-01 a 05",), True),
     Modulo("F5", "Compras", "#7A4A2E", ("HU-CMP-01 a 03",), True),
     Modulo("F6", "Reportes", "#1E5F63", ("HU-REP-01 a 05",), True),
     Modulo("F7", "Administracion", "#4A4F55", ("HU-USR-01, 03",)),
@@ -137,6 +138,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
         ConsultarAlertasVencimiento,
     )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
+    from pos.aplicacion.casos_uso.gestionar_clientes import GestionarClientes, RegistrarAbono
     from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
     from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra
     from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
@@ -152,6 +154,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.infraestructura.sqlite.esquema import crear_esquema
     from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite
     from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
+    from pos.infraestructura.sqlite.repositorio_clientes import RepositorioClientesSQLite
     from pos.infraestructura.sqlite.repositorio_existencias import (
         RepositorioAjustesSQLite,
         RepositorioExistenciasSQLite,
@@ -183,6 +186,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     repo_categorias = RepositorioCategoriasSQLite(conexion)
     repo_usuarios = RepositorioUsuariosSQLite(conexion)
     repo_facturas = RepositorioFacturasCompraSQLite(conexion)
+    repo_clientes = RepositorioClientesSQLite(conexion)
     cola = ColaSincronizacionSQLite(conexion)
     sesion = Sesion()
     # Sin SUPABASE_DB_URL la app vende igual y deja lo pendiente en la cola.
@@ -202,15 +206,19 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     repo_existencias,
                     cola=cola,
                     repositorio_lotes=repo_lotes,
+                    repositorio_clientes=repo_clientes,
                 ),
                 AbrirTurnoCaja(repo_turnos, cola=cola),
-                CerrarTurnoCaja(repo_turnos, repo_ventas, cola=cola),
+                CerrarTurnoCaja(
+                    repo_turnos, repo_ventas, cola=cola, repositorio_clientes=repo_clientes
+                ),
                 RegistrarMovimientoCaja(repo_turnos, cola=cola),
                 cola=cola,
                 publicador=publicador,
                 sesion=sesion,
                 repo_tickets=RepositorioTicketsEsperaSQLite(conexion),
                 auditoria=RepositorioAuditoriaSQLite(conexion),
+                repo_clientes=repo_clientes,
             ),
             "F2": lambda padre: VentanaProductos(
                 padre,
@@ -225,6 +233,12 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     repositorio_categorias=repo_categorias,
                 ),
                 repo_categorias,
+            ),
+            "F4": lambda padre: VentanaClientes(
+                padre,
+                GestionarClientes(repo_clientes),
+                RegistrarAbono(repo_clientes, repo_turnos),
+                repo_clientes,
             ),
             "F5": lambda padre: VentanaCompras(
                 padre,

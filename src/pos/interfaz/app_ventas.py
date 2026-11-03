@@ -28,12 +28,14 @@ from pos.aplicacion.puertos import (
     ColaSincronizacion,
     PublicadorRemoto,
     RepositorioAuditoria,
+    RepositorioClientes,
     RepositorioProductos,
     RepositorioTicketsEspera,
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
 from pos.dominio.caja import TipoMovimientoCaja, calcular_arqueo
+from pos.dominio.clientes import saldo_de
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_clp, parsear_monto
 from pos.dominio.pagos import (
@@ -93,6 +95,7 @@ class VentanaVentas(ttk.Frame):
         sesion: Sesion | None = None,
         repo_tickets: RepositorioTicketsEspera | None = None,
         auditoria: RepositorioAuditoria | None = None,
+        repo_clientes: RepositorioClientes | None = None,
     ) -> None:
         super().__init__(parent)
         self._sesion = sesion or Sesion(USUARIO_DEMO)
@@ -108,6 +111,7 @@ class VentanaVentas(ttk.Frame):
 
         self._repo_tickets = repo_tickets
         self._auditoria = auditoria
+        self._clientes = repo_clientes
         # O-25: no se guarda nada hasta haber restaurado lo guardado; si no, el primer
         # refresco al abrir la app sobrescribia los tickets en espera con una lista vacia.
         self._persistir = False
@@ -519,6 +523,7 @@ class VentanaVentas(ttk.Frame):
         messagebox.showinfo(
             "Arqueo de cierre",
             f"{detalle}\n\n"
+            f"Abonos de clientes en efectivo: {_formatear_clp(arqueo.abonos_efectivo.monto)}\n"
             f"Efectivo esperado: {_formatear_clp(arqueo.efectivo_esperado)}\n"
             f"Efectivo contado: {_formatear_clp(arqueo.efectivo_contado.monto)}\n"
             f"Diferencia: {_formatear_clp(arqueo.diferencia)}",
@@ -1167,12 +1172,60 @@ class VentanaVentas(ttk.Frame):
                     vuelto_fmt = _formatear_clp(pago.cobro_efectivo.vuelto.monto)
                     messagebox.showinfo("Cambio", f"Cambio: {vuelto_fmt}")
             else:
+                if medio is MedioPago.CREDITO_CLIENTE and not self._elegir_cliente(venta):
+                    return  # HU-CLI-02: sin cliente no hay credito
                 pago = Pago(medio=medio, monto=Dinero(monto))
             self._registrar_venta.agregar_pago(venta, pago)
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo agregar el pago", str(exc))
             return
         self._refrescar_ticket()
+
+    # --------------------------------------------- Venta a credito (HU-CLI-02) --
+
+    def _elegir_cliente(self, venta: Venta) -> bool:
+        """Pide el cliente al que se carga el credito; False si se cancela o no hay clientes."""
+        if venta.cliente_id is not None:
+            return True
+        cliente_id = self._elegir_cliente_ui()
+        if cliente_id is None:
+            return False
+        venta.cliente_id = cliente_id
+        return True
+
+    def _elegir_cliente_ui(self) -> int | None:
+        activos = [c for c in (self._clientes.listar() if self._clientes else []) if c.activo]
+        if not activos:
+            messagebox.showwarning(
+                "Crédito cliente",
+                "No hay clientes con crédito activos. Crea uno en F4 Clientes.",
+            )
+            return None
+        dialogo = Toplevel(self)
+        dialogo.title("Cargar a la cuenta de un cliente")
+        dialogo.transient(self.winfo_toplevel())
+        dialogo.grab_set()
+        lista = Listbox(dialogo, height=min(10, len(activos)), width=44, exportselection=False)
+        for cliente in activos:
+            saldo = saldo_de(self._clientes.movimientos(cliente.id))
+            lista.insert("end", f"{cliente.nombre} · saldo {_formatear_clp(saldo)}")
+        lista.selection_set(0)
+        lista.pack(padx=12, pady=10)
+        lista.focus_set()
+        elegido: list[int] = []
+
+        def aceptar(_evento: object = None) -> None:
+            seleccion = lista.curselection()
+            if seleccion:
+                elegido.append(activos[seleccion[0]].id)
+            dialogo.destroy()
+
+        lista.bind("<Double-Button-1>", aceptar)
+        dialogo.bind("<Return>", aceptar)  # Enter acepta, Esc cancela
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
+        ttk.Button(dialogo, text="Cargar a este cliente", command=aceptar).pack(pady=(0, 10))
+        self.wait_window(dialogo)
+        return elegido[0] if elegido else None
 
     def _quitar_pago(self) -> None:
         venta = self._venta_actual()
@@ -1187,6 +1240,8 @@ class VentanaVentas(ttk.Frame):
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo quitar el pago", str(exc))
             return
+        if not any(p.medio is MedioPago.CREDITO_CLIENTE for p in venta.pagos):
+            venta.cliente_id = None  # sin credito ya no hay cliente al que cargar
         self._refrescar_ticket()
 
     def _cerrar_venta(self) -> None:
