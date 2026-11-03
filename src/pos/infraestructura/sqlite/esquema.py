@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS productos (
     activo        INTEGER NOT NULL DEFAULT 1,
     costo_neto    INTEGER,
     perecible     INTEGER NOT NULL DEFAULT 0,
-    dias_aviso    INTEGER
+    dias_aviso    INTEGER,
+    stock_minimo  INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS existencias (
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS historial_ajustes_inventario (
     motivo             TEXT NOT NULL,
     usuario            TEXT NOT NULL,
     fecha              TEXT NOT NULL,
+    observacion        TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
 );
 
@@ -74,13 +76,92 @@ CREATE TABLE IF NOT EXISTS usuarios (
     nombre     TEXT NOT NULL UNIQUE,
     clave_hash TEXT NOT NULL,
     rol        TEXT NOT NULL CHECK (rol IN ('admin', 'cajero')),
-    activo     INTEGER NOT NULL DEFAULT 1
+    activo     INTEGER NOT NULL DEFAULT 1,
+    ultimo_acceso TEXT
+);
+
+-- Historial de movimientos de inventario (HU-INV-08): nunca se edita ni se borra.
+CREATE TABLE IF NOT EXISTS movimientos_inventario (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha            TEXT NOT NULL,
+    codigo_producto  TEXT NOT NULL,
+    tipo             TEXT NOT NULL,
+    cantidad         TEXT NOT NULL,
+    motivo           TEXT NOT NULL DEFAULT '',
+    usuario          TEXT NOT NULL DEFAULT ''
+);
+
+-- Parametros de operacion editables en F7 Configuracion (clave -> valor).
+CREATE TABLE IF NOT EXISTS configuracion (
+    clave  TEXT PRIMARY KEY,
+    valor  TEXT NOT NULL
 );
 
 -- Tickets abiertos sin cobrar (O-25): solo productos y lote elegido, nunca pagos.
 CREATE TABLE IF NOT EXISTS tickets_en_espera (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     datos_json  TEXT NOT NULL
+);
+
+-- Clientes con credito y su cuenta (HU-CLI-01 a 05). El saldo se calcula, nunca se guarda.
+CREATE TABLE IF NOT EXISTS clientes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre         TEXT NOT NULL,
+    telefono       TEXT NOT NULL DEFAULT '',
+    correo         TEXT NOT NULL DEFAULT '',
+    observaciones  TEXT NOT NULL DEFAULT '',
+    activo         INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS movimientos_cliente (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid           TEXT NOT NULL UNIQUE,
+    cliente_id     INTEGER NOT NULL,
+    tipo           TEXT NOT NULL CHECK (tipo IN ('consumo', 'abono')),
+    monto          INTEGER NOT NULL CHECK (monto > 0),
+    fecha          TEXT NOT NULL,
+    detalle        TEXT NOT NULL DEFAULT '',
+    medio          TEXT,
+    venta_uuid     TEXT UNIQUE,
+    turno_caja_id  INTEGER,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+);
+
+-- Facturas de compra a proveedor (HU-CMP-01/02). Una factura confirmada no se edita.
+CREATE TABLE IF NOT EXISTS facturas_compra (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    proveedor   TEXT NOT NULL,
+    numero      TEXT NOT NULL,
+    fecha       TEXT NOT NULL,
+    neto        INTEGER NOT NULL,
+    impuestos   INTEGER NOT NULL,
+    estado      TEXT NOT NULL,
+    UNIQUE (proveedor, numero)
+);
+
+CREATE TABLE IF NOT EXISTS facturas_compra_lineas (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    factura_id            INTEGER NOT NULL,
+    codigo_producto       TEXT NOT NULL,
+    cantidad              TEXT NOT NULL,
+    costo_unitario_neto   INTEGER NOT NULL,
+    costo_anterior        INTEGER,
+    fecha_vencimiento     TEXT,
+    codigo_lote           TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (factura_id) REFERENCES facturas_compra(id)
+);
+
+-- Registro de cambios y descartes (HU-USR-03). La pantalla de auditoria (F7) se construye
+-- despues; por ahora se guarda para no perder el rastro (p. ej. tickets descartados al cerrar).
+CREATE TABLE IF NOT EXISTS auditoria (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha      TEXT NOT NULL,
+    usuario    TEXT NOT NULL,
+    accion     TEXT NOT NULL,
+    detalle    TEXT NOT NULL,
+    registro   TEXT NOT NULL DEFAULT '',
+    antes      TEXT NOT NULL DEFAULT '',
+    despues    TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS turnos_caja (
@@ -158,6 +239,13 @@ CREATE TABLE IF NOT EXISTS lotes (
 # tolera "duplicate column" (la base ya estaba migrada).
 _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
+    "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE usuarios ADD COLUMN ultimo_acceso TEXT",
+    "ALTER TABLE productos ADD COLUMN stock_minimo INTEGER",
+    "ALTER TABLE auditoria ADD COLUMN registro TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE auditoria ADD COLUMN antes TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE auditoria ADD COLUMN despues TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE historial_ajustes_inventario ADD COLUMN observacion TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
     "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",
@@ -177,9 +265,14 @@ def crear_esquema(conexion: sqlite3.Connection) -> None:
 
 
 def _sembrar_categorias(conexion: sqlite3.Connection) -> None:
-    """Base nueva: deja las 4 categorias iniciales con los ids 1 a 4 (los de siempre)."""
-    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    """Deja las 20 categorias validadas por la PO (CA-02) y retira las 4 antiguas.
 
-    if conexion.execute("SELECT 1 FROM categorias LIMIT 1").fetchone() is None:
-        for nombre in CATEGORIAS_INICIALES:
-            conexion.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
+    Base nueva: quedan con los ids 1 a 20. Base existente: se agregan las que falten y las
+    antiguas sin productos se eliminan (las de frutas/verduras mueven antes sus productos).
+    """
+    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
+
+    repo = RepositorioCategoriasSQLite(conexion)
+    repo.sembrar(CATEGORIAS_INICIALES)
+    repo.depurar_antiguas()

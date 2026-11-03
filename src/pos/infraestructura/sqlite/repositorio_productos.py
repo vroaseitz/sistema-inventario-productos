@@ -27,9 +27,9 @@ class RepositorioProductosSQLite:
             """
             INSERT INTO productos (
                 codigo, nombre, precio, unidad_venta, categoria_id, activo,
-                costo_neto, perecible, dias_aviso
+                costo_neto, perecible, dias_aviso, stock_minimo
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(codigo) DO UPDATE SET
                 nombre=excluded.nombre,
                 precio=excluded.precio,
@@ -38,7 +38,8 @@ class RepositorioProductosSQLite:
                 activo=excluded.activo,
                 costo_neto=excluded.costo_neto,
                 perecible=excluded.perecible,
-                dias_aviso=excluded.dias_aviso
+                dias_aviso=excluded.dias_aviso,
+                stock_minimo=excluded.stock_minimo
             """,
             (
                 producto.codigo,
@@ -50,6 +51,7 @@ class RepositorioProductosSQLite:
                 producto.costo.neto.monto if producto.costo is not None else None,
                 1 if producto.perecible else 0,
                 producto.dias_aviso,
+                producto.stock_minimo,
             ),
         )
 
@@ -82,6 +84,7 @@ class RepositorioProductosSQLite:
             costo=costo,
             perecible=bool(fila["perecible"]),
             dias_aviso=fila["dias_aviso"],
+            stock_minimo=fila["stock_minimo"],
         )
 
     def buscar(self, termino: str) -> list[Producto]:

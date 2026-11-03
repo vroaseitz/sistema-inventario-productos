@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.puertos import ColaSincronizacion, RepositorioCategorias, RepositorioProductos
 from pos.aplicacion.sincronizacion import encolar_producto
 from pos.dominio.errores import DatosProductoInvalidos
@@ -16,6 +17,7 @@ class RegistrarProducto:
     repositorio: RepositorioProductos
     cola: ColaSincronizacion | None = None
     repositorio_categorias: RepositorioCategorias | None = None
+    auditor: Auditor | None = None
 
     def ejecutar(
         self,
@@ -50,4 +52,6 @@ class RegistrarProducto:
             else None
         )
         encolar_producto(self.cola, producto, nombre_categoria)
+        if self.auditor is not None:
+            self.auditor.registrar("Alta de producto", f"{nombre} ({codigo})", "—", "creado")
         return producto

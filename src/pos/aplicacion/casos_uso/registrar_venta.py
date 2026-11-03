@@ -13,16 +13,20 @@ from decimal import Decimal
 
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
+    RepositorioClientes,
     RepositorioExistencias,
     RepositorioLotes,
     RepositorioProductos,
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
+from pos.aplicacion.registro_movimientos import RegistroMovimientos
 from pos.aplicacion.sincronizacion import encolar_existencia, encolar_lote, encolar_venta
+from pos.dominio.clientes import MovimientoCliente, TipoMovimientoCliente
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
+from pos.dominio.inventario import TipoMovimiento
 from pos.dominio.lotes import Lote, consumir_fefo, proponer_lote
-from pos.dominio.pagos import Pago
+from pos.dominio.pagos import MedioPago, Pago
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.ventas import DetalleVenta, Venta
 
@@ -35,6 +39,8 @@ class RegistrarVenta:
     repositorio_existencias: RepositorioExistencias
     cola: ColaSincronizacion | None = None
     repositorio_lotes: RepositorioLotes | None = None
+    repositorio_clientes: RepositorioClientes | None = None
+    movimientos: RegistroMovimientos | None = None
 
     def iniciar(self, usuario_id: int, cliente_id: int | None = None) -> Venta:
         turno = self.repositorio_turnos.obtener_abierto()
@@ -51,6 +57,8 @@ class RegistrarVenta:
         if producto is None:
             raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo_producto}")
 
+        if not producto.activo:
+            raise DatosProductoInvalidos(f"El producto {producto.nombre} esta desactivado")
         cantidad_dec = Decimal(str(cantidad))
         if producto.unidad_venta is UnidadVenta.UNIDAD and cantidad_dec % 1 != 0:
             raise DatosProductoInvalidos(
@@ -83,6 +91,7 @@ class RegistrarVenta:
     def cerrar(self, venta: Venta) -> Venta:
         """Valida stock y pagos, descuenta existencias y persiste la venta completa."""
         venta.validar_cierre()
+        credito = self._credito_de(venta)
 
         faltantes = []
         for detalle in venta.detalles:
@@ -107,10 +116,50 @@ class RegistrarVenta:
             )
 
         self.repositorio_ventas.guardar(venta)
+        if credito:
+            self._cargar_a_la_cuenta(venta, credito)
+        if self.movimientos is not None:
+            for detalle in venta.detalles:
+                self.movimientos.registrar(
+                    detalle.producto_codigo,
+                    TipoMovimiento.VENTA,
+                    -detalle.cantidad,
+                    f"Ticket {venta.id}",
+                )
         turno = self.repositorio_turnos.obtener_abierto()
         if turno is not None:
             encolar_venta(self.cola, venta, turno.uuid)
         return venta
+
+    def _credito_de(self, venta: Venta) -> int:
+        """Monto pagado con credito de cliente (HU-CLI-02); exige un cliente activo."""
+        credito = sum(p.monto.monto for p in venta.pagos if p.medio is MedioPago.CREDITO_CLIENTE)
+        if not credito:
+            return 0
+        cliente = (
+            self.repositorio_clientes.obtener(venta.cliente_id)
+            if self.repositorio_clientes is not None and venta.cliente_id is not None
+            else None
+        )
+        if cliente is None:
+            raise ReglaVentaInvalida("Elige el cliente al que se carga el credito")
+        if not cliente.activo:
+            raise ReglaVentaInvalida(f"El cliente {cliente.nombre} esta inactivo")
+        return credito
+
+    def _cargar_a_la_cuenta(self, venta: Venta, credito: int) -> None:
+        productos = len(venta.detalles)
+        plural = "s" if productos != 1 else ""
+        self.repositorio_clientes.agregar_movimiento(
+            MovimientoCliente(
+                cliente_id=venta.cliente_id,
+                tipo=TipoMovimientoCliente.CONSUMO,
+                monto=credito,
+                fecha=venta.creado_en.date(),
+                detalle=f"Venta N° {venta.id} · {productos} producto{plural}",
+                venta_uuid=venta.uuid,
+            )
+        )
 
     def lotes_de(self, codigo: str) -> list[Lote]:
         """Lotes con saldo del producto, el que vence antes primero."""

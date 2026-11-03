@@ -39,6 +39,7 @@ class Producto:
     costo: Costo | None = None
     perecible: bool = False
     dias_aviso: int | None = None
+    stock_minimo: int | None = None  # HU-INV-05: bajo este numero de unidades se avisa
     _validado: bool = field(default=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -50,6 +51,8 @@ class Producto:
             raise DatosProductoInvalidos("El precio debe ser un value object Dinero")
         if self.categoria_id is None:
             raise DatosProductoInvalidos("El producto requiere una categoria (C-04)")
+        if self.stock_minimo is not None and self.stock_minimo < 0:
+            raise DatosProductoInvalidos("El stock minimo no puede ser negativo")
         if self.perecible and (self.dias_aviso is None or self.dias_aviso <= 0):
             raise DatosProductoInvalidos("Un producto perecible requiere dias_aviso (C-05a)")
 
