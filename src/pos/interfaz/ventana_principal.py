@@ -17,6 +17,7 @@ import time
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from tkinter import ttk
 
@@ -29,6 +30,19 @@ from pos.interfaz.app_tkinter import VentanaProductos
 from pos.interfaz.app_ventas import VentanaVentas
 from pos.interfaz.login import pedir_acceso
 from pos.interfaz.sesion import Sesion
+from pos.interfaz.tema import (
+    CABECERA,
+    MARCA,
+    MODULOS_COLOR,
+    PAPEL,
+    PELIGRO,
+    RELLENO,
+    TINTA,
+    TINTA_2,
+    aplicar_tema,
+    colorear_modulo,
+    fuente,
+)
 
 
 @dataclass(frozen=True)
@@ -40,14 +54,24 @@ class Modulo:
     implementado: bool = False
 
 
+TITULOS = {
+    "F1": "VENTA DE PRODUCTOS",
+    "F2": "PRODUCTOS",
+    "F3": "INVENTARIO",
+    "F4": "CRÉDITO A CLIENTES",
+    "F5": "FACTURAS DE COMPRA",
+    "F6": "REPORTES",
+    "F7": "ADMINISTRACIÓN",
+}
+
 MODULOS: tuple[Modulo, ...] = (
-    Modulo("F1", "Operacion", "#1D4E6F", ("HU-VTA-01 a 07", "HU-CAJ-01 a 04"), True),
-    Modulo("F2", "Catalogo", "#8A5A17", ("HU-PRD-01 a 10",), True),
+    Modulo("F1", "Operación", "#1D4E6F", ("HU-VTA-01 a 07", "HU-CAJ-01 a 04"), True),
+    Modulo("F2", "Catálogo", "#8A5A17", ("HU-PRD-01 a 10",), True),
     Modulo("F3", "Inventario", "#5B3E7E", ("HU-INV-01 a 08",), True),
     Modulo("F4", "Clientes", "#2E6B3E", ("HU-CLI-01 a 05",), True),
     Modulo("F5", "Compras", "#7A4A2E", ("HU-CMP-01 a 03",), True),
     Modulo("F6", "Reportes", "#1E5F63", ("HU-REP-01 a 05",), True),
-    Modulo("F7", "Administracion", "#4A4F55", ("HU-USR-01, 03",), True),
+    Modulo("F7", "Administración", "#4A4F55", ("HU-USR-01, 03",), True),
 )
 
 
@@ -70,55 +94,115 @@ class VentanaPrincipal(tk.Tk):
         """`fabricas` mapea F1..F7 a una funcion que construye la pantalla dado su contenedor."""
         super().__init__()
         self.title("NaturalSur - Emporio")
-        self.geometry("1100x760")
-        self.minsize(980, 700)
+        self.geometry("1100x860")
+        self.minsize(980, 780)
+        self._estilo = aplicar_tema(self)
 
         self._permitidos: Callable[[], frozenset[str]] = lambda: frozenset(m.clave for m in MODULOS)
         self._ultima_actividad = time.monotonic()
         self._pestanas: dict[str, tk.Label] = {}
+        self._insignias: dict[str, tk.Label] = {}
+        self._bordes: dict[str, tk.Frame] = {}
+        self._contenedores: dict[str, tk.Frame] = {}
         self._marcos: dict[str, ttk.Frame] = {}
         self._activo: str | None = None
 
-        # Fila de sesion arriba (usuario, clave, salir): no comparte fila con las pestanas F1-F7
-        # porque a 1100 px de ancho las tapaba.
-        barra_sesion = tk.Frame(self, bg="#e6eae8")
-        barra_sesion.pack(fill="x")
-        barra = tk.Frame(self, bg="#f3f5f4")
-        barra.pack(fill="x")
+        # --- Cabecera oscura: marca a la izquierda, quien atiende a la derecha (prototipo v3).
+        cabecera = tk.Frame(self, bg=CABECERA)
+        cabecera.pack(fill="x")
+        tk.Label(cabecera, text="●", bg=MARCA, fg="#ffffff", width=3, font=fuente(13)).pack(
+            side="left", padx=(14, 10), pady=8
+        )
+        marca = tk.Frame(cabecera, bg=CABECERA)
+        marca.pack(side="left", pady=6)
+        tk.Label(marca, text="NaturalSur", bg=CABECERA, fg="#ffffff", font=fuente(13, True)).pack(
+            anchor="w"
+        )
         tk.Label(
-            barra, text="NaturalSur", bg="#f3f5f4", fg="#2f6b45", font=("TkDefaultFont", 13, "bold")
-        ).pack(side="left", padx=14, pady=6)
-
-        # HU-USR-01: quien esta en el sistema, su clave y salir (a la derecha de la barra).
+            marca,
+            text="PUNTO DE VENTA E INVENTARIO",
+            bg=CABECERA,
+            fg="#aab3ae",
+            font=fuente(8),
+        ).pack(anchor="w")
+        # HU-USR-01: quien esta en el sistema, su clave y salir.
+        chip = tk.Frame(cabecera, bg="#31393a")
+        chip.pack(side="right", padx=14)
         self._btn_salir = tk.Label(
-            barra_sesion, text="Cerrar sesión", bg="#e6eae8", fg="#4A4F55", padx=10, cursor="hand2"
+            chip, text="Cerrar sesión", bg="#31393a", fg="#d6dcd8", padx=8, cursor="hand2"
         )
-        self._btn_salir.pack(side="right")
+        self._btn_salir.pack(side="right", pady=5)
         self._btn_clave = tk.Label(
-            barra_sesion, text="Mi contraseña", bg="#e6eae8", fg="#4A4F55", padx=10, cursor="hand2"
+            chip, text="Mi contraseña", bg="#31393a", fg="#d6dcd8", padx=8, cursor="hand2"
         )
-        self._btn_clave.pack(side="right")
-        self._lbl_usuario = tk.Label(barra_sesion, text="", bg="#e6eae8", fg="#1b2220", padx=10)
-        self._lbl_usuario.pack(side="right")
-        self._franja = tk.Frame(self, height=5, bg=MODULOS[0].color)
+        self._btn_clave.pack(side="right", pady=5)
+        self._lbl_usuario = tk.Label(
+            chip, text="", bg="#31393a", fg="#ffffff", padx=8, font=fuente(11, True)
+        )
+        self._lbl_usuario.pack(side="right", pady=5)
+        tk.Label(chip, text="Le atiende:", bg="#31393a", fg="#aab3ae", padx=8).pack(
+            side="right", pady=5
+        )
+
+        # --- Pestanas de modulo con su tecla (F1 Operacion ... F7 Administracion).
+        barra = tk.Frame(self, bg=RELLENO)
+        barra.pack(fill="x")
+        # --- Franja de color del modulo con su titulo en mayusculas.
+        self._franja = tk.Frame(self, bg=MODULOS[0].color)
         self._franja.pack(fill="x")
+        self._titulo = tk.Label(
+            self._franja, text="", bg=MODULOS[0].color, fg="#ffffff", font=fuente(13, True)
+        )
+        self._titulo.pack(side="left", padx=14, pady=8)
+        self._subtitulo = tk.Label(
+            self._franja, text="", bg=MODULOS[0].color, fg="#ffffff", font=fuente(10)
+        )
+        self._subtitulo.pack(side="right", padx=14)
+        # --- Barra de estado abajo: conexion, jornada y hora (se reserva antes del contenido).
+        estado = tk.Frame(self, bg=RELLENO)
+        estado.pack(side="bottom", fill="x")
+        self._lbl_conexion = tk.Label(
+            estado, text="● Sincronizado", bg=RELLENO, fg=MARCA, font=fuente(10), padx=10
+        )
+        self._lbl_conexion.pack(side="left", pady=4)
+        self._lbl_jornada = tk.Label(
+            estado, text="Sin jornada abierta", bg=RELLENO, fg=TINTA_2, font=fuente(10), padx=6
+        )
+        self._lbl_jornada.pack(side="left")
+        self._lbl_reloj = tk.Label(
+            estado, text="", bg=RELLENO, fg=TINTA_2, font=fuente(10), padx=10
+        )
+        self._lbl_reloj.pack(side="right")
         self._contenido = ttk.Frame(self)
         self._contenido.pack(fill="both", expand=True)
 
         fabricas = fabricas or {}
         for modulo in MODULOS:
-            etiqueta = tk.Label(
-                barra,
-                text=f"{modulo.clave}  {modulo.nombre}",
-                bg="#f3f5f4",
-                fg="#1b2220",
-                padx=12,
-                pady=7,
-                cursor="hand2",
+            contenedor = tk.Frame(barra, bg=RELLENO, cursor="hand2")
+            contenedor.pack(side="left")
+            borde = tk.Frame(contenedor, bg=RELLENO, height=3)  # linea de color al activarse
+            borde.pack(fill="x")
+            interior = tk.Frame(contenedor, bg=RELLENO)
+            interior.pack()
+            insignia = tk.Label(
+                interior,
+                text=modulo.clave,
+                bg="#dfe4e2",
+                fg=TINTA_2,
+                font=fuente(9),
+                padx=4,
             )
-            etiqueta.pack(side="left")
-            etiqueta.bind("<Button-1>", lambda _e, k=modulo.clave: self.mostrar(k))
+            insignia.pack(side="left", padx=(12, 4), pady=7)
+            etiqueta = tk.Label(
+                interior, text=modulo.nombre, bg=RELLENO, fg=TINTA, padx=0, pady=7, cursor="hand2"
+            )
+            etiqueta.pack(side="left", padx=(0, 12))
+            for pieza in (contenedor, interior, insignia, etiqueta):
+                pieza.bind("<Button-1>", lambda _e, k=modulo.clave: self.mostrar(k))
             self._pestanas[modulo.clave] = etiqueta
+            self._insignias[modulo.clave] = insignia
+            self._bordes[modulo.clave] = borde
+            self._contenedores[modulo.clave] = interior
             self.bind(f"<{modulo.clave}>", lambda _e, k=modulo.clave: self.mostrar(k))
             fabrica = fabricas.get(modulo.clave)
             self._marcos[modulo.clave] = (
@@ -126,25 +210,52 @@ class VentanaPrincipal(tk.Tk):
             )
 
         self.mostrar("F1")
+        self._actualizar_reloj()
+
+    def _actualizar_reloj(self) -> None:
+        self._lbl_reloj.config(text=f"NaturalSur · {datetime.now():%d-%m-%Y %H:%M}")
+        self.after(30_000, self._actualizar_reloj)
+
+    def actualizar_estado(self, conexion: str, jornada: str) -> None:
+        """La pantalla de venta informa aqui el estado de la sincronizacion y de la jornada."""
+        pendiente = "pendiente" in conexion.lower() and "todo" not in conexion.lower()
+        self._lbl_conexion.config(text=f"● {conexion}", fg=PELIGRO if pendiente else MARCA)
+        self._lbl_jornada.config(text=jornada)
+
+    def fijar_subtitulo(self, texto: str) -> None:
+        self._subtitulo.config(text=texto)
 
     def mostrar(self, clave: str) -> None:
-        """Cambia de modulo: muestra su pantalla y pinta la franja con su color."""
+        """Cambia de modulo: muestra su pantalla y pinta franja, titulo y pestana con su color."""
         if clave == self._activo or clave not in self._marcos:
             return
         if clave not in self._permitidos():
             return  # HU-USR-02: la vendedora no entra a los modulos de la administradora
         if self._activo is not None:
             self._marcos[self._activo].pack_forget()
-            self._pestanas[self._activo].config(bg="#f3f5f4", fg="#1b2220")
+            self._pintar_pestana(self._activo, activa=False)
         modulo = next(m for m in MODULOS if m.clave == clave)
         self._marcos[clave].pack(fill="both", expand=True)
         # R-02: las pantallas que dependen de lo que pasa en otras se refrescan al entrar.
         al_mostrar = getattr(self._marcos[clave], "al_mostrar", None)
         if callable(al_mostrar):
             al_mostrar()
-        self._pestanas[clave].config(bg=modulo.color, fg="#ffffff")
         self._franja.config(bg=modulo.color)
+        self._titulo.config(text=TITULOS[clave], bg=modulo.color)
+        self._subtitulo.config(bg=modulo.color, text="")
+        colorear_modulo(self._estilo, clave)
         self._activo = clave
+        self._pintar_pestana(clave, activa=True)
+
+    def _pintar_pestana(self, clave: str, activa: bool) -> None:
+        color, claro = MODULOS_COLOR[clave]
+        fondo = claro if activa else RELLENO
+        self._bordes[clave].config(bg=color if activa else RELLENO)
+        self._contenedores[clave].config(bg=fondo)
+        self._insignias[clave].config(
+            bg=fondo if not activa else PAPEL, fg=color if activa else TINTA_2
+        )
+        self._pestanas[clave].config(bg=fondo, fg=color if activa else TINTA)
 
     # ------------------------------------------------------- sesion y permisos (F7) --
 
@@ -165,18 +276,18 @@ class VentanaPrincipal(tk.Tk):
     def refrescar_permisos(self) -> None:
         """Atenúa los modulos que el perfil no puede usar y vuelve a F1 si el actual ya no vale."""
         permitidos = self._permitidos()
-        for modulo in MODULOS:
-            etiqueta = self._pestanas[modulo.clave]
-            if modulo.clave in permitidos:
-                if modulo.clave != self._activo:
-                    etiqueta.config(fg="#1b2220")
-            else:
-                etiqueta.config(fg="#b5b9b8", cursor="arrow")
         if self._activo is not None and self._activo not in permitidos:
             anterior, self._activo = self._activo, None
             self._marcos[anterior].pack_forget()
-            self._pestanas[anterior].config(bg="#f3f5f4")
+            self._pintar_pestana(anterior, activa=False)
             self.mostrar("F1")
+        for modulo in MODULOS:  # despues de cambiar de modulo, para que el gris no se pise
+            etiqueta = self._pestanas[modulo.clave]
+            if modulo.clave in permitidos:
+                if modulo.clave != self._activo:
+                    etiqueta.config(fg=TINTA, cursor="hand2")
+            else:
+                etiqueta.config(fg="#b5b9b8", cursor="arrow")
 
     def vigilar_inactividad(
         self, minutos: Callable[[], int], al_vencer: Callable[[], None], cada_ms: int = 10_000
@@ -457,6 +568,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
             ventana.title(f"NaturalSur - Emporio ({usuario.nombre})")
             ventana.mostrar_usuario(f"{usuario.nombre} · {NOMBRES_ROL[usuario.rol]}")
             ventana.refrescar_permisos()
+            ventana._marcos["F1"].al_mostrar()  # la vendedora de la venta es quien entro
 
         def cerrar_sesion() -> None:
             usuario = pedir_ingreso()

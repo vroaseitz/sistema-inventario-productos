@@ -16,6 +16,7 @@ lo que hay que cobrar, no el total sin redondear.
 from __future__ import annotations
 
 import time
+import tkinter as tk
 import unicodedata
 from decimal import Decimal, InvalidOperation
 from tkinter import Listbox, Misc, StringVar, Toplevel, messagebox, ttk
@@ -52,7 +53,18 @@ from pos.dominio.productos import UnidadVenta
 from pos.dominio.value_objects import Dinero
 from pos.dominio.ventas import EstadoVenta, Venta
 from pos.interfaz.sesion import Sesion
+from pos.interfaz.tema import (
+    LINEA_2,
+    MODULOS_COLOR,
+    PAPEL,
+    TINTA,
+    TINTA_2,
+    TINTA_3,
+    BotonAccion,
+    fuente,
+)
 
+SIN_CLIENTE = "— sin cliente —"
 USUARIO_DEMO = 1  # usuario por defecto cuando no hay sesion (pruebas / sin login)
 
 # Motivos validados por la Product Owner el 22-09 (HU-CAJ-04, hallazgo E-03).
@@ -138,6 +150,7 @@ class VentanaVentas(ttk.Frame):
         self._refrescar_sync()
         self._nueva_venta(forzar=True)  # D-01a: siempre hay una venta abierta
         self._restaurar_espera()  # O-25
+        self.al_mostrar()
 
     @property
     def _venta(self) -> Venta | None:
@@ -173,94 +186,127 @@ class VentanaVentas(ttk.Frame):
         self._construir_caja(tab_caja)
         self._construir_resumen(tab_resumen)
 
+        color, claro = MODULOS_COLOR["F1"]
+
+        # --- Fila de acciones con su tecla, como el prototipo v3 (sobre el tinte del modulo).
+        acciones = tk.Frame(tab_venta, bg=claro)
+        acciones.pack(fill="x")
+        interior = tk.Frame(acciones, bg=claro)
+        interior.pack(fill="x", padx=12, pady=8)
+        for texto, comando, tecla, variante in (
+            ("Nuevo ticket", self._nuevo_ticket, "INS", "normal"),
+            ("Buscar producto", self._buscar_producto_ui, "F10", "normal"),
+            ("Cambiar lote", self._cambiar_lote_ui, "F11", "normal"),
+            ("Reimprimir último", self._reimprimir_ultimo, "F8", "normal"),
+            ("Quitar línea", self._quitar_linea, "DEL", "peligro"),
+            ("Eliminar ticket", self._eliminar_ticket, "", "peligro"),
+        ):
+            BotonAccion(interior, texto, comando, tecla, variante, color, PAPEL).pack(
+                side="left", padx=(0, 6)
+            )
+        BotonAccion(
+            interior, "Cobrar", lambda: self._cerrar_venta(True), "F12", "primario", color
+        ).pack(side="right")
+
         # O-01b: pestanas de tickets (Ticket 1, Ticket 2...); su contenido es el de abajo.
         self._nb_tickets = ttk.Notebook(tab_venta, height=1)
         self._nb_tickets.add(ttk.Frame(self._nb_tickets), text="Ticket 1")
         self._nb_tickets.pack(fill="x", padx=12, pady=(8, 0))
         self._nb_tickets.bind("<<NotebookTabChanged>>", self._al_cambiar_ticket)
 
-        marco_venta = ttk.LabelFrame(tab_venta, text="Venta en curso")
-        marco_venta.pack(fill="x", padx=12, pady=8)
-
-        ttk.Label(marco_venta, text="Codigo").grid(row=0, column=0, padx=4, pady=6)
-        self._entrada_codigo = ttk.Entry(marco_venta, width=14)
-        self._entrada_codigo.grid(row=0, column=1, padx=4, pady=6)
+        # --- Codigo del producto: el campo grande donde queda el cursor (el lector escribe solo).
+        marco_venta = tk.Frame(
+            tab_venta, bg=claro, highlightthickness=1, highlightbackground=LINEA_2
+        )
+        marco_venta.pack(fill="x", padx=12, pady=(8, 0))
+        tk.Label(
+            marco_venta, text="Código del producto:", bg=claro, fg=color, font=fuente(12, True)
+        ).grid(row=0, column=0, padx=(12, 8), pady=10)
+        self._entrada_codigo = ttk.Entry(marco_venta, font=fuente(13))
+        self._entrada_codigo.grid(row=0, column=1, sticky="ew", pady=10)
+        marco_venta.columnconfigure(1, weight=1)
         self._entrada_codigo.bind("<Return>", lambda _e: self._agregar_producto())  # D-03
         # O-02b: al escanear el producto se agrega solo, sin apretar Enter.
         self._entrada_codigo.bind("<KeyRelease>", self._al_escribir_codigo)
-
-        ttk.Label(marco_venta, text="Cantidad").grid(row=0, column=2, padx=4, pady=6)
-        self._entrada_cantidad = ttk.Entry(marco_venta, width=8)
+        tk.Label(marco_venta, text="Cantidad", bg=claro, fg=TINTA_2).grid(
+            row=0, column=2, padx=(14, 4)
+        )
+        self._entrada_cantidad = ttk.Entry(marco_venta, width=7)
         self._entrada_cantidad.insert(0, "1")
-        self._entrada_cantidad.grid(row=0, column=3, padx=4, pady=6)
+        self._entrada_cantidad.grid(row=0, column=3, padx=(0, 6))
         self._entrada_cantidad.bind("<Return>", lambda _e: self._agregar_producto())
-
-        ttk.Button(marco_venta, text="Agregar", command=self._agregar_producto).grid(
-            row=0, column=4, padx=8, pady=6
-        )
-        ttk.Button(
-            marco_venta, text="Buscar producto (F10)", command=self._buscar_producto_ui
-        ).grid(row=0, column=5, padx=4, pady=6)
-        ttk.Button(marco_venta, text="Quitar linea", command=self._quitar_linea).grid(
-            row=0, column=6, padx=4, pady=6
-        )
-        ttk.Button(marco_venta, text="Nuevo ticket (Ins)", command=self._nuevo_ticket).grid(
-            row=0, column=7, padx=4, pady=6
-        )
-        ttk.Button(marco_venta, text="Eliminar ticket", command=self._eliminar_ticket).grid(
-            row=1, column=7, padx=4, pady=2
-        )
-        # O-04: con una linea seleccionada, + suma 1 y - resta 1. O-28: F11 cambia el lote.
-        ttk.Button(marco_venta, text="+", width=3, command=lambda: self._ajustar_cantidad(1)).grid(
-            row=1, column=4, padx=2, pady=2
-        )
-        ttk.Button(marco_venta, text="−", width=3, command=lambda: self._ajustar_cantidad(-1)).grid(
-            row=1, column=5, padx=2, pady=2, sticky="w"
-        )
-        ttk.Button(marco_venta, text="Cambiar lote (F11)", command=self._cambiar_lote_ui).grid(
-            row=1, column=6, padx=4, pady=2
-        )
+        BotonAccion(
+            marco_venta, "Agregar", self._agregar_producto, "", "normal", color, PAPEL
+        ).grid(row=0, column=4, padx=4)
+        # O-04: con una linea seleccionada, + suma 1 y - resta 1.
+        BotonAccion(
+            marco_venta, "+", lambda: self._ajustar_cantidad(1), "", "normal", color, PAPEL
+        ).grid(row=0, column=5, padx=2)
+        BotonAccion(
+            marco_venta, "−", lambda: self._ajustar_cantidad(-1), "", "normal", color, PAPEL
+        ).grid(row=0, column=6, padx=(2, 12))
         # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
         self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")
         self.winfo_toplevel().bind("<F8>", self._atajo_imprimir, add="+")
         self.winfo_toplevel().bind("<F11>", self._atajo_cambiar_lote, add="+")
+        self.winfo_toplevel().bind("<F12>", self._atajo_cobrar, add="+")
         self.winfo_toplevel().bind("<Insert>", self._atajo_nuevo_ticket, add="+")
 
-        columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal", "lote")
-        anchos = {
-            "codigo": 90,
-            "nombre": 220,
-            "cantidad": 80,
-            "precio": 100,
-            "subtotal": 110,
-            "lote": 190,
-        }
-        self._tabla = ttk.Treeview(tab_venta, columns=columnas, show="headings", height=8)
-        for col, titulo in zip(
-            columnas, ("Codigo", "Nombre", "Cantidad", "Precio", "Subtotal", "Lote"), strict=True
-        ):
-            self._tabla.heading(col, text=titulo)
-            self._tabla.column(col, width=anchos[col], anchor="w")
-        self._tabla.pack(fill="both", expand=True, padx=12, pady=4)
-        self._tabla.bind("<Delete>", lambda _e: self._quitar_linea())
-        self._tabla.bind("<BackSpace>", lambda _e: self._quitar_linea())
-        for tecla in ("<plus>", "<KP_Add>"):
-            self._tabla.bind(tecla, lambda _e: self._ajustar_cantidad(1))
-        for tecla in ("<minus>", "<KP_Subtract>"):
-            self._tabla.bind(tecla, lambda _e: self._ajustar_cantidad(-1))
-
-        # D-15: el numero grande es lo que hay que cobrar (ya redondeado si hay
-        # efectivo), no el total crudo. La barra de abajo deja el resto siempre
-        # visible, no solo en un mensaje que se cierra.
-        self._lbl_a_cobrar = ttk.Label(
-            tab_venta, text="A cobrar: $0", font=("TkDefaultFont", 16, "bold")
+        # --- Cliente de la venta y vendedora (HU-CLI-02: solo se carga a una cuenta de credito).
+        fila_cliente = ttk.Frame(tab_venta)
+        fila_cliente.pack(fill="x", padx=12, pady=(8, 0))
+        fila_cliente.columnconfigure(0, weight=1)
+        fila_cliente.columnconfigure(1, weight=1)
+        ttk.Label(fila_cliente, text="Cliente de la venta", foreground=TINTA_2).grid(
+            row=0, column=0, sticky="w"
         )
-        self._lbl_a_cobrar.pack(anchor="e", padx=16)
-        self._lbl_resumen = ttk.Label(tab_venta, text="Total: $0  ·  Pagó con: $0  ·  Cambio: $0")
-        self._lbl_resumen.pack(anchor="e", padx=16)
+        ttk.Label(fila_cliente, text="Vendedora", foreground=TINTA_2).grid(
+            row=0, column=1, sticky="w", padx=(12, 0)
+        )
+        self._cliente_nombre = StringVar(value=SIN_CLIENTE)
+        self._clientes_por_nombre: dict[str, int] = {}
+        self._cb_cliente = ttk.Combobox(
+            fila_cliente, textvariable=self._cliente_nombre, values=[SIN_CLIENTE], state="readonly"
+        )
+        self._cb_cliente.grid(row=1, column=0, sticky="ew")
+        self._cb_cliente.bind("<<ComboboxSelected>>", self._al_elegir_cliente)
+        self._lbl_vendedora = ttk.Entry(fila_cliente, state="readonly")
+        self._lbl_vendedora.grid(row=1, column=1, sticky="ew", padx=(12, 0))
+        ttk.Label(
+            fila_cliente, text="Solo se carga a una cuenta de crédito", foreground=TINTA_3
+        ).grid(row=2, column=0, sticky="w")
+
+        # --- Barra de abajo: productos, Total / Pago con / Cambio y el total a cobrar grande.
+        barra_total = tk.Frame(tab_venta, bg=claro)
+        barra_total.pack(side="bottom", fill="x")
+        self._lbl_cantidad = tk.Label(
+            barra_total, text="0", bg=claro, fg=color, font=fuente(22, True), padx=14
+        )
+        self._lbl_cantidad.pack(side="left")
+        self._lbl_cantidad_texto = tk.Label(
+            barra_total, text="productos en la venta actual", bg=claro, fg=TINTA
+        )
+        self._lbl_cantidad_texto.pack(side="left")
+        self._lbl_resumen = tk.Label(
+            barra_total, text="Total: $0  ·  Pagó con: $0  ·  Cambio: $0", bg=claro, fg=TINTA
+        )
+        self._lbl_resumen.pack(side="left", padx=28)
+        # D-15: el numero grande es lo que hay que cobrar (ya redondeado si hay efectivo).
+        bloque = tk.Frame(barra_total, bg=color)
+        bloque.pack(side="right", fill="y")
+        self._lbl_a_cobrar = tk.Label(
+            bloque,
+            text="A cobrar: $0",
+            bg=color,
+            fg="#ffffff",
+            font=fuente(20, True),
+            padx=22,
+            pady=12,
+        )
+        self._lbl_a_cobrar.pack()
 
         marco_pago = ttk.LabelFrame(tab_venta, text="Pago")
-        marco_pago.pack(fill="both", padx=12, pady=8)
+        marco_pago.pack(side="bottom", fill="x", padx=12, pady=8)
 
         fila_pago = ttk.Frame(marco_pago)
         fila_pago.pack(fill="x")
@@ -295,13 +341,36 @@ class VentanaVentas(ttk.Frame):
         ttk.Button(
             fila_pago, text="Cobrar solo registrando", command=lambda: self._cerrar_venta(False)
         ).grid(row=0, column=6, padx=4, pady=6)
-        ttk.Button(fila_pago, text="Reimprimir último (F8)", command=self._reimprimir_ultimo).grid(
-            row=0, column=7, padx=4, pady=6
-        )
 
         # D-18a: los pagos ya agregados quedan listados y se pueden quitar.
-        self._lista_pagos = Listbox(marco_pago, height=3)
+        self._lista_pagos = Listbox(marco_pago, height=2, highlightthickness=0, borderwidth=1)
         self._lista_pagos.pack(fill="x", padx=4, pady=(0, 6))
+
+        columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal", "lote")
+        anchos = {
+            "codigo": 130,
+            "nombre": 260,
+            "cantidad": 80,
+            "precio": 100,
+            "subtotal": 110,
+            "lote": 190,
+        }
+        self._tabla = ttk.Treeview(tab_venta, columns=columnas, show="headings", height=4)
+        for col, titulo in zip(
+            columnas,
+            ("Código de barras", "Descripción del producto", "Cant.", "Precio", "Importe", "Lote"),
+            strict=True,
+        ):
+            self._tabla.heading(col, text=titulo)
+            numerica = col in ("cantidad", "precio", "subtotal")
+            self._tabla.column(col, width=anchos[col], anchor="e" if numerica else "w")
+        self._tabla.pack(fill="both", expand=True, padx=12, pady=(8, 4))
+        self._tabla.bind("<Delete>", lambda _e: self._quitar_linea())
+        self._tabla.bind("<BackSpace>", lambda _e: self._quitar_linea())
+        for tecla in ("<plus>", "<KP_Add>"):
+            self._tabla.bind(tecla, lambda _e: self._ajustar_cantidad(1))
+        for tecla in ("<minus>", "<KP_Subtract>"):
+            self._tabla.bind(tecla, lambda _e: self._ajustar_cantidad(-1))
 
     # --------------------------------------------------------- Sincronizacion --
 
@@ -314,6 +383,18 @@ class VentanaVentas(ttk.Frame):
         self._lbl_sync.config(
             text="Todo sincronizado" if pendientes == 0 else f"Pendientes: {pendientes}{destino}"
         )
+        self._publicar_estado()
+
+    def _publicar_estado(self) -> None:
+        """Repite en la barra de estado de la ventana la sincronizacion y la jornada."""
+        barra = getattr(self.winfo_toplevel(), "actualizar_estado", None)
+        if callable(barra):
+            barra(
+                "Sincronizado"
+                if "sincronizado" in self._lbl_sync.cget("text").lower()
+                else self._lbl_sync.cget("text"),
+                self._lbl_turno.cget("text"),
+            )
 
     def _sincronizar(self) -> None:
         if self._cola is None or self._publicador is None:
@@ -361,6 +442,7 @@ class VentanaVentas(ttk.Frame):
                         self._sesion.nombre or f"usuario {turno.usuario_id}",
                     ),
                 )
+        self._publicar_estado()
         self._refrescar_resumen()
 
     def _construir_caja(self, padre: ttk.Frame) -> None:
@@ -662,6 +744,50 @@ class VentanaVentas(ttk.Frame):
         self._entrada_cantidad.insert(0, "1")
         self._medio.set(MedioPago.EFECTIVO.value)  # O-27: cada ticket parte con Efectivo
         self._medio_nombre.set(NOMBRES_MEDIO_PAGO[MedioPago.EFECTIVO])
+
+    def _atajo_cobrar(self, _evento: object = None) -> None:
+        """F12 Cobrar (prototipo): cobra e imprime, solo con F1 Venta a la vista."""
+        if self.winfo_ismapped() and self._subpestanas.index("current") == 0:
+            self._cerrar_venta(True)
+
+    # ------------------------------------- Cliente, vendedora y cabecera de la venta --
+
+    def _refrescar_clientes_combo(self) -> None:
+        activos = [c for c in (self._clientes.listar() if self._clientes else []) if c.activo]
+        self._clientes_por_nombre = {c.nombre: c.id for c in activos}
+        self._cb_cliente.config(values=[SIN_CLIENTE, *self._clientes_por_nombre])
+
+    def _al_elegir_cliente(self, _evento: object = None) -> None:
+        if self._venta is not None:
+            self._venta.cliente_id = self._clientes_por_nombre.get(self._cliente_nombre.get())
+
+    def _sincronizar_cabecera_venta(self) -> None:
+        """Cliente elegido, vendedora, cuantos productos y el subtitulo «Ticket 3 · 3 abiertos»."""
+        venta = self._venta
+        nombre = SIN_CLIENTE
+        if venta is not None and venta.cliente_id is not None and self._clientes:
+            cliente = self._clientes.obtener(venta.cliente_id)
+            nombre = cliente.nombre if cliente else SIN_CLIENTE
+        self._cliente_nombre.set(nombre)
+        cantidad = len(venta.detalles) if venta is not None else 0
+        self._lbl_cantidad.config(text=str(cantidad))
+        self._lbl_cantidad_texto.config(
+            text="producto en la venta actual" if cantidad == 1 else "productos en la venta actual"
+        )
+        barra = getattr(self.winfo_toplevel(), "fijar_subtitulo", None)
+        if callable(barra):
+            abiertos = len(self._tickets)
+            barra(
+                f"Ticket {self._numeros[self._indice]} · {abiertos} abierto{'s' * (abiertos != 1)}"
+            )
+
+    def al_mostrar(self) -> None:
+        self._refrescar_clientes_combo()
+        self._lbl_vendedora.config(state="normal")
+        self._lbl_vendedora.delete(0, "end")
+        self._lbl_vendedora.insert(0, (self._sesion.nombre or "").capitalize())
+        self._lbl_vendedora.config(state="readonly")
+        self._sincronizar_cabecera_venta()
 
     def _atajo_nuevo_ticket(self, _evento: object = None) -> None:
         if self.winfo_ismapped() and self._subpestanas.index("current") == 0:
@@ -1051,6 +1177,7 @@ class VentanaVentas(ttk.Frame):
 
     def _refrescar_ticket(self) -> None:
         self._rotular_pestanas()
+        self._sincronizar_cabecera_venta()
         for fila in self._tabla.get_children():
             self._tabla.delete(fila)
         venta = self._venta
@@ -1344,8 +1471,6 @@ class VentanaVentas(ttk.Frame):
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo quitar el pago", str(exc))
             return
-        if not any(p.medio is MedioPago.CREDITO_CLIENTE for p in venta.pagos):
-            venta.cliente_id = None  # sin credito ya no hay cliente al que cargar
         self._refrescar_ticket()
 
     def _cerrar_venta(self, imprimir: bool = False) -> None:
