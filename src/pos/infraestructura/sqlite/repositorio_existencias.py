@@ -55,9 +55,10 @@ class RepositorioAjustesSQLite(RepositorioAjustes):
                 diferencia_conteo,
                 motivo,
                 usuario,
-                fecha
+                fecha,
+                observacion
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ajuste.codigo_producto,
@@ -67,5 +68,6 @@ class RepositorioAjustesSQLite(RepositorioAjustes):
                 motivo_valor,
                 ajuste.usuario,
                 fecha_str,
+                ajuste.observacion,
             ),
         )

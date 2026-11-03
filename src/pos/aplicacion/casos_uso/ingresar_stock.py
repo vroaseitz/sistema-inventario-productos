@@ -37,6 +37,7 @@ class IngresarStock:
         motivo: str,
         fecha_vencimiento: date | None = None,
         hoy: date | None = None,
+        codigo_lote: str = "",
     ) -> Lote | None:
         producto = self.repositorio_productos.obtener_por_codigo(codigo_producto)
         if producto is None:
@@ -55,7 +56,9 @@ class IngresarStock:
         )
         if fecha_vencimiento is None:
             return None
-        lote = Lote(codigo_producto, fecha_vencimiento, cantidad_dec)
+        lote = Lote(
+            codigo_producto, fecha_vencimiento, cantidad_dec, codigo_lote=codigo_lote.strip()
+        )
         self.repositorio_lotes.guardar(lote)
         encolar_lote(self.cola, lote)
         return lote

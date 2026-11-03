@@ -108,18 +108,18 @@ class TestIndicadoresCosto:
 
 class TestColumnaCategoria:
     def test_tabla_muestra_nombre_categoria_no_id(self, vista):
-        """QA C-02: la columna Categoría muestra texto ("Abarrotes"), no el id numerico."""
+        """QA C-02: la columna Categoría muestra texto ("Superalimentos"), no el id numerico."""
         from pos.dominio.productos import Producto
         from pos.dominio.value_objects import Dinero
 
-        producto = Producto(codigo="C-9", nombre="Quinoa", precio=Dinero(3000), categoria_id=3)
+        producto = Producto(codigo="C-9", nombre="Quinoa", precio=Dinero(3000), categoria_id=4)
         vista._repo.listar.return_value = [producto]
         vista._tabla.get_children.return_value = []
 
         vista._refrescar()
 
         valores = vista._tabla.insert.call_args.kwargs["values"]
-        assert valores[4] == "abarrotes"
+        assert valores[4] == "Superalimentos"
         assert not isinstance(valores[4], int)
 
 
