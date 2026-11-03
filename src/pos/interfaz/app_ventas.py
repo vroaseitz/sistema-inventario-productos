@@ -21,19 +21,24 @@ from tkinter import Listbox, Misc, StringVar, Toplevel, messagebox, ttk
 
 from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
 from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
+from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
 from pos.aplicacion.casos_uso.sincronizar_pendientes import SincronizarPendientes
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
     PublicadorRemoto,
+    RepositorioAuditoria,
+    RepositorioClientes,
+    RepositorioConfiguracion,
     RepositorioProductos,
     RepositorioTicketsEspera,
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
 from pos.dominio.caja import TipoMovimientoCaja, calcular_arqueo
-from pos.dominio.errores import ErrorDominio
+from pos.dominio.clientes import saldo_de
+from pos.dominio.errores import ErrorDominio, ErrorImpresion
 from pos.dominio.formato import formatear_clp, parsear_monto
 from pos.dominio.pagos import (
     DENOMINACIONES_CLP,
@@ -42,6 +47,7 @@ from pos.dominio.pagos import (
     Pago,
     redondear_a_decena,
 )
+from pos.dominio.productos import UnidadVenta
 from pos.dominio.value_objects import Dinero
 from pos.dominio.ventas import EstadoVenta, Venta
 from pos.interfaz.sesion import Sesion
@@ -90,6 +96,10 @@ class VentanaVentas(ttk.Frame):
         publicador: PublicadorRemoto | None = None,
         sesion: Sesion | None = None,
         repo_tickets: RepositorioTicketsEspera | None = None,
+        auditoria: RepositorioAuditoria | None = None,
+        repo_clientes: RepositorioClientes | None = None,
+        configuracion: RepositorioConfiguracion | None = None,
+        imprimir: ImprimirComprobante | None = None,
     ) -> None:
         super().__init__(parent)
         self._sesion = sesion or Sesion(USUARIO_DEMO)
@@ -104,8 +114,19 @@ class VentanaVentas(ttk.Frame):
         self._registrar_movimiento = registrar_movimiento
 
         self._repo_tickets = repo_tickets
+        self._auditoria = auditoria
+        self._clientes = repo_clientes
+        self._configuracion = configuracion
+        self._imprimir = imprimir
+        self._ayuda_conteo = ""
+        # O-25: no se guarda nada hasta haber restaurado lo guardado; si no, el primer
+        # refresco al abrir la app sobrescribia los tickets en espera con una lista vacia.
+        self._persistir = False
+        self._temporizador_codigo: str | None = None
+        self._dialogo_peso_abierto = False
         # O-01b: varios tickets abiertos a la vez; el activo es `_venta`.
         self._tickets: list[Venta | None] = [None]
+        self._numeros = [1]  # numero que muestra la pestana de cada ticket
         self._indice = 0
         self._contador_tickets = 1
         self._cambiando_ticket = False
@@ -163,6 +184,8 @@ class VentanaVentas(ttk.Frame):
         self._entrada_codigo = ttk.Entry(marco_venta, width=14)
         self._entrada_codigo.grid(row=0, column=1, padx=4, pady=6)
         self._entrada_codigo.bind("<Return>", lambda _e: self._agregar_producto())  # D-03
+        # O-02b: al escanear el producto se agrega solo, sin apretar Enter.
+        self._entrada_codigo.bind("<KeyRelease>", self._al_escribir_codigo)
 
         ttk.Label(marco_venta, text="Cantidad").grid(row=0, column=2, padx=4, pady=6)
         self._entrada_cantidad = ttk.Entry(marco_venta, width=8)
@@ -183,21 +206,22 @@ class VentanaVentas(ttk.Frame):
             row=0, column=7, padx=4, pady=6
         )
         ttk.Button(marco_venta, text="Eliminar ticket", command=self._eliminar_ticket).grid(
-            row=1, column=8, padx=4, pady=2
+            row=1, column=7, padx=4, pady=2
         )
-        # O-04: con una linea seleccionada, + suma 1 y - resta 1. I-03: F5 cambia el lote.
+        # O-04: con una linea seleccionada, + suma 1 y - resta 1. O-28: F11 cambia el lote.
         ttk.Button(marco_venta, text="+", width=3, command=lambda: self._ajustar_cantidad(1)).grid(
             row=1, column=4, padx=2, pady=2
         )
         ttk.Button(marco_venta, text="−", width=3, command=lambda: self._ajustar_cantidad(-1)).grid(
             row=1, column=5, padx=2, pady=2, sticky="w"
         )
-        ttk.Button(marco_venta, text="Cambiar lote (F5)", command=self._cambiar_lote_ui).grid(
-            row=1, column=6, columnspan=2, padx=4, pady=2
+        ttk.Button(marco_venta, text="Cambiar lote (F11)", command=self._cambiar_lote_ui).grid(
+            row=1, column=6, padx=4, pady=2
         )
         # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
         self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")
-        self.winfo_toplevel().bind("<F5>", self._atajo_cambiar_lote, add="+")
+        self.winfo_toplevel().bind("<F8>", self._atajo_imprimir, add="+")
+        self.winfo_toplevel().bind("<F11>", self._atajo_cambiar_lote, add="+")
         self.winfo_toplevel().bind("<Insert>", self._atajo_nuevo_ticket, add="+")
 
         columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal", "lote")
@@ -230,7 +254,7 @@ class VentanaVentas(ttk.Frame):
             tab_venta, text="A cobrar: $0", font=("TkDefaultFont", 16, "bold")
         )
         self._lbl_a_cobrar.pack(anchor="e", padx=16)
-        self._lbl_resumen = ttk.Label(tab_venta, text="Total: $0  ·  Pagado: $0  ·  Vuelto: $0")
+        self._lbl_resumen = ttk.Label(tab_venta, text="Total: $0  ·  Pagó con: $0  ·  Cambio: $0")
         self._lbl_resumen.pack(anchor="e", padx=16)
 
         marco_pago = ttk.LabelFrame(tab_venta, text="Pago")
@@ -262,8 +286,15 @@ class VentanaVentas(ttk.Frame):
         ttk.Button(fila_pago, text="Quitar pago", command=self._quitar_pago).grid(
             row=0, column=4, padx=4, pady=6
         )
-        ttk.Button(fila_pago, text="Cobrar y cerrar venta", command=self._cerrar_venta).grid(
-            row=0, column=5, padx=8, pady=6
+        # HU-VTA-06: «Cobrar e imprimir ticket» o «Cobrar solo registrando la venta».
+        ttk.Button(
+            fila_pago, text="Cobrar e imprimir ticket", command=lambda: self._cerrar_venta(True)
+        ).grid(row=0, column=5, padx=4, pady=6)
+        ttk.Button(
+            fila_pago, text="Cobrar solo registrando", command=lambda: self._cerrar_venta(False)
+        ).grid(row=0, column=6, padx=4, pady=6)
+        ttk.Button(fila_pago, text="Reimprimir último (F8)", command=self._reimprimir_ultimo).grid(
+            row=0, column=7, padx=4, pady=6
         )
 
         # D-18a: los pagos ya agregados quedan listados y se pueden quitar.
@@ -338,6 +369,9 @@ class VentanaVentas(ttk.Frame):
         ttk.Button(marco, text="Abrir turno", command=self._abrir_turno_ui).pack(
             side="right", padx=4, pady=6
         )
+        ttk.Button(marco, text="Imprimir corte (F8)", command=self._imprimir_corte).pack(
+            side="right", padx=4, pady=6
+        )
         ttk.Button(marco, text="Movimiento de caja", command=self._movimiento_ui).pack(
             side="right", padx=4, pady=6
         )
@@ -407,6 +441,10 @@ class VentanaVentas(ttk.Frame):
         dialogo.transient(self.winfo_toplevel())
         dialogo.grab_set()
 
+        if self._ayuda_conteo:
+            ttk.Label(dialogo, text=self._ayuda_conteo, foreground="#666").grid(
+                row=len(DENOMINACIONES_CLP) + 2, column=0, columnspan=2, pady=(0, 6)
+            )
         entradas: dict[int, ttk.Entry] = {}
         for fila, denominacion in enumerate(DENOMINACIONES_CLP):
             ttk.Label(dialogo, text=_formatear_clp(denominacion)).grid(
@@ -450,6 +488,8 @@ class VentanaVentas(ttk.Frame):
             resultado["valor"] = ConteoDenominaciones(_leer_conteo())
             dialogo.destroy()
 
+        dialogo.bind("<Return>", lambda _e: confirmar())  # O-29
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
         ttk.Button(dialogo, text="Confirmar", command=confirmar).grid(
             row=fila_total + 1, column=0, pady=8
         )
@@ -462,7 +502,11 @@ class VentanaVentas(ttk.Frame):
         return resultado["valor"]
 
     def _abrir_turno_ui(self) -> None:
+        if self._configuracion is not None:
+            habitual = self._configuracion.obtener("fondo_habitual")
+            self._ayuda_conteo = f"Fondo de caja habitual: {_formatear_clp(habitual)}"
         conteo = self._contar_denominaciones_ui("Abrir turno - contar fondo inicial")
+        self._ayuda_conteo = ""
         if conteo is None:
             return
         try:
@@ -481,8 +525,13 @@ class VentanaVentas(ttk.Frame):
         # iniciara sola despues de este punto.
         if self._venta is None:
             self._nueva_venta(forzar=True)
+        self._restaurar_espera()  # O-25: los tickets guardados vuelven al abrir el turno
 
     def _cerrar_turno_ui(self) -> None:
+        # O-30: la advertencia es informativa: se puede volver a los tickets o descartarlos.
+        pendientes = self._tickets_sin_cobrar()
+        if pendientes and not self._confirmar_descartar_tickets(pendientes):
+            return
         conteo = self._contar_denominaciones_ui("Cerrar turno - contar efectivo")
         if conteo is None:
             return
@@ -491,6 +540,8 @@ class VentanaVentas(ttk.Frame):
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo cerrar el turno", str(exc))
             return
+        if pendientes:
+            self._descartar_tickets(pendientes)
         detalle = "\n".join(
             f"{NOMBRES_MEDIO_PAGO[medio]}: {_formatear_clp(monto.monto)}"
             for medio, monto in arqueo.totales_por_medio.items()
@@ -498,6 +549,7 @@ class VentanaVentas(ttk.Frame):
         messagebox.showinfo(
             "Arqueo de cierre",
             f"{detalle}\n\n"
+            f"Abonos de clientes en efectivo: {_formatear_clp(arqueo.abonos_efectivo.monto)}\n"
             f"Efectivo esperado: {_formatear_clp(arqueo.efectivo_esperado)}\n"
             f"Efectivo contado: {_formatear_clp(arqueo.efectivo_contado.monto)}\n"
             f"Diferencia: {_formatear_clp(arqueo.diferencia)}",
@@ -535,6 +587,9 @@ class VentanaVentas(ttk.Frame):
         ttk.Label(dialogo, text="Monto (CLP)").grid(row=3, column=0, padx=8, pady=6, sticky="w")
         entrada_monto = ttk.Entry(dialogo, width=16)
         entrada_monto.grid(row=3, column=1, padx=8, pady=6)
+
+        dialogo.bind("<Return>", lambda _e: confirmar())  # O-29
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
 
         def confirmar() -> None:
             try:
@@ -619,6 +674,7 @@ class VentanaVentas(ttk.Frame):
             return
         self._tickets.append(venta)
         self._contador_tickets += 1
+        self._numeros.append(self._contador_tickets)
         marco = ttk.Frame(self._nb_tickets)
         self._nb_tickets.add(marco, text=f"Ticket {self._contador_tickets}")
         self._cambiando_ticket = True
@@ -646,6 +702,7 @@ class VentanaVentas(ttk.Frame):
         self._cambiando_ticket = True
         self._nb_tickets.forget(indice)
         del self._tickets[indice]
+        del self._numeros[indice]
         self._indice = min(indice, len(self._tickets) - 1)
         self._nb_tickets.select(self._indice)
         self._cambiando_ticket = False
@@ -667,7 +724,7 @@ class VentanaVentas(ttk.Frame):
 
     def _guardar_espera(self) -> None:
         """O-25: conserva los tickets con productos para reabrirlos (nunca los pagos)."""
-        if self._repo_tickets is None:
+        if self._repo_tickets is None or not self._persistir:
             return
         self._repo_tickets.guardar(
             [
@@ -681,6 +738,11 @@ class VentanaVentas(ttk.Frame):
         )
 
     def _restaurar_espera(self) -> None:
+        """O-25: al abrir la app vuelven los tickets que quedaron sin cobrar.
+
+        Sin turno abierto no se restaura ni se guarda nada (los tickets siguen guardados y
+        vuelven cuando se abre el turno).
+        """
         if self._repo_tickets is None or self._repo_turnos.obtener_abierto() is None:
             return
         guardados = self._repo_tickets.cargar()
@@ -696,12 +758,73 @@ class VentanaVentas(ttk.Frame):
                 except ErrorDominio:
                     continue  # el stock o el producto cambiaron: se omite la linea
             venta.lote_elegido.update(ticket.get("lotes", {}))
+        self._persistir = True
         if guardados:
             self._cambiando_ticket = True
             self._nb_tickets.select(0)
             self._cambiando_ticket = False
             self._indice = 0
-            self._refrescar_ticket()
+        self._refrescar_ticket()
+
+    # ------------------------------------------- Cierre de jornada con tickets (O-30) --
+
+    def _tickets_sin_cobrar(self) -> list[Venta]:
+        return [v for v in self._tickets if v is not None and v.detalles]
+
+    def _confirmar_descartar_tickets(self, pendientes: list[Venta]) -> bool:
+        """Avisa cuantos tickets quedan y su total; False si se prefiere volver a ellos."""
+        total = sum(v.total.monto for v in pendientes)
+        cantidad = len(pendientes)
+        if cantidad == 1:
+            cuantos = "Queda 1 ticket sin cobrar"
+        else:
+            cuantos = f"Quedan {cantidad} tickets sin cobrar"
+        if messagebox.askyesno(
+            "Tickets sin cobrar",
+            f"{cuantos} por {_formatear_clp(total)}.\n\n"
+            "¿Descartarlos y cerrar la jornada?\n"
+            "Elige «No» para volver a ellos.",
+        ):
+            return True
+        self._subpestanas.select(0)
+        return False
+
+    def _descartar_tickets(self, pendientes: list[Venta]) -> None:
+        """Deja constancia en la auditoria (sin tocar existencias) y limpia los tickets."""
+        if self._auditoria is not None:
+            self._auditoria.registrar(
+                self._sesion.nombre or str(self._sesion.usuario_id),
+                "tickets_descartados_al_cerrar_jornada",
+                registro=f"{len(pendientes)} ticket{'s' if len(pendientes) != 1 else ''}",
+                antes=_formatear_clp(sum(v.total.monto for v in pendientes)),
+                despues="descartados",
+                detalle={
+                    "cantidad": len(pendientes),
+                    "total": sum(v.total.monto for v in pendientes),
+                    "tickets": [
+                        [
+                            {
+                                "codigo": d.producto_codigo,
+                                "cantidad": str(d.cantidad),
+                                "subtotal": d.subtotal.monto,
+                            }
+                            for d in v.detalles
+                        ]
+                        for v in pendientes
+                    ],
+                },
+            )
+        for _ in range(len(self._tickets) - 1):
+            self._nb_tickets.forget(len(self._tickets) - 1)
+            self._tickets.pop()
+        self._tickets[0] = None
+        self._numeros = [1]
+        self._contador_tickets = 1
+        self._indice = 0
+        self._cambiando_ticket = True
+        self._nb_tickets.select(0)
+        self._cambiando_ticket = False
+        self._nueva_venta(forzar=True)  # con la jornada cerrada queda sin venta
 
     def _venta_actual(self) -> Venta | None:
         if self._venta is None:
@@ -712,6 +835,7 @@ class VentanaVentas(ttk.Frame):
         venta = self._venta_actual()
         if venta is None:
             return
+        self._cancelar_autoagregado()
         codigo = self._entrada_codigo.get().strip()
         if not codigo:
             return
@@ -722,6 +846,12 @@ class VentanaVentas(ttk.Frame):
         except InvalidOperation:
             messagebox.showerror("Cantidad invalida", "La cantidad debe ser un numero")
             return
+        producto = self._repo_productos.obtener_por_codigo(codigo)
+        if producto is not None and producto.unidad_venta is UnidadVenta.GRANEL:
+            # O-02b: a granel siempre se pide el peso (con el importe a la vista).
+            cantidad = self._pedir_peso(producto)
+            if cantidad is None:
+                return
         try:
             self._registrar_venta.agregar_producto(venta, codigo, cantidad)
         except ErrorDominio as exc:
@@ -732,6 +862,96 @@ class VentanaVentas(ttk.Frame):
         self._entrada_cantidad.insert(0, "1")  # D-23
         self._refrescar_ticket()
         self._entrada_codigo.focus_set()  # D-24
+
+    # ------------------------------------------- Escaneo y peso a granel (O-02b) --
+
+    def _al_escribir_codigo(self, evento: object) -> None:
+        if getattr(evento, "keysym", "") in ("Return", "KP_Enter", "Tab", "Escape"):
+            return
+        self._cancelar_autoagregado()
+        self._temporizador_codigo = self.after(150, self._autoagregar)
+
+    def _cancelar_autoagregado(self) -> None:
+        if self._temporizador_codigo is not None:
+            self.after_cancel(self._temporizador_codigo)
+            self._temporizador_codigo = None
+
+    def _autoagregar(self) -> None:
+        """Agrega solo cuando lo escrito es exactamente un producto y no el comienzo de otro."""
+        self._temporizador_codigo = None
+        codigo = self._entrada_codigo.get().strip()
+        if not codigo or self._dialogo_peso_abierto or self._venta is None:
+            return
+        if self._repo_productos.obtener_por_codigo(codigo) is None:
+            return
+        if any(
+            p.codigo != codigo and p.codigo.startswith(codigo)
+            for p in self._repo_productos.listar()
+        ):
+            return  # podria faltar un digito: se espera el Enter
+        self._agregar_producto()
+
+    def _pedir_peso(self, producto) -> Decimal | None:
+        """Cuadro que pide el peso (kg) de un producto a granel y muestra el importe."""
+        self._dialogo_peso_abierto = True
+        resultado: list[Decimal] = []
+        ventana = Toplevel(self)
+        ventana.title("Peso del producto")
+        ventana.transient(self.winfo_toplevel())
+        ventana.resizable(False, False)
+        ttk.Label(
+            ventana,
+            text=f"{producto.nombre}\nPrecio por kilo: {_formatear_clp(producto.precio.monto)}",
+            padding=(16, 12, 16, 4),
+        ).pack()
+        marco = ttk.Frame(ventana, padding=(16, 4))
+        marco.pack()
+        ttk.Label(marco, text="Peso (kg)").grid(row=0, column=0, padx=4)
+        entrada = ttk.Entry(marco, width=10)
+        entrada.grid(row=0, column=1, padx=4)
+        importe = ttk.Label(marco, text="Importe: $0", font=("TkDefaultFont", 12, "bold"))
+        importe.grid(row=1, column=0, columnspan=2, pady=(8, 0))
+        error = ttk.Label(ventana, text="", foreground="#a11")
+        error.pack()
+
+        def peso_ingresado() -> Decimal | None:
+            texto = entrada.get().strip().replace(",", ".")
+            try:
+                peso = Decimal(texto)
+            except InvalidOperation:
+                return None
+            return peso if peso > 0 else None
+
+        def recalcular(*_args: object) -> None:
+            peso = peso_ingresado()
+            monto = producto.precio.multiplicado_por(peso).monto if peso is not None else 0
+            importe.config(text=f"Importe: {_formatear_clp(monto)}")
+
+        def cerrar() -> None:
+            self._dialogo_peso_abierto = False
+            ventana.destroy()
+
+        def confirmar(_evento: object = None) -> None:
+            peso = peso_ingresado()
+            if peso is None:
+                error.config(text="Escribe el peso en kilos (por ejemplo 0,350)")
+                return
+            resultado.append(peso)
+            cerrar()
+
+        entrada.bind("<KeyRelease>", recalcular)
+        ventana.bind("<Return>", confirmar)  # Enter confirma, Esc cancela (O-29)
+        ventana.bind("<Escape>", lambda _e: cerrar())
+        ventana.protocol("WM_DELETE_WINDOW", cerrar)
+        botones = ttk.Frame(ventana, padding=(16, 4, 16, 12))
+        botones.pack()
+        ttk.Button(botones, text="Agregar", command=confirmar).pack(side="left", padx=4)
+        ttk.Button(botones, text="Cancelar", command=cerrar).pack(side="left", padx=4)
+        ventana.grab_set()
+        entrada.focus_set()
+        self.wait_window(ventana)
+        self._dialogo_peso_abierto = False
+        return resultado[0] if resultado else None
 
     def _quitar_linea(self) -> None:
         venta = self._venta_actual()
@@ -785,13 +1005,29 @@ class VentanaVentas(ttk.Frame):
             dialogo.destroy()
             self._entrada_cantidad.focus_set()
 
+        def elegir_con_enter(_evento: object = None) -> None:
+            if not lista.curselection() and lista.size():
+                lista.selection_set(0)  # Enter sin elegir toma el primero de la lista
+            elegir()
+
         entrada.bind("<KeyRelease>", refrescar_lista)
         lista.bind("<Double-Button-1>", elegir)
+        dialogo.bind("<Return>", elegir_con_enter)  # O-29
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
         refrescar_lista()
 
         ttk.Button(dialogo, text="Seleccionar", command=elegir).pack(pady=(0, 8))
 
+    def _rotular_pestanas(self) -> None:
+        """HU-VTA-05: cada pestana muestra el total de su ticket (p. ej. «Ticket 1 · $18.240»)."""
+        for posicion, venta in enumerate(self._tickets):
+            texto = f"Ticket {self._numeros[posicion]}"
+            if venta is not None and venta.detalles:
+                texto += f" · {_formatear_clp(venta.total.monto)}"
+            self._nb_tickets.tab(posicion, text=texto)
+
     def _refrescar_ticket(self) -> None:
+        self._rotular_pestanas()
         for fila in self._tabla.get_children():
             self._tabla.delete(fila)
         venta = self._venta
@@ -799,7 +1035,8 @@ class VentanaVentas(ttk.Frame):
 
         if venta is None:
             self._lbl_a_cobrar.config(text="A cobrar: $0")
-            self._lbl_resumen.config(text="Total: $0  ·  Pagado: $0  ·  Vuelto: $0")
+            self._lbl_resumen.config(text="Total: $0  ·  Pagó con: $0  ·  Cambio: $0")
+            self._guardar_espera()
             return
 
         for detalle in venta.detalles:
@@ -830,8 +1067,8 @@ class VentanaVentas(ttk.Frame):
         self._lbl_a_cobrar.config(text=f"A cobrar: {_formatear_clp(a_cobrar)}")
         self._lbl_resumen.config(
             text=f"Total: {_formatear_clp(venta.total.monto)}  ·  "
-            f"Pagado: {_formatear_clp(pagado)}  ·  "
-            f"Vuelto: {_formatear_clp(venta.vuelto_entregado.monto)}"
+            f"Pagó con: {_formatear_clp(pagado)}  ·  "
+            f"Cambio: {_formatear_clp(venta.vuelto_entregado.monto)}"
         )
 
         # D-19: proponer el saldo pendiente como monto por defecto; la cajera
@@ -839,7 +1076,7 @@ class VentanaVentas(ttk.Frame):
         saldo = max(0, a_cobrar - pagado)
         self._entrada_monto_pago.delete(0, "end")
         if saldo:
-            self._entrada_monto_pago.insert(0, str(saldo))
+            self._entrada_monto_pago.insert(0, _formatear_clp(saldo).lstrip("$"))
         self._guardar_espera()
 
     def _a_cobrar_visible(self, venta: Venta) -> int:
@@ -860,7 +1097,7 @@ class VentanaVentas(ttk.Frame):
         if lote is None:
             return "-"
         elegido = "* " if venta.lote_elegido.get(codigo) == lote.uuid else ""
-        return f"{elegido}L{lote.id} · vence {lote.fecha_vencimiento.isoformat()}"
+        return f"{elegido}{lote.etiqueta} · vence {lote.fecha_vencimiento.isoformat()}"
 
     def _linea_seleccionada(self) -> str | None:
         seleccion = self._tabla.selection()
@@ -896,7 +1133,7 @@ class VentanaVentas(ttk.Frame):
             self._cambiar_lote_ui()
 
     def _cambiar_lote_ui(self) -> None:
-        """I-03: F5 Cambiar lote. Lista los lotes con saldo y deja elegir de cual sale."""
+        """O-28: F11 Cambiar lote (F5 es Compras). Lista los lotes con saldo y deja elegir uno."""
         venta = self._venta_actual()
         codigo = self._linea_seleccionada() if venta is not None else None
         if venta is None or codigo is None:
@@ -911,7 +1148,9 @@ class VentanaVentas(ttk.Frame):
         dialogo.grab_set()
         lista = Listbox(dialogo, height=min(8, len(lotes)), width=48, exportselection=False)
         for lote in lotes:
-            lista.insert("end", f"L{lote.id} · vence {lote.fecha_vencimiento} · saldo {lote.saldo}")
+            lista.insert(
+                "end", f"{lote.etiqueta} · vence {lote.fecha_vencimiento} · saldo {lote.saldo}"
+            )
         lista.selection_set(0)
         lista.pack(padx=12, pady=10)
 
@@ -928,6 +1167,9 @@ class VentanaVentas(ttk.Frame):
             self._refrescar_ticket()
 
         lista.bind("<Double-Button-1>", lambda _e: elegir())
+        dialogo.bind("<Return>", lambda _e: elegir())  # O-29
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
+        lista.focus_set()
         ttk.Button(dialogo, text="Usar este lote", command=elegir).pack(pady=(0, 10))
 
     def _atajo_buscar(self, _evento: object = None) -> None:
@@ -957,14 +1199,114 @@ class VentanaVentas(ttk.Frame):
                 pago = venta.construir_pago_efectivo(monto_entregado=monto)
                 if pago.cobro_efectivo is not None and pago.cobro_efectivo.vuelto.monto:
                     vuelto_fmt = _formatear_clp(pago.cobro_efectivo.vuelto.monto)
-                    messagebox.showinfo("Vuelto", f"Vuelto: {vuelto_fmt}")
+                    messagebox.showinfo("Cambio", f"Cambio: {vuelto_fmt}")
             else:
+                if medio is MedioPago.CREDITO_CLIENTE and not self._elegir_cliente(venta):
+                    return  # HU-CLI-02: sin cliente no hay credito
                 pago = Pago(medio=medio, monto=Dinero(monto))
             self._registrar_venta.agregar_pago(venta, pago)
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo agregar el pago", str(exc))
             return
         self._refrescar_ticket()
+
+    # --------------------------------------------- Venta a credito (HU-CLI-02) --
+
+    def _elegir_cliente(self, venta: Venta) -> bool:
+        """Pide el cliente al que se carga el credito; False si se cancela o no hay clientes."""
+        if venta.cliente_id is not None:
+            return True
+        cliente_id = self._elegir_cliente_ui()
+        if cliente_id is None:
+            return False
+        venta.cliente_id = cliente_id
+        return True
+
+    def _elegir_cliente_ui(self) -> int | None:
+        activos = [c for c in (self._clientes.listar() if self._clientes else []) if c.activo]
+        if not activos:
+            messagebox.showwarning(
+                "Crédito cliente",
+                "No hay clientes con crédito activos. Crea uno en F4 Clientes.",
+            )
+            return None
+        dialogo = Toplevel(self)
+        dialogo.title("Cargar a la cuenta de un cliente")
+        dialogo.transient(self.winfo_toplevel())
+        dialogo.grab_set()
+        lista = Listbox(dialogo, height=min(10, len(activos)), width=44, exportselection=False)
+        for cliente in activos:
+            saldo = saldo_de(self._clientes.movimientos(cliente.id))
+            lista.insert("end", f"{cliente.nombre} · saldo {_formatear_clp(saldo)}")
+        lista.selection_set(0)
+        lista.pack(padx=12, pady=10)
+        lista.focus_set()
+        elegido: list[int] = []
+
+        def aceptar(_evento: object = None) -> None:
+            seleccion = lista.curselection()
+            if seleccion:
+                elegido.append(activos[seleccion[0]].id)
+            dialogo.destroy()
+
+        lista.bind("<Double-Button-1>", aceptar)
+        dialogo.bind("<Return>", aceptar)  # Enter acepta, Esc cancela
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
+        ttk.Button(dialogo, text="Cargar a este cliente", command=aceptar).pack(pady=(0, 10))
+        self.wait_window(dialogo)
+        return elegido[0] if elegido else None
+
+    # ---------------------------------------------- Impresora y cajon (HU-VTA-06) --
+
+    def _imprimir_tras_cobrar(self, venta: Venta, imprimir: bool) -> None:
+        """La venta ya esta registrada: si la impresora falla solo se avisa, nunca se deshace."""
+        if self._imprimir is None:
+            return
+        try:
+            if imprimir:
+                self._imprimir.comprobante(venta)  # imprime y abre el cajon si hubo efectivo
+            else:
+                self._imprimir.abrir_cajon_si_hubo_efectivo(venta)  # igual entra plata a la gaveta
+        except ErrorImpresion as exc:
+            messagebox.showwarning(
+                "Impresora", f"La venta #{venta.id} quedo registrada, pero: {exc}"
+            )
+
+    def _reimprimir_ultimo(self) -> None:
+        if self._imprimir is None:
+            messagebox.showwarning("Impresora", "No hay impresora configurada")
+            return
+        try:
+            venta = self._imprimir.reimprimir_ultimo()
+        except ErrorImpresion as exc:
+            messagebox.showwarning("Impresora", str(exc))
+            return
+        messagebox.showinfo("Impresora", f"Se reimprimio el comprobante de la venta #{venta.id}")
+
+    def _imprimir_corte(self) -> None:
+        turno = self._repo_turnos.obtener_abierto()
+        if turno is None or self._imprimir is None:
+            messagebox.showwarning("Impresora", "No hay una jornada abierta para imprimir su corte")
+            return
+        abonos = Dinero(
+            self._clientes.abonos_en_efectivo_del_turno(turno.id) if self._clientes else 0
+        )
+        arqueo = calcular_arqueo(
+            turno, self._repo_ventas.obtener_por_turno(turno.id), Dinero(0), abonos_efectivo=abonos
+        )
+        try:
+            self._imprimir.corte(turno, arqueo)
+        except ErrorImpresion as exc:
+            messagebox.showwarning("Impresora", str(exc))
+
+    def _atajo_imprimir(self, _evento: object = None) -> None:
+        """F8: reimprime el ultimo comprobante en Venta, o imprime el corte en Caja y corte."""
+        if not self.winfo_ismapped():
+            return
+        if self._subpestanas.index("current") == 1:
+            self._imprimir_corte()
+        else:
+            self._reimprimir_ultimo()
 
     def _quitar_pago(self) -> None:
         venta = self._venta_actual()
@@ -979,9 +1321,11 @@ class VentanaVentas(ttk.Frame):
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo quitar el pago", str(exc))
             return
+        if not any(p.medio is MedioPago.CREDITO_CLIENTE for p in venta.pagos):
+            venta.cliente_id = None  # sin credito ya no hay cliente al que cargar
         self._refrescar_ticket()
 
-    def _cerrar_venta(self) -> None:
+    def _cerrar_venta(self, imprimir: bool = False) -> None:
         venta = self._venta_actual()
         if venta is None:
             return
@@ -990,6 +1334,7 @@ class VentanaVentas(ttk.Frame):
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo cerrar la venta", str(exc))
             return
+        self._imprimir_tras_cobrar(venta, imprimir)
         messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con exito")
         self._refrescar_sync()
         self._refrescar_turno()

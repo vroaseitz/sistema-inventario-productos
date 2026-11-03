@@ -69,6 +69,7 @@ class AjustarStock:
         cantidad_real_contada: float | Decimal,
         motivo: MotivoAjuste,
         usuario: str,
+        observacion: str = "",
     ) -> AjusteInventario:
         """Registra un ajuste de inventario (físico, merma, robo, etc.) y actualiza el stock."""
         cantidad_contada_dec = Decimal(str(cantidad_real_contada))
@@ -87,6 +88,7 @@ class AjustarStock:
             cantidad_nueva=cantidad_contada_dec,
             motivo=motivo,
             usuario=usuario,
+            observacion=observacion.strip(),
         )
 
         existencia.cantidad = cantidad_contada_dec

@@ -27,11 +27,18 @@ class Lote:
     id: int | None = None
     # Identificador estable para sincronizar con Supabase sin depender del id local.
     uuid: str = field(default_factory=lambda: str(uuid4()))
+    # I-02: codigo de lote impreso en el envase (p. ej. «L. 26089 A»); vacio si no se escribio.
+    codigo_lote: str = ""
 
     def __post_init__(self) -> None:
         self.saldo = Decimal(str(self.saldo))
         if self.saldo < 0:
             raise ReglaInventarioInvalida("El saldo de un lote no puede ser negativo")
+
+    @property
+    def etiqueta(self) -> str:
+        """Lo que se muestra al usuario: el codigo impreso o, si no hay, «L» + numero interno."""
+        return self.codigo_lote or f"L{self.id}"
 
     def dias_para_vencer(self, hoy: date) -> int:
         """Dias que le quedan al lote (negativo si ya vencio)."""

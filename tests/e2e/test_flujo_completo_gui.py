@@ -149,7 +149,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
             "vence " + (date.today() + timedelta(days=2)).isoformat()
             in ventas._tabla.item(fila_yog, "values")[5]
         )
-        # ...y F5 "Cambiar lote" permite elegir el otro
+        # ...y F11 "Cambiar lote" permite elegir el otro
         repo_lotes = ventas._registrar_venta.repositorio_lotes
         segundo = repo_lotes.por_producto("YOG")[1]
         ventas._registrar_venta.elegir_lote(ventas._venta, "YOG", segundo.uuid)
@@ -177,7 +177,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         ]
         agregar("CAF", "1")  # $15.296 -> a la decena: $15.300
         assert ventas._lbl_a_cobrar.cget("text") == "A cobrar: $15.300"
-        assert ventas._entrada_monto_pago.get() == "15300"
+        assert ventas._entrada_monto_pago.get() == "15.300"  # O-07: con punto de miles
         ventas._entrada_monto_pago.delete(0, "end")
         ventas._entrada_monto_pago.insert(0, "15.300")  # con punto de miles tambien
         ventas._agregar_pago()

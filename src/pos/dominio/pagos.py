@@ -36,6 +36,14 @@ class MedioPago(Enum):
     CREDITO_CLIENTE = "credito_cliente"
 
 
+NOMBRES_MEDIO = {
+    MedioPago.EFECTIVO: "Efectivo",
+    MedioPago.TARJETA: "Tarjeta",
+    MedioPago.TRANSFERENCIA: "Transferencia",
+    MedioPago.CREDITO_CLIENTE: "Crédito cliente",
+}
+
+
 def redondear_a_decena(monto: int) -> int:
     """Redondea un monto en pesos a la decena mas cercana.
 
