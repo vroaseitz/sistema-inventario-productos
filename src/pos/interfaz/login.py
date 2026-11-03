@@ -49,6 +49,7 @@ class DialogoAcceso(tk.Toplevel):
             row=4, column=0, columnspan=2, pady=(8, 0)
         )
         self.bind("<Return>", lambda _e: self.confirmar())
+        self.bind("<Escape>", lambda _e: self.destroy())  # O-29
         entrada.focus_set()
 
     def confirmar(self) -> None:

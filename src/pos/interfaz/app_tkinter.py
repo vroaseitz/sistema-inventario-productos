@@ -18,9 +18,10 @@ from tkinter import messagebox, ttk
 from pos.aplicacion.casos_uso.editar_producto import EditarProducto
 from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
 from pos.aplicacion.puertos import RepositorioCategorias, RepositorioProductos
-from pos.dominio.categorias import Categoria
+from pos.dominio.categorias import CATEGORIAS_INICIALES, Categoria
 from pos.dominio.errores import ErrorDominio
-from pos.dominio.productos import CATEGORIAS_VALIDAS, Producto, UnidadVenta
+from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
 
 
@@ -36,6 +37,7 @@ class VentanaProductos(ttk.Frame):
 
     # Valor por defecto a nivel de clase: las pruebas de regresion crean la vista con `__new__`.
     _categorias: RepositorioCategorias | None = None
+    _sesion = None  # las pruebas con __new__ no la pasan
 
     def __init__(
         self,
@@ -44,9 +46,11 @@ class VentanaProductos(ttk.Frame):
         registrar_producto: RegistrarProducto,
         editar_producto: EditarProducto,
         repo_categorias: RepositorioCategorias | None = None,
+        sesion=None,
     ) -> None:
         super().__init__(parent)
         self._categorias = repo_categorias
+        self._sesion = sesion
         self._repo = repositorio
         self._registrar = registrar_producto
         self._editar = editar_producto
@@ -60,7 +64,7 @@ class VentanaProductos(ttk.Frame):
     def _lista_categorias(self) -> list[Categoria]:
         if self._categorias is not None:
             return self._categorias.listar()
-        return [Categoria(i + 1, n) for i, n in enumerate(CATEGORIAS_VALIDAS)]
+        return [Categoria(i + 1, n) for i, n in enumerate(CATEGORIAS_INICIALES)]
 
     def _id_categoria(self, nombre: str) -> int:
         for categoria in self._lista_categorias():
@@ -148,7 +152,7 @@ class VentanaProductos(ttk.Frame):
         self._categoria = ttk.Combobox(
             marco_form,
             values=[c.nombre for c in self._lista_categorias()],
-            width=18,
+            width=34,  # CA-02: la lista desplegable no corta los nombres largos
             state="readonly",
         )
         self._categoria.grid(row=0, column=5, padx=4, pady=6)
@@ -205,7 +209,7 @@ class VentanaProductos(ttk.Frame):
         self._tabla.column("codigo", width=100, minwidth=80)
         self._tabla.column("precio", width=90, anchor="e")
         self._tabla.column("unidad", width=90, anchor="center")
-        self._tabla.column("categoria", width=100)
+        self._tabla.column("categoria", width=210)
         self._tabla.column("costo", width=100, anchor="e")
         self._tabla.pack(fill="both", expand=True, padx=12, pady=8)
 
@@ -237,8 +241,8 @@ class VentanaProductos(ttk.Frame):
             return
 
         try:
-            costo = int(costo_str)
-            precio = int(precio_str) if precio_str else 0
+            costo = parsear_monto(costo_str)
+            precio = parsear_monto(precio_str) if precio_str else 0
 
             # C-06: el markup sobre costo neto 0 no esta definido y el margen
             # con costo 0 es 100% falso: ambos se reportan como dato faltante.
@@ -279,7 +283,7 @@ class VentanaProductos(ttk.Frame):
                 raise ValueError("La categoria es obligatoria (C-04).")
             cat_id = self._id_categoria(cat_str)
             costo_str = self._costo_var.get().strip()
-            costo_val = int(costo_str) if costo_str else None
+            costo_val = parsear_monto(costo_str) if costo_str else None
             perecible = self._perecible.get()
             dias_str = self._dias_aviso.get().strip()
             dias_aviso = int(dias_str) if dias_str else None
@@ -290,7 +294,7 @@ class VentanaProductos(ttk.Frame):
             producto = self._registrar.ejecutar(
                 codigo=self._entradas["codigo"].get().strip(),
                 nombre=self._entradas["nombre"].get().strip(),
-                precio=int(self._entradas["precio"].get() or 0),
+                precio=parsear_monto(self._entradas["precio"].get() or "0"),
                 unidad_venta=unidad,
                 categoria_id=cat_id,
                 costo=costo_val,
@@ -343,8 +347,10 @@ class VentanaProductos(ttk.Frame):
         self._entradas["nombre"].delete(0, tk.END)
         self._entradas["nombre"].insert(0, producto.nombre)
         self._entradas["precio"].delete(0, tk.END)
-        self._entradas["precio"].insert(0, str(producto.precio.monto))
-        self._costo_var.set(str(producto.costo.neto.monto) if producto.costo else "")
+        self._entradas["precio"].insert(0, formatear_clp(producto.precio.monto).lstrip("$"))
+        self._costo_var.set(
+            formatear_clp(producto.costo.neto.monto).lstrip("$") if producto.costo else ""
+        )
         self._dias_aviso.delete(0, tk.END)
         if producto.dias_aviso is not None:
             self._dias_aviso.insert(0, str(producto.dias_aviso))
@@ -375,7 +381,7 @@ class VentanaProductos(ttk.Frame):
                 raise ValueError("La categoria es obligatoria (C-04).")
             cat_id = self._id_categoria(cat_str)
             costo_str = self._costo_var.get().strip()
-            costo_val = int(costo_str) if costo_str else None
+            costo_val = parsear_monto(costo_str) if costo_str else None
             dias_str = self._dias_aviso.get().strip()
             dias_aviso = int(dias_str) if dias_str else None
             perecible = self._perecible.get()
@@ -383,9 +389,9 @@ class VentanaProductos(ttk.Frame):
             self._editar.ejecutar(
                 codigo=codigo,
                 nuevo_nombre=self._entradas["nombre"].get().strip(),
-                nuevo_precio=int(self._entradas["precio"].get() or 0),
+                nuevo_precio=parsear_monto(self._entradas["precio"].get() or "0"),
                 nueva_categoria_id=cat_id,
-                usuario="Usuario_POS",
+                usuario=(self._sesion.nombre if self._sesion else "") or "Usuario_POS",
                 costo=costo_val,
                 perecible=perecible,
                 dias_aviso=dias_aviso if perecible else None,
@@ -428,10 +434,10 @@ class VentanaProductos(ttk.Frame):
             values=(
                 p.codigo,
                 p.nombre,
-                p.precio.monto,
+                formatear_clp(p.precio.monto),  # O-07: punto de miles
                 p.unidad_venta.value,
                 categoria,
-                p.costo.neto.monto if p.costo else "",
+                formatear_clp(p.costo.neto.monto) if p.costo else "",
             ),
         )
 

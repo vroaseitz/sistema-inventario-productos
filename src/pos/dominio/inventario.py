@@ -18,6 +18,12 @@ class MotivoAjuste(StrEnum):
     VENCIMIENTO = "vencimiento"
     INVENTARIO_FISICO = "inventario_fisico"
     INGRESO_MANUAL = "ingreso_manual"
+    # Motivos del prototipo v3 para «Registrar merma o ajuste» (HU-INV-04); la lista final la
+    # define la Product Owner con las propietarias.
+    ROTURA = "rotura"
+    PERDIDA = "perdida"
+    CONSUMO_INTERNO = "consumo_interno"
+    DEVOLUCION = "devolucion"
 
 
 @dataclass(frozen=True)
@@ -30,6 +36,7 @@ class AjusteInventario:
     motivo: MotivoAjuste
     usuario: str
     fecha: datetime = field(default_factory=datetime.now)
+    observacion: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "cantidad_anterior", Decimal(str(self.cantidad_anterior)))
