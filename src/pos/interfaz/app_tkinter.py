@@ -37,6 +37,7 @@ class VentanaProductos(ttk.Frame):
 
     # Valor por defecto a nivel de clase: las pruebas de regresion crean la vista con `__new__`.
     _categorias: RepositorioCategorias | None = None
+    _sesion = None  # las pruebas con __new__ no la pasan
 
     def __init__(
         self,
@@ -45,9 +46,11 @@ class VentanaProductos(ttk.Frame):
         registrar_producto: RegistrarProducto,
         editar_producto: EditarProducto,
         repo_categorias: RepositorioCategorias | None = None,
+        sesion=None,
     ) -> None:
         super().__init__(parent)
         self._categorias = repo_categorias
+        self._sesion = sesion
         self._repo = repositorio
         self._registrar = registrar_producto
         self._editar = editar_producto
@@ -388,7 +391,7 @@ class VentanaProductos(ttk.Frame):
                 nuevo_nombre=self._entradas["nombre"].get().strip(),
                 nuevo_precio=parsear_monto(self._entradas["precio"].get() or "0"),
                 nueva_categoria_id=cat_id,
-                usuario="Usuario_POS",
+                usuario=(self._sesion.nombre if self._sesion else "") or "Usuario_POS",
                 costo=costo_val,
                 perecible=perecible,
                 dias_aviso=dias_aviso if perecible else None,

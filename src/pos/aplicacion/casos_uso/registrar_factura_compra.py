@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
@@ -34,6 +35,7 @@ class RegistrarFacturaCompra:
     repositorio_lotes: RepositorioLotes
     cola: ColaSincronizacion | None = None
     repositorio_categorias: RepositorioCategorias | None = None
+    auditor: Auditor | None = None
 
     def confirmar(self, factura: FacturaCompra, hoy: date | None = None) -> FacturaCompra:
         hoy = hoy or date.today()
@@ -80,4 +82,11 @@ class RegistrarFacturaCompra:
                 codigo_lote=linea.codigo_lote,
             )
         self.repositorio_facturas.guardar(factura)
+        if self.auditor is not None:
+            self.auditor.registrar(
+                "Confirmación de factura",
+                f"{factura.numero} · {factura.proveedor}",
+                "Borrador",
+                "Confirmada",
+            )
         return factura

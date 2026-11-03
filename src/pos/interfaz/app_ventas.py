@@ -29,6 +29,7 @@ from pos.aplicacion.puertos import (
     PublicadorRemoto,
     RepositorioAuditoria,
     RepositorioClientes,
+    RepositorioConfiguracion,
     RepositorioProductos,
     RepositorioTicketsEspera,
     RepositorioTurnosCaja,
@@ -96,6 +97,7 @@ class VentanaVentas(ttk.Frame):
         repo_tickets: RepositorioTicketsEspera | None = None,
         auditoria: RepositorioAuditoria | None = None,
         repo_clientes: RepositorioClientes | None = None,
+        configuracion: RepositorioConfiguracion | None = None,
     ) -> None:
         super().__init__(parent)
         self._sesion = sesion or Sesion(USUARIO_DEMO)
@@ -112,6 +114,8 @@ class VentanaVentas(ttk.Frame):
         self._repo_tickets = repo_tickets
         self._auditoria = auditoria
         self._clientes = repo_clientes
+        self._configuracion = configuracion
+        self._ayuda_conteo = ""
         # O-25: no se guarda nada hasta haber restaurado lo guardado; si no, el primer
         # refresco al abrir la app sobrescribia los tickets en espera con una lista vacia.
         self._persistir = False
@@ -423,6 +427,10 @@ class VentanaVentas(ttk.Frame):
         dialogo.transient(self.winfo_toplevel())
         dialogo.grab_set()
 
+        if self._ayuda_conteo:
+            ttk.Label(dialogo, text=self._ayuda_conteo, foreground="#666").grid(
+                row=len(DENOMINACIONES_CLP) + 2, column=0, columnspan=2, pady=(0, 6)
+            )
         entradas: dict[int, ttk.Entry] = {}
         for fila, denominacion in enumerate(DENOMINACIONES_CLP):
             ttk.Label(dialogo, text=_formatear_clp(denominacion)).grid(
@@ -480,7 +488,11 @@ class VentanaVentas(ttk.Frame):
         return resultado["valor"]
 
     def _abrir_turno_ui(self) -> None:
+        if self._configuracion is not None:
+            habitual = self._configuracion.obtener("fondo_habitual")
+            self._ayuda_conteo = f"Fondo de caja habitual: {_formatear_clp(habitual)}"
         conteo = self._contar_denominaciones_ui("Abrir turno - contar fondo inicial")
+        self._ayuda_conteo = ""
         if conteo is None:
             return
         try:
@@ -769,7 +781,10 @@ class VentanaVentas(ttk.Frame):
             self._auditoria.registrar(
                 self._sesion.nombre or str(self._sesion.usuario_id),
                 "tickets_descartados_al_cerrar_jornada",
-                {
+                registro=f"{len(pendientes)} ticket{'s' if len(pendientes) != 1 else ''}",
+                antes=_formatear_clp(sum(v.total.monto for v in pendientes)),
+                despues="descartados",
+                detalle={
                     "cantidad": len(pendientes),
                     "total": sum(v.total.monto for v in pendientes),
                     "tickets": [

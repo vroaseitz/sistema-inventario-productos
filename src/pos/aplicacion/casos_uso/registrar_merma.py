@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
+from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.casos_uso.ajustar_stock import AjustarStock
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
@@ -30,6 +31,7 @@ class RegistrarMerma:
     repositorio_ajustes: RepositorioAjustes
     repositorio_lotes: RepositorioLotes | None = None
     cola: ColaSincronizacion | None = None
+    auditor: Auditor | None = None
 
     def ejecutar(
         self,
@@ -56,6 +58,14 @@ class RegistrarMerma:
             self.repositorio_existencias, self.repositorio_ajustes, cola=self.cola
         ).ejecutar(codigo_producto, actual - baja, motivo, usuario, observacion)
         self._descontar_lotes(codigo_producto, baja)
+        if self.auditor is not None:
+            self.auditor.registrar(
+                f"Merma ({motivo.value})",
+                codigo_producto,
+                str(ajuste.cantidad_anterior),
+                str(ajuste.cantidad_nueva),
+                {"observacion": observacion},
+            )
         return ajuste
 
     def _descontar_lotes(self, codigo: str, cantidad: Decimal) -> None:

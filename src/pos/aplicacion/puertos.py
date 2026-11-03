@@ -103,6 +103,8 @@ class RepositorioUsuarios(Protocol):
     def guardar(self, usuario: Usuario) -> None: ...
     def obtener_por_nombre(self, nombre: str) -> Usuario | None: ...
     def hay_usuarios(self) -> bool: ...
+    def listar(self) -> list[Usuario]: ...
+    def registrar_acceso(self, usuario_id: int) -> None: ...
 
 
 @runtime_checkable
@@ -140,8 +142,31 @@ class RepositorioFacturasCompra(Protocol):
 class RepositorioAuditoria(Protocol):
     """Puerto del registro de auditoria (HU-USR-03): quien hizo que y cuando."""
 
-    def registrar(self, usuario: str, accion: str, detalle: dict) -> None: ...
-    def listar(self, accion: str | None = None) -> list[dict]: ...
+    def registrar(
+        self,
+        usuario: str,
+        accion: str,
+        detalle: dict,
+        registro: str = "",
+        antes: str = "",
+        despues: str = "",
+    ) -> None: ...
+    def listar(
+        self,
+        accion: str | None = None,
+        usuario: str | None = None,
+        desde: date | None = None,
+        hasta: date | None = None,
+    ) -> list[dict]: ...
+
+
+@runtime_checkable
+class RepositorioConfiguracion(Protocol):
+    """Puerto de los parametros de operacion (F7 Configuracion)."""
+
+    def obtener(self, clave: str) -> int: ...
+    def guardar(self, clave: str, valor: int) -> None: ...
+    def restaurar_valores_por_defecto(self) -> None: ...
 
 
 @runtime_checkable

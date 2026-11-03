@@ -19,7 +19,15 @@ def test_hay_siete_modulos_con_atajo_y_color_del_prototipo():
 
 def test_solo_los_modulos_con_pantalla_se_declaran_implementados():
     # Honestidad: los demas modulos son marcadores, no pantallas (ver informe final).
-    assert {m.clave for m in MODULOS if m.implementado} == {"F1", "F2", "F3", "F4", "F5", "F6"}
+    assert {m.clave for m in MODULOS if m.implementado} == {
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+    }
 
 
 def _hay_pantalla() -> bool:

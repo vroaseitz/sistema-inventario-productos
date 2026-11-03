@@ -75,7 +75,14 @@ CREATE TABLE IF NOT EXISTS usuarios (
     nombre     TEXT NOT NULL UNIQUE,
     clave_hash TEXT NOT NULL,
     rol        TEXT NOT NULL CHECK (rol IN ('admin', 'cajero')),
-    activo     INTEGER NOT NULL DEFAULT 1
+    activo     INTEGER NOT NULL DEFAULT 1,
+    ultimo_acceso TEXT
+);
+
+-- Parametros de operacion editables en F7 Configuracion (clave -> valor).
+CREATE TABLE IF NOT EXISTS configuracion (
+    clave  TEXT PRIMARY KEY,
+    valor  TEXT NOT NULL
 );
 
 -- Tickets abiertos sin cobrar (O-25): solo productos y lote elegido, nunca pagos.
@@ -139,7 +146,10 @@ CREATE TABLE IF NOT EXISTS auditoria (
     fecha      TEXT NOT NULL,
     usuario    TEXT NOT NULL,
     accion     TEXT NOT NULL,
-    detalle    TEXT NOT NULL
+    detalle    TEXT NOT NULL,
+    registro   TEXT NOT NULL DEFAULT '',
+    antes      TEXT NOT NULL DEFAULT '',
+    despues    TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS turnos_caja (
@@ -218,6 +228,10 @@ CREATE TABLE IF NOT EXISTS lotes (
 _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
     "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE usuarios ADD COLUMN ultimo_acceso TEXT",
+    "ALTER TABLE auditoria ADD COLUMN registro TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE auditoria ADD COLUMN antes TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE auditoria ADD COLUMN despues TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE historial_ajustes_inventario ADD COLUMN observacion TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
