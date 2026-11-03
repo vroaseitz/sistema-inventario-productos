@@ -19,9 +19,15 @@ from pos.aplicacion.puertos import (
     RepositorioExistencias,
     RepositorioLotes,
 )
+from pos.aplicacion.registro_movimientos import RegistroMovimientos
 from pos.aplicacion.sincronizacion import encolar_lote
 from pos.dominio.errores import ReglaInventarioInvalida
-from pos.dominio.inventario import AjusteInventario, MotivoAjuste
+from pos.dominio.inventario import (
+    ETIQUETAS_MOTIVO,
+    AjusteInventario,
+    MotivoAjuste,
+    TipoMovimiento,
+)
 from pos.dominio.lotes import consumir_fefo
 
 
@@ -32,6 +38,7 @@ class RegistrarMerma:
     repositorio_lotes: RepositorioLotes | None = None
     cola: ColaSincronizacion | None = None
     auditor: Auditor | None = None
+    movimientos: RegistroMovimientos | None = None
 
     def ejecutar(
         self,
@@ -58,6 +65,10 @@ class RegistrarMerma:
             self.repositorio_existencias, self.repositorio_ajustes, cola=self.cola
         ).ejecutar(codigo_producto, actual - baja, motivo, usuario, observacion)
         self._descontar_lotes(codigo_producto, baja)
+        if self.movimientos is not None:
+            self.movimientos.registrar(
+                codigo_producto, TipoMovimiento.MERMA, -baja, ETIQUETAS_MOTIVO[motivo]
+            )
         if self.auditor is not None:
             self.auditor.registrar(
                 f"Merma ({motivo.value})",

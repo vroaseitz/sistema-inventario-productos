@@ -14,7 +14,12 @@ from pos.dominio.caja import MovimientoCaja, TurnoCaja
 from pos.dominio.categorias import Categoria
 from pos.dominio.clientes import Cliente, MovimientoCliente
 from pos.dominio.compras import FacturaCompra
-from pos.dominio.inventario import AjusteInventario, Existencia
+from pos.dominio.inventario import (
+    AjusteInventario,
+    Existencia,
+    MovimientoInventario,
+    TipoMovimiento,
+)
 from pos.dominio.lotes import Lote
 from pos.dominio.productos import Producto, RegistroCambioPrecio
 from pos.dominio.usuarios import Usuario
@@ -115,6 +120,20 @@ class RepositorioTicketsEspera(Protocol):
 
     def guardar(self, tickets: list[dict]) -> None: ...
     def cargar(self) -> list[dict]: ...
+
+
+@runtime_checkable
+class RepositorioMovimientos(Protocol):
+    """Puerto del historial de movimientos de inventario (HU-INV-08)."""
+
+    def registrar(self, movimiento: MovimientoInventario) -> None: ...
+    def listar(
+        self,
+        desde: date | None = None,
+        hasta: date | None = None,
+        tipo: TipoMovimiento | None = None,
+        codigo: str | None = None,
+    ) -> list[MovimientoInventario]: ...
 
 
 @runtime_checkable

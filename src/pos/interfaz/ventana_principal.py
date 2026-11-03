@@ -213,6 +213,12 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import (
         ConsultarAlertasVencimiento,
     )
+    from pos.aplicacion.casos_uso.consultar_inventario import (
+        ConsultarExistencias,
+        ConsultarMovimientos,
+        DefinirStockMinimo,
+        ReporteInventario,
+    )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
     from pos.aplicacion.casos_uso.gestionar_clientes import GestionarClientes, RegistrarAbono
     from pos.aplicacion.casos_uso.gestionar_usuarios import GestionarUsuarios
@@ -225,6 +231,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
     from pos.aplicacion.casos_uso.reporte_rentabilidad import ReporteRentabilidad, ReporteRotacion
     from pos.aplicacion.casos_uso.reporte_ventas import ReporteVentas
+    from pos.aplicacion.registro_movimientos import RegistroMovimientos
     from pos.dominio.usuarios import NOMBRES_ROL, Rol, modulos_permitidos
     from pos.infraestructura.config import Config
     from pos.infraestructura.impresion.impresoras import crear_impresora
@@ -247,6 +254,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     )
     from pos.infraestructura.sqlite.repositorio_historial import RepositorioHistorialSQLite
     from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
+    from pos.infraestructura.sqlite.repositorio_movimientos import RepositorioMovimientosSQLite
     from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
     from pos.infraestructura.sqlite.repositorio_tickets_espera import (
         RepositorioTicketsEsperaSQLite,
@@ -278,6 +286,8 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     # HU-USR-03: el nombre sale de la sesion en el momento de cada cambio (la sesion puede cambiar).
     auditor = Auditor(repo_auditoria, lambda: sesion.nombre)
     gestion_usuarios = GestionarUsuarios(repo_usuarios, hasheador, auditor)
+    repo_movimientos = RepositorioMovimientosSQLite(conexion)
+    movimientos = RegistroMovimientos(repo_movimientos, lambda: sesion.nombre)
     carpeta_comprobantes = Path(config.sqlite_path).resolve().parent / "comprobantes"
     imprimir = ImprimirComprobante(
         lambda: crear_impresora(
@@ -307,6 +317,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     cola=cola,
                     repositorio_lotes=repo_lotes,
                     repositorio_clientes=repo_clientes,
+                    movimientos=movimientos,
                 ),
                 AbrirTurnoCaja(repo_turnos, cola=cola),
                 CerrarTurnoCaja(
@@ -357,6 +368,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     cola=cola,
                     repositorio_categorias=repo_categorias,
                     auditor=auditor,
+                    movimientos=movimientos,
                 ),
                 repo_facturas,
                 repo_productos,
@@ -377,7 +389,13 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
             "F3": lambda padre: VentanaInventario(
                 padre,
                 repo_productos,
-                IngresarStock(repo_productos, repo_existencias, repo_lotes, cola=cola),
+                IngresarStock(
+                    repo_productos,
+                    repo_existencias,
+                    repo_lotes,
+                    cola=cola,
+                    movimientos=movimientos,
+                ),
                 ConsultarAlertasVencimiento(repo_lotes, repo_productos, configuracion=repo_config),
                 repo_lotes,
                 registrar_merma=RegistrarMerma(
@@ -386,9 +404,17 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     repositorio_lotes=repo_lotes,
                     cola=cola,
                     auditor=auditor,
+                    movimientos=movimientos,
                 ),
                 repo_existencias=repo_existencias,
                 sesion=sesion,
+                consultar_existencias=ConsultarExistencias(
+                    repo_productos, repo_existencias, repo_ventas
+                ),
+                definir_minimo=DefinirStockMinimo(repo_productos, auditor),
+                reporte_inventario=ReporteInventario(repo_productos, repo_existencias),
+                consultar_movimientos=ConsultarMovimientos(repo_movimientos, repo_productos),
+                repo_categorias=repo_categorias,
             ),
             "F7": lambda padre: VentanaAdministracion(
                 padre,

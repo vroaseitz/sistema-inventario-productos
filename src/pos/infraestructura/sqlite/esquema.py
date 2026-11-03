@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS productos (
     activo        INTEGER NOT NULL DEFAULT 1,
     costo_neto    INTEGER,
     perecible     INTEGER NOT NULL DEFAULT 0,
-    dias_aviso    INTEGER
+    dias_aviso    INTEGER,
+    stock_minimo  INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS existencias (
@@ -77,6 +78,17 @@ CREATE TABLE IF NOT EXISTS usuarios (
     rol        TEXT NOT NULL CHECK (rol IN ('admin', 'cajero')),
     activo     INTEGER NOT NULL DEFAULT 1,
     ultimo_acceso TEXT
+);
+
+-- Historial de movimientos de inventario (HU-INV-08): nunca se edita ni se borra.
+CREATE TABLE IF NOT EXISTS movimientos_inventario (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha            TEXT NOT NULL,
+    codigo_producto  TEXT NOT NULL,
+    tipo             TEXT NOT NULL,
+    cantidad         TEXT NOT NULL,
+    motivo           TEXT NOT NULL DEFAULT '',
+    usuario          TEXT NOT NULL DEFAULT ''
 );
 
 -- Parametros de operacion editables en F7 Configuracion (clave -> valor).
@@ -229,6 +241,7 @@ _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
     "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE usuarios ADD COLUMN ultimo_acceso TEXT",
+    "ALTER TABLE productos ADD COLUMN stock_minimo INTEGER",
     "ALTER TABLE auditoria ADD COLUMN registro TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE auditoria ADD COLUMN antes TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE auditoria ADD COLUMN despues TEXT NOT NULL DEFAULT ''",

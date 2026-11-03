@@ -322,17 +322,36 @@ con3 = crear_conexion(ruta)
 lotes3 = RepositorioLotesSQLite(con3)
 productos3 = RepositorioProductosSQLite(con3)
 existencias3 = RepositorioExistenciasSQLite(con3)
+from pos.aplicacion.casos_uso.consultar_inventario import (  # noqa: E402
+    ConsultarExistencias,
+    ConsultarMovimientos,
+    DefinirStockMinimo,
+    ReporteInventario,
+)
 from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma  # noqa: E402
+from pos.aplicacion.registro_movimientos import RegistroMovimientos  # noqa: E402
 from pos.infraestructura.sqlite.repositorio_existencias import RepositorioAjustesSQLite  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_movimientos import (  # noqa: E402
+    RepositorioMovimientosSQLite,
+)
+from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite as RV  # noqa: E402
 
+repo_movs = RepositorioMovimientosSQLite(con3)
+registro_movs = RegistroMovimientos(repo_movs, lambda: "ana")
 inventario = VentanaInventario(
     raiz,
     productos3,
-    IngresarStock(productos3, existencias3, lotes3),
+    IngresarStock(productos3, existencias3, lotes3, movimientos=registro_movs),
     ConsultarAlertasVencimiento(lotes3, productos3),
     lotes3,
-    registrar_merma=RegistrarMerma(existencias3, RepositorioAjustesSQLite(con3), lotes3),
+    registrar_merma=RegistrarMerma(
+        existencias3, RepositorioAjustesSQLite(con3), lotes3, movimientos=registro_movs
+    ),
     repo_existencias=existencias3,
+    consultar_existencias=ConsultarExistencias(productos3, existencias3, RV(con3)),
+    definir_minimo=DefinirStockMinimo(productos3),
+    reporte_inventario=ReporteInventario(productos3, existencias3),
+    consultar_movimientos=ConsultarMovimientos(repo_movs, productos3),
 )
 inventario.pack()
 raiz.update()
@@ -404,6 +423,50 @@ verificar(existencias3.obtener("NUE").cantidad == Decimal("51.5"), "HU-INV-04: b
 verificar(
     [x.saldo for x in lotes3.por_producto("NUE")] == [Decimal("1.5")],
     "HU-INV-04: baja tambien el lote",
+)
+# --- HU-INV-05 / 07 / 08: existencias con minimo, inventario valorizado y movimientos ----------
+inventario.refrescar()
+estados = {f.codigo: f.estado for f in inventario.existencias.consultar()}
+verificar(estados["NUE"] == "Granel", f"HU-INV-05: el granel se muestra aparte {estados}")
+verificar(
+    inventario.existencias.definir_minimo("7801", "70") is True, "HU-INV-05: guarda el minimo"
+)
+estados = {f.codigo: f.estado for f in inventario.existencias.consultar()}
+verificar(
+    estados["7801"] == "Bajo el mínimo", "HU-INV-05: 50 unidades con minimo 70 = bajo el minimo"
+)
+mensajes.clear()
+verificar(
+    inventario.existencias.definir_minimo("7801", "mucho") is False, "HU-INV-05: minimo mal escrito"
+)
+verificar(
+    inventario.existencias.definir_minimo("NUE", "5") is False,
+    "HU-INV-05: el granel no lleva minimo",
+)
+primera = inventario.existencias._tabla.get_children()[0]
+verificar(primera == "7801", f"HU-INV-05: lo urgente va primero ({primera})")
+inventario.reporte.refrescar()
+verificar(
+    "Total valorizado: $0" in inventario.reporte._lbl_total.cget("text"),
+    "HU-INV-07: sin costos el total es $0",
+)
+verificar(
+    "fuera del total" in inventario.reporte._lbl_total.cget("text"),
+    "HU-INV-07: avisa los que quedan fuera",
+)
+movs_pantalla = [
+    inventario.movimientos._tabla.item(i, "values")
+    for i in inventario.movimientos._tabla.get_children()
+]
+tipos = [m[2] for m in movs_pantalla]
+verificar(
+    "Entrada" in tipos and "Merma" in tipos, f"HU-INV-08: entrada y merma en el historial {tipos}"
+)
+verificar(all(m[5] == "ana" for m in movs_pantalla), "HU-INV-08: queda el usuario")
+verificar(
+    any(m[3].startswith("−") for m in movs_pantalla)
+    and any(m[3].startswith("+") for m in movs_pantalla),
+    "HU-INV-08: cantidades con signo",
 )
 inventario.destroy()
 

@@ -12,11 +12,27 @@ from decimal import Decimal, InvalidOperation
 from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import ConsultarAlertasVencimiento
+from pos.aplicacion.casos_uso.consultar_inventario import (
+    ConsultarExistencias,
+    ConsultarMovimientos,
+    DefinirStockMinimo,
+    ReporteInventario,
+)
 from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
 from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
-from pos.aplicacion.puertos import RepositorioExistencias, RepositorioLotes, RepositorioProductos
+from pos.aplicacion.puertos import (
+    RepositorioCategorias,
+    RepositorioExistencias,
+    RepositorioLotes,
+    RepositorioProductos,
+)
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.inventario import MotivoAjuste
+from pos.interfaz.app_inventario_consultas import (
+    PanelExistencias,
+    PanelMovimientos,
+    PanelReporteInventario,
+)
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.sesion import Sesion
 
@@ -35,7 +51,7 @@ MOTIVOS_MERMA = {
 }
 
 
-class VentanaInventario(ttk.Frame):
+class PanelEntradaYAlertas(ttk.Frame):
     def __init__(
         self,
         parent: tk.Misc,
@@ -302,3 +318,70 @@ class VentanaInventario(ttk.Frame):
                     _clp(alerta.precio_sugerido.monto),
                 ),
             )
+
+
+class VentanaInventario(ttk.Frame):
+    """F3 Inventario: entrada y alertas (HU-INV-01/02/03/04/06), existencias con minimo
+    (HU-INV-05), reporte valorizado (HU-INV-07) y movimientos (HU-INV-08)."""
+
+    def __init__(
+        self,
+        parent: tk.Misc,
+        repo_productos: RepositorioProductos,
+        ingresar_stock: IngresarStock,
+        consultar_alertas: ConsultarAlertasVencimiento,
+        repo_lotes: RepositorioLotes | None = None,
+        registrar_merma: RegistrarMerma | None = None,
+        repo_existencias: RepositorioExistencias | None = None,
+        sesion: Sesion | None = None,
+        consultar_existencias: ConsultarExistencias | None = None,
+        definir_minimo: DefinirStockMinimo | None = None,
+        reporte_inventario: ReporteInventario | None = None,
+        consultar_movimientos: ConsultarMovimientos | None = None,
+        repo_categorias: RepositorioCategorias | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._pestanas = ttk.Notebook(self)
+        self._pestanas.pack(fill="both", expand=True)
+        self._panel_entrada = PanelEntradaYAlertas(
+            self._pestanas,
+            repo_productos,
+            ingresar_stock,
+            consultar_alertas,
+            repo_lotes,
+            registrar_merma,
+            repo_existencias,
+            sesion,
+        )
+        self._pestanas.add(self._panel_entrada, text="Entrada y alertas")
+        self._paneles: list = []
+        if consultar_existencias is not None and definir_minimo is not None:
+            self.existencias = PanelExistencias(
+                self._pestanas, consultar_existencias, definir_minimo, repo_categorias
+            )
+            self._pestanas.add(self.existencias, text="Existencias")
+            self._paneles.append(self.existencias)
+        if reporte_inventario is not None:
+            self.reporte = PanelReporteInventario(
+                self._pestanas, reporte_inventario, repo_categorias
+            )
+            self._pestanas.add(self.reporte, text="Reporte de inventario")
+            self._paneles.append(self.reporte)
+        if consultar_movimientos is not None:
+            self.movimientos = PanelMovimientos(self._pestanas, consultar_movimientos)
+            self._pestanas.add(self.movimientos, text="Movimientos")
+            self._paneles.append(self.movimientos)
+
+    def __getattr__(self, nombre: str):
+        """La pestana de entrada conserva sus nombres de siempre (_codigo, _registrar, ...)."""
+        if nombre.startswith("__") or nombre == "_panel_entrada":
+            raise AttributeError(nombre)
+        return getattr(self._panel_entrada, nombre)
+
+    def refrescar(self) -> None:
+        self._panel_entrada.refrescar()
+        for panel in self._paneles:
+            panel.refrescar()
+
+    def al_mostrar(self) -> None:
+        self.refrescar()

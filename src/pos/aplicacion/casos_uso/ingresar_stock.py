@@ -18,8 +18,10 @@ from pos.aplicacion.puertos import (
     RepositorioLotes,
     RepositorioProductos,
 )
+from pos.aplicacion.registro_movimientos import RegistroMovimientos
 from pos.aplicacion.sincronizacion import encolar_lote
 from pos.dominio.errores import DatosProductoInvalidos, ReglaInventarioInvalida
+from pos.dominio.inventario import TipoMovimiento
 from pos.dominio.lotes import Lote
 
 
@@ -29,6 +31,7 @@ class IngresarStock:
     repositorio_existencias: RepositorioExistencias
     repositorio_lotes: RepositorioLotes
     cola: ColaSincronizacion | None = None
+    movimientos: RegistroMovimientos | None = None
 
     def ejecutar(
         self,
@@ -54,6 +57,10 @@ class IngresarStock:
         AjustarStock(self.repositorio_existencias, cola=self.cola).ingresar(
             codigo_producto, cantidad_dec, motivo
         )
+        if self.movimientos is not None:
+            self.movimientos.registrar(
+                codigo_producto, TipoMovimiento.ENTRADA, cantidad_dec, motivo
+            )
         if fecha_vencimiento is None:
             return None
         lote = Lote(

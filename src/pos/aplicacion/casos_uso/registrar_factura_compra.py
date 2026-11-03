@@ -21,6 +21,7 @@ from pos.aplicacion.puertos import (
     RepositorioLotes,
     RepositorioProductos,
 )
+from pos.aplicacion.registro_movimientos import RegistroMovimientos
 from pos.aplicacion.sincronizacion import encolar_producto
 from pos.dominio.compras import FacturaCompra
 from pos.dominio.errores import ReglaCompraInvalida
@@ -36,6 +37,7 @@ class RegistrarFacturaCompra:
     cola: ColaSincronizacion | None = None
     repositorio_categorias: RepositorioCategorias | None = None
     auditor: Auditor | None = None
+    movimientos: RegistroMovimientos | None = None
 
     def confirmar(self, factura: FacturaCompra, hoy: date | None = None) -> FacturaCompra:
         hoy = hoy or date.today()
@@ -60,6 +62,7 @@ class RegistrarFacturaCompra:
             self.repositorio_existencias,
             self.repositorio_lotes,
             cola=self.cola,
+            movimientos=self.movimientos,
         )
         for linea in factura.lineas:
             producto = self.repositorio_productos.obtener_por_codigo(linea.codigo_producto)

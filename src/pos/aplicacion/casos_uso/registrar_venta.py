@@ -20,9 +20,11 @@ from pos.aplicacion.puertos import (
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
+from pos.aplicacion.registro_movimientos import RegistroMovimientos
 from pos.aplicacion.sincronizacion import encolar_existencia, encolar_lote, encolar_venta
 from pos.dominio.clientes import MovimientoCliente, TipoMovimientoCliente
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
+from pos.dominio.inventario import TipoMovimiento
 from pos.dominio.lotes import Lote, consumir_fefo, proponer_lote
 from pos.dominio.pagos import MedioPago, Pago
 from pos.dominio.productos import UnidadVenta
@@ -38,6 +40,7 @@ class RegistrarVenta:
     cola: ColaSincronizacion | None = None
     repositorio_lotes: RepositorioLotes | None = None
     repositorio_clientes: RepositorioClientes | None = None
+    movimientos: RegistroMovimientos | None = None
 
     def iniciar(self, usuario_id: int, cliente_id: int | None = None) -> Venta:
         turno = self.repositorio_turnos.obtener_abierto()
@@ -115,6 +118,14 @@ class RegistrarVenta:
         self.repositorio_ventas.guardar(venta)
         if credito:
             self._cargar_a_la_cuenta(venta, credito)
+        if self.movimientos is not None:
+            for detalle in venta.detalles:
+                self.movimientos.registrar(
+                    detalle.producto_codigo,
+                    TipoMovimiento.VENTA,
+                    -detalle.cantidad,
+                    f"Ticket {venta.id}",
+                )
         turno = self.repositorio_turnos.obtener_abierto()
         if turno is not None:
             encolar_venta(self.cola, venta, turno.uuid)
