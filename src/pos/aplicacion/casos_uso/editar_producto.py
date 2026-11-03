@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
     RepositorioCategorias,
@@ -12,6 +13,7 @@ from pos.aplicacion.puertos import (
 )
 from pos.aplicacion.sincronizacion import encolar_producto
 from pos.dominio.errores import DatosProductoInvalidos
+from pos.dominio.formato import formatear_clp
 from pos.dominio.productos import RegistroCambioPrecio
 from pos.dominio.value_objects import Costo, Dinero
 
@@ -22,6 +24,7 @@ class EditarProducto:
     repositorio_historial: RepositorioHistorial
     cola: ColaSincronizacion | None = None
     repositorio_categorias: RepositorioCategorias | None = None
+    auditor: Auditor | None = None
 
     def ejecutar(
         self,
@@ -71,3 +74,10 @@ class EditarProducto:
                 usuario=usuario,
             )
             self.repositorio_historial.guardar_registro_precio(registro)
+            if self.auditor is not None:
+                self.auditor.registrar(
+                    "Cambio de precio",
+                    f"{producto.nombre} ({codigo})",
+                    formatear_clp(precio_anterior.monto),
+                    formatear_clp(nuevo_precio),
+                )

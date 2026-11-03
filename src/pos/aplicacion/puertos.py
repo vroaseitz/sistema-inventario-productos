@@ -12,6 +12,8 @@ from typing import Protocol, runtime_checkable
 
 from pos.dominio.caja import MovimientoCaja, TurnoCaja
 from pos.dominio.categorias import Categoria
+from pos.dominio.clientes import Cliente, MovimientoCliente
+from pos.dominio.compras import FacturaCompra
 from pos.dominio.inventario import AjusteInventario, Existencia
 from pos.dominio.lotes import Lote
 from pos.dominio.productos import Producto, RegistroCambioPrecio
@@ -101,6 +103,8 @@ class RepositorioUsuarios(Protocol):
     def guardar(self, usuario: Usuario) -> None: ...
     def obtener_por_nombre(self, nombre: str) -> Usuario | None: ...
     def hay_usuarios(self) -> bool: ...
+    def listar(self) -> list[Usuario]: ...
+    def registrar_acceso(self, usuario_id: int) -> None: ...
 
 
 @runtime_checkable
@@ -109,6 +113,60 @@ class RepositorioTicketsEspera(Protocol):
 
     def guardar(self, tickets: list[dict]) -> None: ...
     def cargar(self) -> list[dict]: ...
+
+
+@runtime_checkable
+class RepositorioClientes(Protocol):
+    """Puerto de clientes con credito y sus movimientos (HU-CLI-01 a 05)."""
+
+    def guardar(self, cliente: Cliente) -> None: ...
+    def obtener(self, cliente_id: int) -> Cliente | None: ...
+    def listar(self) -> list[Cliente]: ...
+    def agregar_movimiento(self, movimiento: MovimientoCliente) -> None: ...
+    def movimientos(self, cliente_id: int) -> list[MovimientoCliente]: ...
+    def abonos_en_efectivo_del_turno(self, turno_caja_id: int) -> int: ...
+
+
+@runtime_checkable
+class RepositorioFacturasCompra(Protocol):
+    """Puerto de facturas de compra a proveedor (HU-CMP-01/02)."""
+
+    def guardar(self, factura: FacturaCompra) -> None: ...
+    def listar(
+        self, desde: date | None = None, hasta: date | None = None
+    ) -> list[FacturaCompra]: ...
+    def proveedores(self) -> list[str]: ...
+
+
+@runtime_checkable
+class RepositorioAuditoria(Protocol):
+    """Puerto del registro de auditoria (HU-USR-03): quien hizo que y cuando."""
+
+    def registrar(
+        self,
+        usuario: str,
+        accion: str,
+        detalle: dict,
+        registro: str = "",
+        antes: str = "",
+        despues: str = "",
+    ) -> None: ...
+    def listar(
+        self,
+        accion: str | None = None,
+        usuario: str | None = None,
+        desde: date | None = None,
+        hasta: date | None = None,
+    ) -> list[dict]: ...
+
+
+@runtime_checkable
+class RepositorioConfiguracion(Protocol):
+    """Puerto de los parametros de operacion (F7 Configuracion)."""
+
+    def obtener(self, clave: str) -> int: ...
+    def guardar(self, clave: str, valor: int) -> None: ...
+    def restaurar_valores_por_defecto(self) -> None: ...
 
 
 @runtime_checkable
