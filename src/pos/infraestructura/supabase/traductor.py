@@ -24,23 +24,51 @@ Sentencia = tuple[str, tuple]
 _USUARIO_CAJA = "(SELECT id FROM pos.usuario WHERE correo = 'caja@naturalsur.local')"
 _CATEGORIA_DEFECTO = "(SELECT id FROM pos.categoria WHERE nombre = 'Sin categoria')"
 
+_COLUMNAS_EXTRA = "costo_neto, costo_cargado, es_perecible, dias_aviso_vencimiento, stock_minimo"
+_ACTUALIZAR_EXTRA = (
+    "costo_neto = EXCLUDED.costo_neto, costo_cargado = EXCLUDED.costo_cargado, "
+    "es_perecible = EXCLUDED.es_perecible, "
+    "dias_aviso_vencimiento = EXCLUDED.dias_aviso_vencimiento, "
+    "stock_minimo = EXCLUDED.stock_minimo"
+)
+
 _SQL_PRODUCTO = (
-    "INSERT INTO pos.producto (codigo, nombre, categoria_id, unidad_venta, precio_venta, activo) "
-    f"VALUES (%s, %s, {_CATEGORIA_DEFECTO}, %s, %s, %s) "
+    "INSERT INTO pos.producto (codigo, nombre, categoria_id, unidad_venta, precio_venta, activo, "
+    f"{_COLUMNAS_EXTRA}) "
+    f"VALUES (%s, %s, {_CATEGORIA_DEFECTO}, %s, %s, %s, %s, %s, %s, %s, %s) "
     "ON CONFLICT (codigo) DO UPDATE SET "
     "nombre = EXCLUDED.nombre, unidad_venta = EXCLUDED.unidad_venta, "
-    "precio_venta = EXCLUDED.precio_venta, activo = EXCLUDED.activo"
+    f"precio_venta = EXCLUDED.precio_venta, activo = EXCLUDED.activo, {_ACTUALIZAR_EXTRA}"
 )
 
 _SQL_CATEGORIA = "INSERT INTO pos.categoria (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING"
 
+_SQL_CATEGORIA_ESTADO = (
+    "INSERT INTO pos.categoria (nombre, activa) VALUES (%s, %s) "
+    "ON CONFLICT (nombre) DO UPDATE SET activa = EXCLUDED.activa"
+)
+
+# Renombrar: solo si el nombre nuevo no existe ya (si existiera, la fusion trae los productos).
+_SQL_CATEGORIA_RENOMBRAR = (
+    "UPDATE pos.categoria SET nombre = %s WHERE nombre = %s "
+    "AND NOT EXISTS (SELECT 1 FROM pos.categoria WHERE nombre = %s)"
+)
+
+# Eliminar (despues de fusionar): nunca borra una categoria que aun tenga productos.
+_SQL_CATEGORIA_ELIMINAR = (
+    "DELETE FROM pos.categoria c WHERE c.nombre = %s "
+    "AND NOT EXISTS (SELECT 1 FROM pos.producto p WHERE p.categoria_id = c.id)"
+)
+
 _SQL_PRODUCTO_CON_CATEGORIA = (
-    "INSERT INTO pos.producto (codigo, nombre, categoria_id, unidad_venta, precio_venta, activo) "
-    "VALUES (%s, %s, (SELECT id FROM pos.categoria WHERE nombre = %s), %s, %s, %s) "
+    "INSERT INTO pos.producto (codigo, nombre, categoria_id, unidad_venta, precio_venta, activo, "
+    f"{_COLUMNAS_EXTRA}) "
+    "VALUES (%s, %s, (SELECT id FROM pos.categoria WHERE nombre = %s), %s, %s, %s, "
+    "%s, %s, %s, %s, %s) "
     "ON CONFLICT (codigo) DO UPDATE SET "
     "nombre = EXCLUDED.nombre, categoria_id = EXCLUDED.categoria_id, "
     "unidad_venta = EXCLUDED.unidad_venta, "
-    "precio_venta = EXCLUDED.precio_venta, activo = EXCLUDED.activo"
+    f"precio_venta = EXCLUDED.precio_venta, activo = EXCLUDED.activo, {_ACTUALIZAR_EXTRA}"
 )
 
 _SQL_EXISTENCIA = (
@@ -68,31 +96,47 @@ _SQL_MOVIMIENTO = (
 
 
 _SQL_LOTE = (
-    "INSERT INTO pos.lote (id_cliente, producto_id, fecha_vencimiento, saldo) "
-    "SELECT %s, p.id, %s::date, %s::numeric FROM pos.producto p WHERE p.codigo = %s "
+    "INSERT INTO pos.lote (id_cliente, producto_id, fecha_vencimiento, saldo, codigo_lote) "
+    "SELECT %s, p.id, %s::date, %s::numeric, %s FROM pos.producto p WHERE p.codigo = %s "
     "ON CONFLICT (id_cliente) DO UPDATE SET "
-    "saldo = EXCLUDED.saldo, fecha_vencimiento = EXCLUDED.fecha_vencimiento"
+    "saldo = EXCLUDED.saldo, fecha_vencimiento = EXCLUDED.fecha_vencimiento, "
+    "codigo_lote = EXCLUDED.codigo_lote"
 )
 
 
 def _sql_venta(n_lineas: int, n_pagos: int) -> str:
-    linea = "(%s::text, %s::numeric, %s::numeric, %s::numeric, %s::numeric)"
+    linea = "(%s::text, %s::numeric, %s::numeric, %s::numeric, %s::numeric, %s::text)"
     lineas = ", ".join([linea] * n_lineas)
     pagos = ", ".join(["(%s::text, %s::numeric)"] * n_pagos)
     return (
         "WITH v AS ("
-        "INSERT INTO pos.venta (id_cliente, turno_caja_id, usuario_id, estado, creado_en) "
-        f"SELECT %s, t.id, {_USUARIO_CAJA}, %s, %s::timestamptz "
+        "INSERT INTO pos.venta (id_cliente, turno_caja_id, usuario_id, estado, creado_en, nota) "
+        f"SELECT %s, t.id, {_USUARIO_CAJA}, %s, %s::timestamptz, %s "
         "FROM pos.turno_caja t WHERE t.id_cliente = %s "
         "ON CONFLICT (id_cliente) DO NOTHING RETURNING id), "
         "d AS ("
         "INSERT INTO pos.venta_detalle "
-        "(venta_id, producto_id, cantidad, precio_unitario, costo_unitario, descuento_linea) "
-        "SELECT v.id, p.id, x.cantidad, x.precio, x.costo, x.descuento "
-        f"FROM v CROSS JOIN (VALUES {lineas}) AS x(codigo, cantidad, precio, costo, descuento) "
+        "(venta_id, producto_id, cantidad, precio_unitario, costo_unitario, descuento_linea, "
+        "motivo_descuento) "
+        "SELECT v.id, p.id, x.cantidad, x.precio, x.costo, x.descuento, x.motivo "
+        "FROM v CROSS JOIN "
+        f"(VALUES {lineas}) AS x(codigo, cantidad, precio, costo, descuento, motivo) "
         "JOIN pos.producto p ON p.codigo = x.codigo RETURNING 1) "
         "INSERT INTO pos.venta_pago (venta_id, medio_pago, monto) "
         f"SELECT v.id, y.medio, y.monto FROM v CROSS JOIN (VALUES {pagos}) AS y(medio, monto)"
+    )
+
+
+def _extras_producto(d: dict) -> tuple:
+    """costo_neto, costo_cargado, es_perecible, dias_aviso, stock_minimo (con valores por defecto
+    para operaciones viejas que aun esten en la cola sin estos campos)."""
+    costo = d.get("costo")
+    return (
+        costo,
+        costo is not None,
+        bool(d.get("perecible", False)),
+        d.get("dias_aviso"),
+        d.get("stock_minimo"),
     )
 
 
@@ -117,9 +161,19 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
                     str(d["unidad_venta"]).upper(),
                     d["precio"],
                     d.get("activo", True),
+                    *_extras_producto(d),
                 ),
             ),
         ]
+
+    if entidad == "categoria":
+        return [(_SQL_CATEGORIA_ESTADO, (d["nombre"], d.get("activa", True)))]
+
+    if entidad == "categoria_renombrar":
+        return [(_SQL_CATEGORIA_RENOMBRAR, (d["nuevo"], d["anterior"], d["nuevo"]))]
+
+    if entidad == "categoria_eliminar":
+        return [(_SQL_CATEGORIA_ELIMINAR, (d["nombre"],))]
 
     if entidad == "producto":
         return [
@@ -131,6 +185,7 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
                     str(d["unidad_venta"]).upper(),
                     d["precio"],
                     d.get("activo", True),
+                    *_extras_producto(d),
                 ),
             )
         ]
@@ -139,7 +194,18 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
         return [(_SQL_EXISTENCIA, (d["cantidad"], d["codigo_producto"]))]
 
     if entidad == "lote":
-        return [(_SQL_LOTE, (d["uuid"], d["fecha_vencimiento"], d["saldo"], d["codigo_producto"]))]
+        return [
+            (
+                _SQL_LOTE,
+                (
+                    d["uuid"],
+                    d["fecha_vencimiento"],
+                    d["saldo"],
+                    d.get("codigo_lote") or None,
+                    d["codigo_producto"],
+                ),
+            )
+        ]
 
     if entidad == "turno_abrir":
         return [(_SQL_TURNO_ABRIR, (d["uuid"], d["fondo_inicial"], d["abierto_en"]))]
@@ -166,7 +232,13 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
         lineas, pagos = d["detalles"], d["pagos"]
         if not lineas or not pagos:
             raise ValueError("Una venta sincronizable requiere al menos una linea y un pago")
-        params: list = [d["uuid"], d["estado"], d["creado_en"], d["turno_uuid"]]
+        params: list = [
+            d["uuid"],
+            d["estado"],
+            d["creado_en"],
+            d.get("nota") or None,
+            d["turno_uuid"],
+        ]
         for linea in lineas:
             params += [
                 linea["codigo"],
@@ -174,6 +246,7 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
                 linea["precio"],
                 linea.get("costo"),
                 linea.get("descuento", 0),
+                linea.get("motivo_descuento") or None,
             ]
         for pago in pagos:
             params += [pago["medio"], pago["monto"]]

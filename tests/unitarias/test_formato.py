@@ -30,3 +30,17 @@ def test_parsear_monto_rechaza_lo_que_no_es_entero(texto):
 def test_los_mensajes_de_error_del_dominio_usan_punto_de_miles():
     with pytest.raises(ReglaVentaInvalida, match=r"\$15\.000.*\$15\.300"):
         calcular_cobro_efectivo(Dinero(15296), monto_entregado=Dinero(15000))
+
+
+def test_formatear_cantidad_no_le_quita_ceros_a_los_enteros():
+    from decimal import Decimal
+
+    from pos.dominio.formato import formatear_cantidad
+
+    assert formatear_cantidad(Decimal("30")) == "30"
+    assert formatear_cantidad(Decimal("100")) == "100"
+    assert formatear_cantidad(Decimal("10")) == "10"
+    assert formatear_cantidad(Decimal("0")) == "0"
+    assert formatear_cantidad(Decimal("2.500")) == "2,5"
+    assert formatear_cantidad(Decimal("0.350")) == "0,35"
+    assert formatear_cantidad(Decimal("29.650")) == "29,65"

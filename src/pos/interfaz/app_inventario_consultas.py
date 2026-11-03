@@ -20,7 +20,7 @@ from pos.aplicacion.casos_uso.consultar_inventario import (
 )
 from pos.aplicacion.puertos import RepositorioCategorias
 from pos.dominio.errores import ErrorDominio
-from pos.dominio.formato import formatear_clp
+from pos.dominio.formato import formatear_cantidad, formatear_clp
 from pos.dominio.inventario import ESTADO_AGOTADO, ESTADO_BAJO_MINIMO, TipoMovimiento
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.dialogo_formulario import pedir_formulario
@@ -36,10 +36,7 @@ TIPOS = {
 
 
 def _cantidad(valor: Decimal) -> str:
-    texto = f"{valor:f}"
-    if "." in texto:
-        texto = texto.rstrip("0").rstrip(".")
-    return texto.replace(".", ",") or "0"
+    return formatear_cantidad(valor)
 
 
 def _opciones_categoria(repo: RepositorioCategorias | None) -> dict[str, int | None]:

@@ -25,9 +25,42 @@ class RepositorioCategoriasSQLite:
     def __init__(self, conexion: sqlite3.Connection) -> None:
         self._con = conexion
 
-    def listar(self) -> list[Categoria]:
-        filas = self._con.execute("SELECT id, nombre FROM categorias ORDER BY id").fetchall()
-        return [Categoria(f["id"], f["nombre"]) for f in filas]
+    def listar(self, solo_activas: bool = False) -> list[Categoria]:
+        consulta = "SELECT id, nombre, activa FROM categorias"
+        if solo_activas:
+            consulta += " WHERE activa = 1"
+        filas = self._con.execute(consulta + " ORDER BY id").fetchall()
+        return [Categoria(f["id"], f["nombre"], bool(f["activa"])) for f in filas]
+
+    def obtener(self, categoria_id: int) -> Categoria | None:
+        fila = self._con.execute(
+            "SELECT id, nombre, activa FROM categorias WHERE id = ?", (categoria_id,)
+        ).fetchone()
+        return Categoria(fila["id"], fila["nombre"], bool(fila["activa"])) if fila else None
+
+    def contar_productos(self) -> dict[int, int]:
+        """Cuantos productos usa cada categoria (por id)."""
+        filas = self._con.execute(
+            "SELECT categoria_id, COUNT(*) AS n FROM productos GROUP BY categoria_id"
+        ).fetchall()
+        return {f["categoria_id"]: f["n"] for f in filas}
+
+    def renombrar(self, categoria_id: int, nombre: str) -> None:
+        self._con.execute(
+            "UPDATE categorias SET nombre = ? WHERE id = ?",
+            (normalizar_nombre_categoria(nombre), categoria_id),
+        )
+        self._con.commit()
+
+    def cambiar_estado(self, categoria_id: int, activa: bool) -> None:
+        self._con.execute(
+            "UPDATE categorias SET activa = ? WHERE id = ?", (int(activa), categoria_id)
+        )
+        self._con.commit()
+
+    def eliminar(self, categoria_id: int) -> None:
+        self._con.execute("DELETE FROM categorias WHERE id = ?", (categoria_id,))
+        self._con.commit()
 
     def nombre_de(self, categoria_id: int | None) -> str | None:
         if categoria_id is None:

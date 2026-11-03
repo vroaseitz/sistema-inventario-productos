@@ -26,6 +26,7 @@ from pos.dominio.clientes import (
 )
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.interfaz import tema
 from pos.interfaz.campo_fecha import CampoFecha
 
 MESES = (
@@ -140,16 +141,24 @@ class VentanaClientes(ttk.Frame):
         for combo in (combo_estado, combo_orden):
             combo.bind("<<ComboboxSelected>>", lambda _e: self._refrescar_lista())
 
-        botones = ttk.Frame(marco)
+        botones = tk.Frame(marco, bg=tema.PAPEL)
         botones.pack(fill="x", pady=8)
-        for texto, comando in (
-            ("Nuevo cliente", self._nuevo_cliente),
-            ("Modificar cliente", self._modificar_cliente),
-            ("Desactivar / reactivar", self._cambiar_estado),
-            ("Ver cuenta", self._ver_cuenta),
-            ("Registrar abono", self._abono_desde_lista),
+        for texto, comando, tecla, variante in (
+            ("Nuevo cliente", self._nuevo_cliente, "INS", "primario"),
+            ("Modificar cliente", self._modificar_cliente, "", "normal"),
+            ("Desactivar / reactivar", self._cambiar_estado, "DEL", "peligro"),
+            ("Ver cuenta", self._ver_cuenta, "↵", "normal"),
+            ("Registrar abono", self._abono_desde_lista, "", "normal"),
         ):
-            ttk.Button(botones, text=texto, command=comando).pack(side="left", padx=4)
+            tema.BotonAccion(
+                botones,
+                texto,
+                comando,
+                tecla,
+                variante,
+                color=tema.MODULOS_COLOR["F4"][0],
+                fondo=tema.PAPEL,
+            ).pack(side="left", padx=(0, 6))
 
         self._tabla_lista = self._tabla(
             marco,
@@ -167,7 +176,7 @@ class VentanaClientes(ttk.Frame):
 
     def _construir_cuenta(self) -> None:
         marco = ttk.Frame(self._pestanas, padding=8)
-        self._pestanas.add(marco, text="Cuenta del cliente")
+        self._pestanas.add(marco, text="Cuenta")
         cab = ttk.Frame(marco)
         cab.pack(fill="x")
         self._lbl_cliente = ttk.Label(

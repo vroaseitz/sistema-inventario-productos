@@ -89,3 +89,12 @@ class FacturaCompra:
                 f"El neto no coincide con la suma del detalle (diferencia de ${self.diferencia}); "
                 "debe ser cero para confirmar"
             )
+
+
+@dataclass(frozen=True)
+class Proveedor:
+    """Quien nos vende la mercaderia. Basta el nombre; el contacto es opcional (HU-CMP-03)."""
+
+    nombre: str
+    contacto: str = ""
+    id: int | None = None

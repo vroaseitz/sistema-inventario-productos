@@ -141,20 +141,20 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         # O-04: con la linea seleccionada, "-" resta 1 (3 -> 2 = $3.000)
         ventas._tabla.selection_set(ventas._tabla.get_children()[0])
         ventas._ajustar_cantidad(-1)
-        assert ventas._tabla.item(ventas._tabla.get_children()[0], "values")[2] == "2"
+        assert ventas._tabla.item(ventas._tabla.get_children()[0], "values")[3] == "2"
         agregar("YOG", "1")  # 2.000  -> total 5.000
         # I-03: la linea muestra el lote que vence antes (FEFO)...
         fila_yog = ventas._tabla.get_children()[1]
         assert (
             "vence " + (date.today() + timedelta(days=2)).isoformat()
-            in ventas._tabla.item(fila_yog, "values")[5]
+            in ventas._tabla.item(fila_yog, "values")[7]
         )
         # ...y F11 "Cambiar lote" permite elegir el otro
         repo_lotes = ventas._registrar_venta.repositorio_lotes
         segundo = repo_lotes.por_producto("YOG")[1]
         ventas._registrar_venta.elegir_lote(ventas._venta, "YOG", segundo.uuid)
         ventas._refrescar_ticket()
-        assert ventas._tabla.item(ventas._tabla.get_children()[1], "values")[5].startswith(
+        assert ventas._tabla.item(ventas._tabla.get_children()[1], "values")[7].startswith(
             f"* L{segundo.id}"
         )
         ventas._medio.set("efectivo")

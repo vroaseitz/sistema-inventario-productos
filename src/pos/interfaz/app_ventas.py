@@ -18,19 +18,23 @@ from __future__ import annotations
 import time
 import tkinter as tk
 import unicodedata
+from datetime import date
 from decimal import Decimal, InvalidOperation
 from tkinter import Listbox, Misc, StringVar, Toplevel, messagebox, ttk
 
+from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
 from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
 from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
+from pos.aplicacion.casos_uso.resumen_del_dia import ResumenDelDia
 from pos.aplicacion.casos_uso.sincronizar_pendientes import SincronizarPendientes
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
     PublicadorRemoto,
     RepositorioAuditoria,
+    RepositorioCategorias,
     RepositorioClientes,
     RepositorioConfiguracion,
     RepositorioProductos,
@@ -52,6 +56,9 @@ from pos.dominio.pagos import (
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.value_objects import Dinero
 from pos.dominio.ventas import EstadoVenta, Venta
+from pos.interfaz.cobro import DialogoCobro, DialogoDescuento, DialogoEspera
+from pos.interfaz.dialogo_formulario import pedir_formulario
+from pos.interfaz.panel_dia import PanelDelDia
 from pos.interfaz.sesion import Sesion
 from pos.interfaz.tema import (
     LINEA_2,
@@ -113,6 +120,9 @@ class VentanaVentas(ttk.Frame):
         repo_clientes: RepositorioClientes | None = None,
         configuracion: RepositorioConfiguracion | None = None,
         imprimir: ImprimirComprobante | None = None,
+        resumen_del_dia: ResumenDelDia | None = None,
+        auditor: Auditor | None = None,
+        repo_categorias: RepositorioCategorias | None = None,
     ) -> None:
         super().__init__(parent)
         self._sesion = sesion or Sesion(USUARIO_DEMO)
@@ -131,6 +141,10 @@ class VentanaVentas(ttk.Frame):
         self._clientes = repo_clientes
         self._configuracion = configuracion
         self._imprimir = imprimir
+        self._resumen_dia = resumen_del_dia
+        self._auditor = auditor
+        self._categorias = repo_categorias
+        self._panel_dia: PanelDelDia | None = None
         self._ayuda_conteo = ""
         # O-25: no se guarda nada hasta haber restaurado lo guardado; si no, el primer
         # refresco al abrir la app sobrescribia los tickets en espera con una lista vacia.
@@ -193,20 +207,22 @@ class VentanaVentas(ttk.Frame):
         acciones.pack(fill="x")
         interior = tk.Frame(acciones, bg=claro)
         interior.pack(fill="x", padx=12, pady=8)
+        # Cobrar se empaqueta primero: con poco ancho se recortan los otros, nunca este.
+        BotonAccion(interior, "Cobrar", self._abrir_cobro, "F12", "primario", color).pack(
+            side="right"
+        )
         for texto, comando, tecla, variante in (
             ("Nuevo ticket", self._nuevo_ticket, "INS", "normal"),
             ("Buscar producto", self._buscar_producto_ui, "F10", "normal"),
-            ("Cambiar lote", self._cambiar_lote_ui, "F11", "normal"),
+            ("Tickets en espera", self._dialogo_espera, "Ctrl+E", "normal"),
+            ("Descuento a la línea", self._dialogo_descuento, "F9", "normal"),
+            ("Nota de la venta", self._dialogo_nota, "Ctrl+N", "normal"),
             ("Reimprimir último", self._reimprimir_ultimo, "F8", "normal"),
-            ("Quitar línea", self._quitar_linea, "DEL", "peligro"),
-            ("Eliminar ticket", self._eliminar_ticket, "", "peligro"),
+            ("Borrar línea", self._quitar_linea, "DEL", "peligro"),
         ):
             BotonAccion(interior, texto, comando, tecla, variante, color, PAPEL).pack(
                 side="left", padx=(0, 6)
             )
-        BotonAccion(
-            interior, "Cobrar", lambda: self._cerrar_venta(True), "F12", "primario", color
-        ).pack(side="right")
 
         # O-01b: pestanas de tickets (Ticket 1, Ticket 2...); su contenido es el de abajo.
         self._nb_tickets = ttk.Notebook(tab_venta, height=1)
@@ -244,12 +260,21 @@ class VentanaVentas(ttk.Frame):
         ).grid(row=0, column=5, padx=2)
         BotonAccion(
             marco_venta, "−", lambda: self._ajustar_cantidad(-1), "", "normal", color, PAPEL
-        ).grid(row=0, column=6, padx=(2, 12))
+        ).grid(row=0, column=6, padx=(2, 6))
+        BotonAccion(
+            marco_venta, "Cambiar lote", self._cambiar_lote_ui, "F11", "normal", color, PAPEL
+        ).grid(row=0, column=7, padx=2)
+        BotonAccion(
+            marco_venta, "Eliminar ticket", self._eliminar_ticket, "", "peligro", color, PAPEL
+        ).grid(row=0, column=8, padx=(2, 12))
         # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
         self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")
         self.winfo_toplevel().bind("<F8>", self._atajo_imprimir, add="+")
         self.winfo_toplevel().bind("<F11>", self._atajo_cambiar_lote, add="+")
         self.winfo_toplevel().bind("<F12>", self._atajo_cobrar, add="+")
+        self.winfo_toplevel().bind("<F9>", self._atajo_descuento, add="+")
+        self.winfo_toplevel().bind("<Control-e>", self._atajo_espera, add="+")
+        self.winfo_toplevel().bind("<Control-n>", self._atajo_nota, add="+")
         self.winfo_toplevel().bind("<Insert>", self._atajo_nuevo_ticket, add="+")
 
         # --- Cliente de la venta y vendedora (HU-CLI-02: solo se carga a una cuenta de credito).
@@ -304,9 +329,12 @@ class VentanaVentas(ttk.Frame):
             pady=12,
         )
         self._lbl_a_cobrar.pack()
+        self._lbl_a_cobrar.config(cursor="hand2")
+        self._lbl_a_cobrar.bind("<Button-1>", lambda _e: self._abrir_cobro())
 
-        marco_pago = ttk.LabelFrame(tab_venta, text="Pago")
-        marco_pago.pack(side="bottom", fill="x", padx=12, pady=8)
+        # El panel de pago ahora es el cuadro de Cobro (F12). Estos widgets siguen existiendo,
+        # sin mostrarse, porque `_agregar_pago`, `_quitar_pago` y `_refrescar_ticket` los usan.
+        marco_pago = ttk.LabelFrame(self, text="Pago")
 
         fila_pago = ttk.Frame(marco_pago)
         fila_pago.pack(fill="x")
@@ -346,23 +374,43 @@ class VentanaVentas(ttk.Frame):
         self._lista_pagos = Listbox(marco_pago, height=2, highlightthickness=0, borderwidth=1)
         self._lista_pagos.pack(fill="x", padx=4, pady=(0, 6))
 
-        columnas = ("codigo", "nombre", "cantidad", "precio", "subtotal", "lote")
+        columnas = (
+            "codigo",
+            "nombre",
+            "precio",
+            "cantidad",
+            "descuento",
+            "subtotal",
+            "existencia",
+            "lote",
+        )
         anchos = {
             "codigo": 130,
-            "nombre": 260,
-            "cantidad": 80,
-            "precio": 100,
-            "subtotal": 110,
-            "lote": 190,
+            "nombre": 250,
+            "precio": 90,
+            "cantidad": 70,
+            "descuento": 70,
+            "subtotal": 100,
+            "existencia": 80,
+            "lote": 170,
         }
         self._tabla = ttk.Treeview(tab_venta, columns=columnas, show="headings", height=4)
         for col, titulo in zip(
             columnas,
-            ("Código de barras", "Descripción del producto", "Cant.", "Precio", "Importe", "Lote"),
+            (
+                "Código de barras",
+                "Descripción del producto",
+                "Precio",
+                "Cant.",
+                "Dcto.",
+                "Importe",
+                "Existencia",
+                "Lote",
+            ),
             strict=True,
         ):
             self._tabla.heading(col, text=titulo)
-            numerica = col in ("cantidad", "precio", "subtotal")
+            numerica = col in ("precio", "cantidad", "descuento", "subtotal", "existencia")
             self._tabla.column(col, width=anchos[col], anchor="e" if numerica else "w")
         self._tabla.pack(fill="both", expand=True, padx=12, pady=(8, 4))
         self._tabla.bind("<Delete>", lambda _e: self._quitar_linea())
@@ -443,28 +491,125 @@ class VentanaVentas(ttk.Frame):
                     ),
                 )
         self._publicar_estado()
+        self._refrescar_corte(
+            turno, self._repo_ventas.obtener_por_turno(turno.id) if turno is not None else []
+        )
         self._refrescar_resumen()
 
     def _construir_caja(self, padre: ttk.Frame) -> None:
-        marco = ttk.LabelFrame(padre, text="Jornada de caja")
-        marco.pack(fill="x", padx=12, pady=8)
-        self._lbl_en_caja = ttk.Label(marco, text="En caja: -", font=("TkDefaultFont", 14, "bold"))
-        self._lbl_en_caja.pack(side="left", padx=8, pady=6)
-        ttk.Button(marco, text="Abrir turno", command=self._abrir_turno_ui).pack(
-            side="right", padx=4, pady=6
+        """Corte y arqueo de caja (prototipo v3): acciones, venta de la jornada y dinero en caja."""
+        color, claro = MODULOS_COLOR["F1"]
+        acciones = tk.Frame(padre, bg=claro)
+        acciones.pack(fill="x")
+        interior = tk.Frame(acciones, bg=claro)
+        interior.pack(fill="x", padx=12, pady=8)
+        for texto, comando, tecla in (
+            ("Abrir jornada", self._abrir_turno_ui, ""),
+            ("Movimiento de caja", self._movimiento_ui, ""),
+            ("Imprimir corte", self._imprimir_corte, "F8"),
+        ):
+            BotonAccion(interior, texto, comando, tecla, "normal", color, PAPEL).pack(
+                side="left", padx=(0, 6)
+            )
+        BotonAccion(
+            interior, "Hacer corte de hoy", self._cerrar_turno_ui, "", "primario", color
+        ).pack(side="left", padx=6)
+
+        info = ttk.Frame(padre)
+        info.pack(fill="x", padx=12, pady=(10, 0))
+        hoy = date.today()
+        dias = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+        meses = [
+            "enero",
+            "febrero",
+            "marzo",
+            "abril",
+            "mayo",
+            "junio",
+            "julio",
+            "agosto",
+            "septiembre",
+            "octubre",
+            "noviembre",
+            "diciembre",
+        ]
+        ttk.Label(
+            info,
+            text=f"Día: {dias[hoy.weekday()]}, {hoy.day} de {meses[hoy.month - 1]} de {hoy.year}",
+        ).pack(side="left")
+        self._lbl_cajera = ttk.Label(info, text="")
+        self._lbl_cajera.pack(side="left", padx=24)
+        self._lbl_estado_jornada = ttk.Label(info, text="", font=fuente(11, True))
+        self._lbl_estado_jornada.pack(side="left")
+
+        columnas = ttk.Frame(padre)
+        columnas.pack(fill="x", padx=12, pady=8)
+        izquierda = ttk.LabelFrame(columnas, text="Venta de la jornada", padding=8)
+        izquierda.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        self._tabla_jornada = ttk.Treeview(
+            izquierda, columns=("medio", "monto"), show="headings", height=5
         )
-        ttk.Button(marco, text="Imprimir corte (F8)", command=self._imprimir_corte).pack(
-            side="right", padx=4, pady=6
+        self._tabla_jornada.heading("medio", text="Medio de pago")
+        self._tabla_jornada.heading("monto", text="Monto")
+        self._tabla_jornada.column("medio", width=210, anchor="w")
+        self._tabla_jornada.column("monto", width=130, anchor="e")
+        self._tabla_jornada.pack(fill="x")
+        derecha = ttk.LabelFrame(columnas, text="Dinero en caja", padding=8)
+        derecha.pack(side="left", fill="both", expand=True)
+        self._filas_dinero: dict[str, ttk.Label] = {}
+        for fila, nombre in enumerate(
+            (
+                "Fondo inicial",
+                "Ventas en efectivo",
+                "Abonos de clientes",
+                "Movimientos de caja",
+            )
+        ):
+            ttk.Label(derecha, text=nombre, foreground=TINTA_2).grid(row=fila, column=0, sticky="w")
+            etiqueta = ttk.Label(derecha, text="-")
+            etiqueta.grid(row=fila, column=1, sticky="e", padx=(30, 0))
+            self._filas_dinero[nombre] = etiqueta
+        derecha.columnconfigure(1, weight=1)
+        self._lbl_en_caja = ttk.Label(derecha, text="En caja: -", font=fuente(14, True))
+        self._lbl_en_caja.grid(row=4, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        ttk.Label(
+            derecha,
+            text="Efectivo esperado = fondo + ventas en efectivo + abonos ± movimientos.",
+            foreground=TINTA_3,
+            wraplength=300,
+        ).grid(row=5, column=0, columnspan=2, sticky="w")
+
+        medios = ttk.Frame(padre)
+        medios.pack(fill="x", padx=12)
+        conciliar = ttk.LabelFrame(medios, text="Para conciliar con el terminal TUU", padding=8)
+        conciliar.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        self._tabla_conciliar = ttk.Treeview(
+            conciliar, columns=("concepto", "monto"), show="headings", height=2
         )
-        ttk.Button(marco, text="Movimiento de caja", command=self._movimiento_ui).pack(
-            side="right", padx=4, pady=6
+        self._tabla_conciliar.heading("concepto", text="Concepto")
+        self._tabla_conciliar.heading("monto", text="Monto")
+        self._tabla_conciliar.column("concepto", width=260, anchor="w")
+        self._tabla_conciliar.column("monto", width=110, anchor="e")
+        self._tabla_conciliar.pack(fill="x")
+        departamentos = ttk.LabelFrame(medios, text="Ventas por departamento", padding=8)
+        departamentos.pack(side="left", fill="both", expand=True)
+        self._tabla_departamentos = ttk.Treeview(
+            departamentos, columns=("departamento", "monto", "parte"), show="headings", height=2
         )
-        ttk.Button(marco, text="Cerrar turno (arqueo)", command=self._cerrar_turno_ui).pack(
-            side="right", padx=4, pady=6
+        for clave, titulo, ancho, ancla in (
+            ("departamento", "Departamento", 170, "w"),
+            ("monto", "Monto", 100, "e"),
+            ("parte", "Participación", 90, "e"),
+        ):
+            self._tabla_departamentos.heading(clave, text=titulo)
+            self._tabla_departamentos.column(clave, width=ancho, anchor=ancla)
+        self._tabla_departamentos.pack(fill="x")
+
+        ttk.Label(padre, text="Movimientos del turno").pack(anchor="w", padx=14, pady=(8, 0))
+        columnas_mov = ("hora", "tipo", "monto", "motivo", "usuario")
+        self._tabla_movimientos = ttk.Treeview(
+            padre, columns=columnas_mov, show="headings", height=4
         )
-        ttk.Label(padre, text="Movimientos del turno").pack(anchor="w", padx=14)
-        columnas = ("hora", "tipo", "monto", "motivo", "usuario")
-        self._tabla_movimientos = ttk.Treeview(padre, columns=columnas, show="headings", height=10)
         for col, titulo, ancho in (
             ("hora", "Hora", 70),
             ("tipo", "Tipo", 90),
@@ -476,23 +621,114 @@ class VentanaVentas(ttk.Frame):
             self._tabla_movimientos.column(col, width=ancho, anchor="w")
         self._tabla_movimientos.pack(fill="both", expand=True, padx=12, pady=4)
 
+    def _refrescar_corte(self, turno, ventas) -> None:
+        """Llena el corte de la jornada: venta por medio, dinero en caja y conciliacion."""
+        for tabla in (self._tabla_jornada, self._tabla_conciliar, self._tabla_departamentos):
+            tabla.delete(*tabla.get_children())
+        if turno is None:
+            self._lbl_estado_jornada.config(text="Sin jornada abierta")
+            self._lbl_cajera.config(text="")
+            for etiqueta in self._filas_dinero.values():
+                etiqueta.config(text="-")
+            return
+        abonos = Dinero(
+            self._clientes.abonos_en_efectivo_del_turno(turno.id) if self._clientes else 0
+        )
+        arqueo = calcular_arqueo(turno, ventas, Dinero(0), abonos_efectivo=abonos)
+        self._lbl_estado_jornada.config(text="Estado: jornada abierta")
+        self._lbl_cajera.config(text=f"Cajera: {self._sesion.nombre or turno.usuario_id}")
+        total = 0
+        for medio, monto in arqueo.totales_por_medio.items():
+            nombre = (
+                "Cuenta de cliente"
+                if medio is MedioPago.CREDITO_CLIENTE
+                else (
+                    "Tarjeta (terminal TUU)"
+                    if medio is MedioPago.TARJETA
+                    else NOMBRES_MEDIO_PAGO[medio]
+                )
+            )
+            self._tabla_jornada.insert("", "end", values=(nombre, _formatear_clp(monto.monto)))
+            total += monto.monto
+        self._tabla_jornada.insert("", "end", values=("Total vendido", _formatear_clp(total)))
+        movimientos = arqueo.ingresos_caja.monto - arqueo.retiros_caja.monto
+        valores = {
+            "Fondo inicial": _formatear_clp(turno.fondo_inicial.monto),
+            "Ventas en efectivo": "+ "
+            + _formatear_clp(arqueo.totales_por_medio[MedioPago.EFECTIVO].monto),
+            "Abonos de clientes": "+ " + _formatear_clp(arqueo.abonos_efectivo.monto),
+            "Movimientos de caja": ("+ " if movimientos >= 0 else "− ")
+            + _formatear_clp(abs(movimientos)),
+        }
+        for nombre, valor in valores.items():
+            self._filas_dinero[nombre].config(text=valor)
+        self._tabla_conciliar.insert(
+            "",
+            "end",
+            values=(
+                "Tarjeta según el sistema",
+                _formatear_clp(arqueo.totales_por_medio[MedioPago.TARJETA].monto),
+            ),
+        )
+        self._tabla_conciliar.insert(
+            "",
+            "end",
+            values=(
+                "Abonos de clientes recibidos hoy",
+                _formatear_clp(arqueo.abonos_efectivo.monto),
+            ),
+        )
+        por_categoria: dict[str, int] = {}
+        for venta in ventas:
+            if venta.estado is not EstadoVenta.PAGADA:
+                continue
+            for detalle in venta.detalles:
+                producto = self._repo_productos.obtener_por_codigo(detalle.producto_codigo)
+                nombre = (
+                    self._categorias.nombre_de(producto.categoria_id)
+                    if producto and self._categorias
+                    else None
+                ) or "Sin categoría"
+                por_categoria[nombre] = por_categoria.get(nombre, 0) + detalle.subtotal.monto
+        suma = sum(por_categoria.values())
+        for nombre, monto in sorted(por_categoria.items(), key=lambda x: -x[1]):
+            parte = f"{monto / suma * 100:.1f}%".replace(".", ",") if suma else "0%"
+            self._tabla_departamentos.insert(
+                "", "end", values=(nombre, _formatear_clp(monto), parte)
+            )
+
     def _construir_resumen(self, padre: ttk.Frame) -> None:
-        self._lbl_resumen_dia = ttk.Label(padre, text="", font=("TkDefaultFont", 12, "bold"))
+        """Resumen del dia (prototipo v3). Sin los casos de uso queda un resumen minimo."""
+        if self._resumen_dia is not None and self._configuracion is not None:
+            self._panel_dia = PanelDelDia(
+                padre,
+                self._resumen_dia,
+                self._configuracion,
+                self._auditor,
+                ir_a_venta=lambda: self._subpestanas.select(0),
+                ir_a=self._ir_a_modulo,
+            )
+            self._panel_dia.pack(fill="both", expand=True)
+            return
+        self._lbl_resumen_dia = ttk.Label(padre, text="", font=fuente(12, True))
         self._lbl_resumen_dia.pack(anchor="w", padx=14, pady=(12, 4))
-        self._tabla_resumen = ttk.Treeview(
-            padre, columns=("medio", "monto"), show="headings", height=6
-        )
-        self._tabla_resumen.heading("medio", text="Medio de pago")
-        self._tabla_resumen.heading("monto", text="Vendido")
-        self._tabla_resumen.pack(fill="x", padx=12, pady=4)
-        ttk.Button(padre, text="Actualizar", command=self._refrescar_resumen).pack(
-            anchor="w", padx=12, pady=4
-        )
+
+    def _ir_a_modulo(self, destino: str) -> None:
+        """Lleva a otro modulo (y a su pestana) desde un aviso o un boton del resumen."""
+        ventana = self.winfo_toplevel()
+        modulo, pestana = {
+            "alertas": ("F3", "alertas"),
+            "existencias": ("F3", "existencias"),
+            "productos": ("F2", ""),
+            "reportes": ("F6", ""),
+        }.get(destino, ("", ""))
+        if modulo and hasattr(ventana, "ir_a"):
+            ventana.ir_a(modulo, pestana)
 
     def _refrescar_resumen(self) -> None:
-        """Resumen del dia = ventas del turno abierto, por medio de pago."""
-        for fila in self._tabla_resumen.get_children():
-            self._tabla_resumen.delete(fila)
+        if self._panel_dia is not None:
+            self._panel_dia.refrescar()
+            return
         turno = self._repo_turnos.obtener_abierto()
         if turno is None:
             self._lbl_resumen_dia.config(text="Sin turno abierto")
@@ -502,17 +738,8 @@ class VentanaVentas(ttk.Frame):
             for v in self._repo_ventas.obtener_por_turno(turno.id)
             if v.estado is EstadoVenta.PAGADA
         ]
-        totales: dict[MedioPago, int] = dict.fromkeys(MedioPago, 0)
-        for venta in ventas:
-            for pago in venta.pagos:
-                totales[pago.medio] += pago.monto.monto
-        for medio, monto in totales.items():
-            self._tabla_resumen.insert(
-                "", "end", values=(NOMBRES_MEDIO_PAGO[medio], _formatear_clp(monto))
-            )
-        self._lbl_resumen_dia.config(
-            text=f"{len(ventas)} venta(s) · total {_formatear_clp(sum(totales.values()))}"
-        )
+        total = sum(v.total.monto for v in ventas)
+        self._lbl_resumen_dia.config(text=f"{len(ventas)} venta(s) · total {_formatear_clp(total)}")
 
     def _contar_denominaciones_ui(self, titulo: str) -> ConteoDenominaciones | None:
         """Dialogo de conteo por billete/moneda (HU-CAJ-01/02, hallazgo E-06).
@@ -745,10 +972,102 @@ class VentanaVentas(ttk.Frame):
         self._medio.set(MedioPago.EFECTIVO.value)  # O-27: cada ticket parte con Efectivo
         self._medio_nombre.set(NOMBRES_MEDIO_PAGO[MedioPago.EFECTIVO])
 
+    def _en_venta(self) -> bool:
+        return bool(self.winfo_ismapped() and self._subpestanas.index("current") == 0)
+
     def _atajo_cobrar(self, _evento: object = None) -> None:
-        """F12 Cobrar (prototipo): cobra e imprime, solo con F1 Venta a la vista."""
-        if self.winfo_ismapped() and self._subpestanas.index("current") == 0:
-            self._cerrar_venta(True)
+        """F12 Cobrar (prototipo): abre el cuadro de Cobro, solo con F1 Venta a la vista."""
+        if self._en_venta():
+            self._abrir_cobro()
+
+    def _atajo_descuento(self, _evento: object = None) -> None:
+        if self._en_venta():
+            self._dialogo_descuento()
+
+    def _atajo_espera(self, _evento: object = None) -> None:
+        if self._en_venta():
+            self._dialogo_espera()
+
+    def _atajo_nota(self, _evento: object = None) -> None:
+        if self._en_venta():
+            self._dialogo_nota()
+
+    # --------------------------------- Cobro, descuento, nota y espera (prototipo v3) --
+
+    def _abrir_cobro(self) -> DialogoCobro | None:
+        venta = self._venta_actual()
+        if venta is None:
+            return None
+        if not venta.detalles:
+            messagebox.showwarning("Cobrar", "El ticket no tiene productos")
+            return None
+        return DialogoCobro(self)
+
+    def _dialogo_descuento(self) -> DialogoDescuento | None:
+        venta = self._venta_actual()
+        codigo = self._linea_seleccionada() if venta is not None else None
+        if venta is None:
+            return None
+        if codigo is None:
+            messagebox.showwarning("Descuento a la línea", "Elige una línea del ticket")
+            return None
+        return DialogoDescuento(self, codigo)
+
+    def _registrar_descuento(self, detalle) -> None:
+        """Queda en la auditoria con el importe antes y despues y el motivo."""
+        if self._auditoria is None:
+            return
+        producto = self._repo_productos.obtener_por_codigo(detalle.producto_codigo)
+        bruto = detalle.precio_unitario.multiplicado_por(detalle.cantidad).monto
+        self._auditoria.registrar(
+            self._sesion.nombre or str(self._sesion.usuario_id),
+            "Descuento a la línea",
+            {"motivo": detalle.motivo_descuento, "descuento": detalle.descuento_linea.monto},
+            registro=f"{producto.nombre if producto else detalle.producto_codigo}",
+            antes=_formatear_clp(bruto),
+            despues=_formatear_clp(detalle.subtotal.monto),
+        )
+
+    def _dialogo_nota(self):
+        venta = self._venta_actual()
+        if venta is None:
+            return None
+
+        def guardar(valores: dict[str, str]) -> bool:
+            venta.nota = valores["nota"].strip()
+            return True
+
+        return pedir_formulario(
+            self,
+            "Nota de la venta",
+            [("nota", "Nota", venta.nota, None)],
+            guardar,
+            "Guardar nota",
+            nota="Queda guardada junto al ticket y en la auditoría. No se imprime.",
+        )
+
+    def _dialogo_espera(self) -> DialogoEspera:
+        return DialogoEspera(self)
+
+    def _ir_a_ticket(self, indice: int) -> None:
+        if indice == self._indice or not 0 <= indice < len(self._tickets):
+            return
+        self._cambiando_ticket = True
+        self._nb_tickets.select(indice)
+        self._cambiando_ticket = False
+        self._indice = indice
+        self._reiniciar_medio()
+        self._refrescar_ticket()
+        self._entrada_codigo.focus_set()
+
+    def _existencia_de(self, producto) -> str:
+        """Existencia del producto para la tabla; el granel se muestra como «granel»."""
+        if producto is None:
+            return "—"
+        if producto.unidad_venta is UnidadVenta.GRANEL:
+            return "granel"
+        existencia = self._registrar_venta.repositorio_existencias.obtener(producto.codigo)
+        return format(existencia.cantidad.normalize(), "f") if existencia else "0"
 
     # ------------------------------------- Cliente, vendedora y cabecera de la venta --
 
@@ -788,6 +1107,7 @@ class VentanaVentas(ttk.Frame):
         self._lbl_vendedora.insert(0, (self._sesion.nombre or "").capitalize())
         self._lbl_vendedora.config(state="readonly")
         self._sincronizar_cabecera_venta()
+        self._refrescar_turno()  # el corte nombra a la cajera de ahora
 
     def _atajo_nuevo_ticket(self, _evento: object = None) -> None:
         if self.winfo_ismapped() and self._subpestanas.index("current") == 0:
@@ -1198,9 +1518,14 @@ class VentanaVentas(ttk.Frame):
                 values=(
                     detalle.producto_codigo,
                     nombre,
+                    _formatear_clp(detalle.precio_unitario.monto)
+                    + ("/kg" if producto and producto.unidad_venta is UnidadVenta.GRANEL else ""),
                     detalle.cantidad,
-                    _formatear_clp(detalle.precio_unitario.monto),
+                    _formatear_clp(detalle.descuento_linea.monto)
+                    if detalle.descuento_linea.monto
+                    else "—",
                     _formatear_clp(detalle.subtotal.monto),
+                    self._existencia_de(producto),
                     self._texto_lote(venta, detalle.producto_codigo),
                 ),
             )
@@ -1473,17 +1798,27 @@ class VentanaVentas(ttk.Frame):
             return
         self._refrescar_ticket()
 
-    def _cerrar_venta(self, imprimir: bool = False) -> None:
+    def _cerrar_venta(self, imprimir: bool = False) -> bool:
+        """Cobra el ticket; devuelve True si la venta quedo registrada."""
         venta = self._venta_actual()
         if venta is None:
-            return
+            return False
         try:
             self._registrar_venta.cerrar(venta)
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo cerrar la venta", str(exc))
-            return
+            return False
+        if venta.nota and self._auditoria is not None:
+            self._auditoria.registrar(
+                self._sesion.nombre or str(self._sesion.usuario_id),
+                "Nota de la venta",
+                {},
+                registro=f"Venta N° {venta.id}",
+                despues=venta.nota,
+            )
         self._imprimir_tras_cobrar(venta, imprimir)
         messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con exito")
         self._refrescar_sync()
         self._refrescar_turno()
         self._quitar_ticket_actual()  # D-01a: queda lista para la siguiente
+        return True

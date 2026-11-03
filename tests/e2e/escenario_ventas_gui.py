@@ -635,6 +635,95 @@ verificar(
 )
 verificar(bool(raiz.bind("<F8>")), "F8 esta asignada a imprimir")
 
+# --- Cobro del prototipo: medios, billetes, pago mixto, descuento, nota y tickets en espera ----
+from pos.dominio.pagos import MedioPago  # noqa: E402
+from pos.interfaz.cobro import DialogoDescuento, DialogoEspera  # noqa: E402
+
+ventana._registrar_venta.agregar_producto(ventana._venta, "7801", 5)  # 5 x $1.200 = $6.000
+ventana._refrescar_ticket()
+filas = [ventana._tabla.item(i, "values") for i in ventana._tabla.get_children()]
+verificar(
+    filas[-1][4] == "—" and filas[-1][6].isdigit(), f"la tabla trae Dcto. y Existencia {filas[-1]}"
+)
+
+# Descuento a la linea (F9): porcentaje, con motivo obligatorio
+ventana._tabla.selection_set(ventana._tabla.get_children()[-1])
+desc = ventana._dialogo_descuento()
+verificar(isinstance(desc, DialogoDescuento), "F9 abre el descuento a la linea")
+desc.var_tipo.set("Porcentaje")
+desc.var_valor.set("10")
+verificar(desc.monto() == 600, f"10 % de $6.000 son $600 ({desc.monto()})")
+mensajes.clear()
+verificar(desc.aplicar() is False and "motivo" in mensajes[-1][1], "el descuento exige motivo")
+desc.var_motivo.set("Cortesía")
+verificar(desc.aplicar() is True, "aplica el descuento")
+detalle = ventana._venta.detalles[-1]
+verificar(
+    detalle.descuento_linea.monto == 600 and detalle.subtotal.monto == 5400,
+    "el importe baja a $5.400",
+)
+verificar(
+    ventana._tabla.item(ventana._tabla.get_children()[-1], "values")[4] == "$600", "se ve en Dcto."
+)
+verificar(
+    any(f["accion"] == "Descuento a la línea" for f in RepositorioAuditoriaSQLite(con3).listar()),
+    "el descuento queda en la auditoria",
+)
+
+# Nota de la venta
+nota = ventana._dialogo_nota()
+nota.variables["nota"].set("Cliente pidió el detalle aparte")
+nota.confirmar()
+verificar(ventana._venta.nota == "Cliente pidió el detalle aparte", "guarda la nota de la venta")
+
+# Tickets en espera (Ctrl+E): otro ticket y vuelta al primero
+primero = ventana._indice
+ventana._nuevo_ticket()
+espera = ventana._dialogo_espera()
+verificar(
+    isinstance(espera, DialogoEspera) and len(espera.tabla.get_children()) >= 2,
+    "lista los tickets abiertos",
+)
+espera.tabla.selection_set(str(primero))
+espera.ir()
+verificar(
+    ventana._indice == primero and ventana._venta.detalles,
+    "vuelve al ticket en espera con sus productos",
+)
+
+# Cobro (F12): tarjeta parcial + efectivo con billetes, cambio y cobrar sin imprimir
+cobro = ventana._abrir_cobro()
+verificar(cobro is not None and cobro.medio is MedioPago.EFECTIVO, "F12 abre el cobro con efectivo")
+verificar(cobro._total.cget("text") == "$5.400", f"total a cobrar {cobro._total.cget('text')}")
+cobro.seleccionar_medio(MedioPago.TARJETA)
+cobro.ent_monto.delete(0, "end")
+cobro.ent_monto.insert(0, "2.000")
+verificar(cobro.agregar_pago() is True, "agrega un pago con tarjeta de $2.000")
+verificar(cobro.saldo() == 3400, f"quedan por cobrar $3.400 ({cobro.saldo()})")
+cobro.seleccionar_medio(MedioPago.EFECTIVO)
+cobro.conteo[5000].delete(0, "end")
+cobro.conteo[5000].insert(0, "1")
+cobro._actualizar()
+verificar(
+    "su cambio $1.600" in cobro._resumen.cget("text"),
+    f"cambio con billete de $5.000: {cobro._resumen.cget('text')}",
+)
+mensajes.clear()
+verificar(cobro.cobrar(False) is True, "cobra solo registrando (pago mixto)")
+verificar(not cobro.winfo_exists(), "el cuadro de cobro se cierra al cobrar")
+ultima = RV(con3).ultima()
+verificar(
+    ultima.total.monto == 5400 and ultima.nota == "Cliente pidió el detalle aparte",
+    "la venta quedo con su nota",
+)
+verificar(
+    [(p.medio.value, p.monto.monto) for p in ultima.pagos]
+    == [("tarjeta", 2000), ("efectivo", 3400)],
+    "pago mixto: tarjeta + efectivo",
+)
+verificar(ultima.vuelto_entregado.monto == 1600, "el cambio entregado es $1.600")
+verificar(ultima.detalles[-1].motivo_descuento == "Cortesía", "el motivo del descuento se guarda")
+
 # --- F4 Clientes: cuenta de credito, venta a credito desde F1, abonos y cierre ---------------
 from pos.aplicacion.casos_uso.gestionar_clientes import (  # noqa: E402
     GestionarClientes,

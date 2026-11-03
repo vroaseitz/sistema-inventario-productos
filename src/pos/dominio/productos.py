@@ -111,3 +111,4 @@ class RegistroCambioPrecio:
     precio_nuevo: Dinero
     usuario: str
     fecha: datetime = field(default_factory=datetime.now)
+    motivo: str = ""

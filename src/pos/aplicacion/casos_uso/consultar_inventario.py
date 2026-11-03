@@ -14,11 +14,14 @@ from decimal import Decimal
 
 from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.puertos import (
+    ColaSincronizacion,
+    RepositorioCategorias,
     RepositorioExistencias,
     RepositorioMovimientos,
     RepositorioProductos,
     RepositorioVentas,
 )
+from pos.aplicacion.sincronizacion import encolar_producto
 from pos.dominio.errores import DatosProductoInvalidos
 from pos.dominio.inventario import (
     ESTADO_AGOTADO,
@@ -114,6 +117,8 @@ class ConsultarExistencias:
 class DefinirStockMinimo:
     repositorio_productos: RepositorioProductos
     auditor: Auditor | None = None
+    cola: ColaSincronizacion | None = None
+    repositorio_categorias: RepositorioCategorias | None = None
 
     def ejecutar(self, codigo: str, minimo: int | None) -> Producto:
         producto = self.repositorio_productos.obtener_por_codigo(codigo)
@@ -126,6 +131,12 @@ class DefinirStockMinimo:
         anterior = producto.stock_minimo
         producto.stock_minimo = minimo
         self.repositorio_productos.guardar(producto)
+        categoria = (
+            self.repositorio_categorias.nombre_de(producto.categoria_id)
+            if self.repositorio_categorias
+            else None
+        )
+        encolar_producto(self.cola, producto, categoria)
         if self.auditor is not None and anterior != minimo:
             self.auditor.registrar(
                 "Cambio de stock mínimo",

@@ -32,8 +32,9 @@ class RepositorioVentasSQLite:
         try:
             cursor = self._con.execute(
                 """
-                INSERT INTO ventas (turno_caja_id, usuario_id, cliente_id, estado, creado_en, uuid)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO ventas
+                    (turno_caja_id, usuario_id, cliente_id, estado, creado_en, uuid, nota)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     venta.turno_caja_id,
@@ -42,6 +43,7 @@ class RepositorioVentasSQLite:
                     venta.estado.value,
                     venta.creado_en.isoformat(sep=" "),
                     venta.uuid,
+                    venta.nota,
                 ),
             )
             venta.id = cursor.lastrowid
@@ -51,8 +53,8 @@ class RepositorioVentasSQLite:
                     """
                     INSERT INTO venta_detalles
                         (venta_id, producto_codigo, cantidad, precio_unitario,
-                         costo_unitario, descuento_linea)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                         costo_unitario, descuento_linea, motivo_descuento)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         venta.id,
@@ -61,6 +63,7 @@ class RepositorioVentasSQLite:
                         detalle.precio_unitario.monto,
                         detalle.costo_unitario.monto if detalle.costo_unitario else None,
                         detalle.descuento_linea.monto,
+                        detalle.motivo_descuento,
                     ),
                 )
 
@@ -138,6 +141,7 @@ class RepositorioVentasSQLite:
                     Dinero(d["costo_unitario"]) if d["costo_unitario"] is not None else None
                 ),
                 descuento_linea=Dinero(d["descuento_linea"]),
+                motivo_descuento=d["motivo_descuento"] or "",
             )
             for d in detalles_filas
         ]
@@ -181,4 +185,5 @@ class RepositorioVentasSQLite:
             pagos=pagos,
             estado=EstadoVenta(fila["estado"]),
             creado_en=datetime.fromisoformat(fila["creado_en"]),
+            nota=fila["nota"] or "",
         )

@@ -11,7 +11,8 @@ DDL = """
 -- Categorias de producto (C-02): tabla propia, ya no una lista fija en el codigo.
 CREATE TABLE IF NOT EXISTS categorias (
     id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    nombre  TEXT NOT NULL UNIQUE
+    nombre  TEXT NOT NULL UNIQUE,
+    activa  INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS productos (
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS historial_precios (
     precio_nuevo    INTEGER NOT NULL,
     usuario         TEXT NOT NULL,
     fecha           TEXT NOT NULL,
+    motivo          TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
 );
 
@@ -151,6 +153,14 @@ CREATE TABLE IF NOT EXISTS facturas_compra_lineas (
     FOREIGN KEY (factura_id) REFERENCES facturas_compra(id)
 );
 
+-- Proveedores creados a mano (HU-CMP-03). Los que aparecen solo en una factura tambien cuentan.
+CREATE TABLE IF NOT EXISTS proveedores (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre     TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    contacto   TEXT NOT NULL DEFAULT '',
+    creado_en  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Registro de cambios y descartes (HU-USR-03). La pantalla de auditoria (F7) se construye
 -- despues; por ahora se guarda para no perder el rastro (p. ej. tickets descartados al cerrar).
 CREATE TABLE IF NOT EXISTS auditoria (
@@ -196,6 +206,7 @@ CREATE TABLE IF NOT EXISTS ventas (
     estado         TEXT NOT NULL DEFAULT 'pagada' CHECK (estado IN ('pagada', 'anulada')),
     creado_en      TEXT NOT NULL DEFAULT (datetime('now')),
     uuid           TEXT,
+    nota           TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (turno_caja_id) REFERENCES turnos_caja(id)
 );
 
@@ -207,6 +218,7 @@ CREATE TABLE IF NOT EXISTS venta_detalles (
     precio_unitario  INTEGER NOT NULL,
     costo_unitario   INTEGER,
     descuento_linea  INTEGER NOT NULL DEFAULT 0,
+    motivo_descuento TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (venta_id) REFERENCES ventas(id)
 );
 
@@ -241,6 +253,8 @@ _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
     "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE usuarios ADD COLUMN ultimo_acceso TEXT",
+    "ALTER TABLE categorias ADD COLUMN activa INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE historial_precios ADD COLUMN motivo TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE productos ADD COLUMN stock_minimo INTEGER",
     "ALTER TABLE auditoria ADD COLUMN registro TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE auditoria ADD COLUMN antes TEXT NOT NULL DEFAULT ''",
@@ -250,6 +264,8 @@ _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
     "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",
     "ALTER TABLE ventas ADD COLUMN uuid TEXT",
+    "ALTER TABLE ventas ADD COLUMN nota TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE venta_detalles ADD COLUMN motivo_descuento TEXT NOT NULL DEFAULT ''",
 )
 
 

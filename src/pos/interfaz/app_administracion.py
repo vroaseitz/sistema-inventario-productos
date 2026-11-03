@@ -24,6 +24,7 @@ from pos.dominio.configuracion import PARAMETROS, validar_parametro
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_clp
 from pos.dominio.usuarios import MODULOS_POR_ROL, NOMBRES_ROL, Rol
+from pos.interfaz import tema
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.dialogo_formulario import pedir_formulario
 from pos.interfaz.sesion import Sesion
@@ -88,16 +89,24 @@ class VentanaAdministracion(ttk.Frame):
 
     def _construir_usuarios(self) -> None:
         marco = ttk.Frame(self._pestanas, padding=8)
-        self._pestanas.add(marco, text="Usuarios y perfiles")
-        botones = ttk.Frame(marco)
-        botones.pack(fill="x")
-        for texto, comando in (
-            ("Nuevo usuario", self._dialogo_nuevo),
-            ("Restablecer contraseña", self._dialogo_clave),
-            ("Cambiar perfil", self._dialogo_perfil),
-            ("Desactivar / reactivar", self._cambiar_estado),
+        self._pestanas.add(marco, text="Usuarios")
+        botones = tk.Frame(marco, bg=tema.PAPEL)
+        botones.pack(fill="x", pady=(0, 8))
+        for texto, comando, tecla, variante in (
+            ("Nuevo usuario", self._dialogo_nuevo, "INS", "primario"),
+            ("Restablecer contraseña", self._dialogo_clave, "", "normal"),
+            ("Cambiar perfil", self._dialogo_perfil, "", "normal"),
+            ("Desactivar / reactivar", self._cambiar_estado, "DEL", "peligro"),
         ):
-            ttk.Button(botones, text=texto, command=comando).pack(side="left", padx=4, pady=4)
+            tema.BotonAccion(
+                botones,
+                texto,
+                comando,
+                tecla,
+                variante,
+                color=tema.MODULOS_COLOR["F7"][0],
+                fondo=tema.PAPEL,
+            ).pack(side="left", padx=(0, 6))
         self._tabla_usuarios = ttk.Treeview(
             marco, columns=("usuario", "perfil", "acceso", "estado"), show="headings", height=6
         )

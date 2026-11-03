@@ -35,6 +35,7 @@ from pos.interfaz.app_inventario_consultas import (
 )
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.sesion import Sesion
+from pos.interfaz.tema import MODULOS_COLOR, PAPEL, BotonAccion
 
 
 def _clp(monto: int) -> str:
@@ -51,10 +52,14 @@ MOTIVOS_MERMA = {
 }
 
 
-class PanelEntradaYAlertas(ttk.Frame):
+class PanelEntradaYAlertas:
+    """Entrada de stock y merma (ventanas modales) + pestañas Lotes y Alertas del prototipo."""
+
+    al_cambiar = None  # la ventana lo fija para refrescar todas las pestañas
+
     def __init__(
         self,
-        parent: tk.Misc,
+        parent: ttk.Notebook,
         repo_productos: RepositorioProductos,
         ingresar_stock: IngresarStock,
         consultar_alertas: ConsultarAlertasVencimiento,
@@ -63,7 +68,7 @@ class PanelEntradaYAlertas(ttk.Frame):
         repo_existencias: RepositorioExistencias | None = None,
         sesion: Sesion | None = None,
     ) -> None:
-        super().__init__(parent, padding=12)
+        self._parent = parent
         self._productos = repo_productos
         self._ingresar = ingresar_stock
         self._alertas = consultar_alertas
@@ -72,16 +77,94 @@ class PanelEntradaYAlertas(ttk.Frame):
         self._existencias = repo_existencias
         self._sesion = sesion or Sesion()
 
-        self._codigo = tk.StringVar()
-        self._cantidad = tk.StringVar()
-        self._codigo_lote = tk.StringVar()  # I-02: codigo impreso en el envase
-        self._motivo = tk.StringVar(value="Compra a proveedor")
-        self._mensaje = tk.StringVar()
+        self._codigo = tk.StringVar(master=parent)
+        self._cantidad = tk.StringVar(master=parent)
+        self._codigo_lote = tk.StringVar(master=parent)  # I-02: codigo impreso en el envase
+        self._motivo = tk.StringVar(master=parent, value="Compra a proveedor")
+        self._mensaje = tk.StringVar(master=parent)
 
-        formulario = ttk.LabelFrame(self, text="Entrada de stock", padding=10)
-        formulario.pack(fill="x")
+        self.marco_lotes = ttk.Frame(parent, padding=8)
+        self.marco_alertas = ttk.Frame(parent, padding=8)
+        self._construir_entrada()
+        if self._merma is not None:
+            self._construir_merma()
+
+        ttk.Label(
+            self.marco_alertas,
+            text="Lotes que vencen pronto, con el descuento que se sugiere para venderlos antes.",
+            foreground="#666",
+        ).pack(anchor="w")
+        columnas = ("producto", "vence", "dias", "saldo", "precio", "descuento", "sugerido")
+        self._tabla = ttk.Treeview(self.marco_alertas, columns=columnas, show="headings", height=14)
+        for clave, titulo, ancho in (
+            ("producto", "Producto", 260),
+            ("vence", "Vence", 100),
+            ("dias", "Dias", 70),
+            ("saldo", "Saldo", 70),
+            ("precio", "Precio", 90),
+            ("descuento", "Descuento", 90),
+            ("sugerido", "Precio sugerido", 130),
+        ):
+            self._tabla.heading(clave, text=titulo)
+            self._tabla.column(clave, width=ancho, anchor="w")
+        self._tabla.tag_configure("vencido", foreground="#a11")
+        self._tabla.pack(fill="both", expand=True, pady=4)
+        ttk.Label(
+            self.marco_alertas,
+            text="El descuento es una sugerencia (politica propuesta); no modifica el precio.",
+            foreground="#666",
+        ).pack(anchor="w")
+        self._tabla_lotes = None
+        if self._repo_lotes is not None:
+            self._tabla_lotes = ttk.Treeview(
+                self.marco_lotes,
+                columns=("lote", "producto", "vence", "saldo"),
+                show="headings",
+                height=14,
+            )
+            for clave, titulo, ancho in (
+                ("lote", "Lote", 100),
+                ("producto", "Producto", 320),
+                ("vence", "Vence", 120),
+                ("saldo", "Saldo", 90),
+            ):
+                self._tabla_lotes.heading(clave, text=titulo)
+                self._tabla_lotes.column(clave, width=ancho, anchor="w")
+            self._tabla_lotes.pack(fill="both", expand=True)
+        self.refrescar()
+
+    # ------------------------------------------------------------------ ventanas modales --
+
+    def _modal(self, titulo: str) -> tk.Toplevel:
+        """Ventana oculta que se muestra con `abrir_*`; los campos existen siempre."""
+        raiz = self._parent.winfo_toplevel()
+        ventana = tk.Toplevel(raiz)
+        ventana.title(titulo)
+        ventana.transient(raiz)
+        ventana.withdraw()
+        ventana.protocol("WM_DELETE_WINDOW", ventana.withdraw)
+        ventana.bind("<Escape>", lambda _e: ventana.withdraw())
+        return ventana
+
+    @staticmethod
+    def _mostrar(ventana: tk.Toplevel) -> None:
+        ventana.deiconify()
+        ventana.lift()
+        ventana.focus_force()
+
+    def abrir_entrada(self) -> None:
+        self._mostrar(self.dlg_entrada)
+
+    def abrir_merma(self) -> None:
+        if self._merma is not None:
+            self._mostrar(self.dlg_merma)
+
+    def _construir_entrada(self) -> None:
+        self.dlg_entrada = self._modal("Agregar a inventario")
+        marco = ttk.Frame(self.dlg_entrada, padding=14)
+        marco.pack(fill="both", expand=True)
         # R-01: "Vence" tiene calendario desplegable (tambien se puede escribir AAAA-MM-DD).
-        self._vence = CampoFecha(formulario, width=14)
+        self._vence = CampoFecha(marco, width=14)
         campos = (
             ("Codigo de producto", self._codigo),
             ("Cantidad", self._cantidad),
@@ -89,73 +172,34 @@ class PanelEntradaYAlertas(ttk.Frame):
             ("Codigo de lote (impreso)", self._codigo_lote),
             ("Motivo", self._motivo),
         )
-        for columna, (etiqueta, variable) in enumerate(campos):
-            ttk.Label(formulario, text=etiqueta).grid(row=0, column=columna, sticky="w", padx=4)
+        for fila, (etiqueta, variable) in enumerate(campos):
+            ttk.Label(marco, text=etiqueta).grid(row=fila, column=0, sticky="w", padx=4, pady=4)
             if variable is self._vence:
-                self._vence.grid(row=1, column=columna, padx=4, pady=(2, 0), sticky="w")
+                self._vence.grid(row=fila, column=1, padx=4, sticky="w")
                 continue
-            ttk.Entry(formulario, textvariable=variable, width=20).grid(
-                row=1, column=columna, padx=4, pady=(2, 0)
-            )
-        ttk.Button(formulario, text="Ingresar", command=self._registrar).grid(
-            row=1, column=len(campos), padx=8
-        )
-        if self._merma is not None:
-            self._construir_merma()
-        ttk.Label(self, textvariable=self._mensaje, foreground="#5B3E7E").pack(anchor="w", pady=6)
-
-        ttk.Label(self, text="Alertas de vencimiento", font=("TkDefaultFont", 12, "bold")).pack(
-            anchor="w"
-        )
-        columnas = ("producto", "vence", "dias", "saldo", "precio", "descuento", "sugerido")
-        self._tabla = ttk.Treeview(self, columns=columnas, show="headings", height=14)
-        for clave, titulo, ancho in (
-            ("producto", "Producto", 220),
-            ("vence", "Vence", 100),
-            ("dias", "Dias", 60),
-            ("saldo", "Saldo", 70),
-            ("precio", "Precio", 90),
-            ("descuento", "Descuento", 90),
-            ("sugerido", "Precio sugerido", 120),
-        ):
-            self._tabla.heading(clave, text=titulo)
-            self._tabla.column(clave, width=ancho, anchor="w")
-        self._tabla.tag_configure("vencido", foreground="#a11")
-        self._tabla.pack(fill="both", expand=True, pady=4)
-        self._tabla_lotes = None
-        if self._repo_lotes is not None:
-            ttk.Label(self, text="Lotes", font=("TkDefaultFont", 12, "bold")).pack(anchor="w")
-            self._tabla_lotes = ttk.Treeview(
-                self, columns=("lote", "producto", "vence", "saldo"), show="headings", height=6
-            )
-            for clave, titulo, ancho in (
-                ("lote", "Lote", 80),
-                ("producto", "Producto", 260),
-                ("vence", "Vence", 110),
-                ("saldo", "Saldo", 80),
-            ):
-                self._tabla_lotes.heading(clave, text=titulo)
-                self._tabla_lotes.column(clave, width=ancho, anchor="w")
-            self._tabla_lotes.pack(fill="x", pady=4)
-        ttk.Label(
-            self,
-            text="El descuento es una sugerencia (politica propuesta); no modifica el precio.",
-            foreground="#666",
-        ).pack(anchor="w")
-        self.refrescar()
+            entrada = ttk.Entry(marco, textvariable=variable, width=28)
+            entrada.grid(row=fila, column=1, padx=4)
+            entrada.bind("<Return>", lambda _e: self._registrar())
+        botones = ttk.Frame(marco)
+        botones.grid(row=len(campos), column=0, columnspan=2, pady=(12, 0))
+        ttk.Button(
+            botones, text="Ingresar", style="Primario.TButton", command=self._registrar
+        ).pack(side="left", padx=6)
+        ttk.Button(botones, text="Cerrar", command=self.dlg_entrada.withdraw).pack(side="left")
 
     # ------------------------------------------- Registrar merma o ajuste (HU-INV-04) --
 
     def _construir_merma(self) -> None:
-        marco = ttk.LabelFrame(self, text="Registrar merma o ajuste", padding=10)
-        marco.pack(fill="x", pady=(8, 0))
+        self.dlg_merma = self._modal("Ajustes y mermas")
+        marco = ttk.Frame(self.dlg_merma, padding=14)
+        marco.pack(fill="both", expand=True)
         self._merma_codigo = tk.StringVar()
         self._merma_cantidad = tk.StringVar()
         self._merma_motivo = tk.StringVar()
         self._merma_obs = tk.StringVar()
         self._merma_estado = tk.StringVar(value="Existencia actual: -  ·  Resultante: -")
         campos = (
-            ("Codigo de producto", ttk.Entry(marco, textvariable=self._merma_codigo, width=18)),
+            ("Codigo de producto", ttk.Entry(marco, textvariable=self._merma_codigo, width=28)),
             (
                 "Cantidad a dar de baja",
                 ttk.Entry(marco, textvariable=self._merma_cantidad, width=14),
@@ -167,22 +211,25 @@ class PanelEntradaYAlertas(ttk.Frame):
                     textvariable=self._merma_motivo,
                     values=list(MOTIVOS_MERMA),
                     state="readonly",
-                    width=18,
+                    width=26,
                 ),
             ),
-            ("Observacion", ttk.Entry(marco, textvariable=self._merma_obs, width=26)),
+            ("Observacion", ttk.Entry(marco, textvariable=self._merma_obs, width=34)),
         )
-        for columna, (titulo, widget) in enumerate(campos):
-            ttk.Label(marco, text=titulo).grid(row=0, column=columna, sticky="w", padx=4)
-            widget.grid(row=1, column=columna, padx=4, pady=(2, 0), sticky="w")
+        for fila, (titulo, widget) in enumerate(campos):
+            ttk.Label(marco, text=titulo).grid(row=fila, column=0, sticky="w", padx=4, pady=4)
+            widget.grid(row=fila, column=1, padx=4, sticky="w")
         for variable in (self._merma_codigo, self._merma_cantidad):
             variable.trace_add("write", lambda *_a: self._actualizar_estado_merma())
-        ttk.Button(marco, text="Registrar merma", command=self._registrar_merma).grid(
-            row=1, column=len(campos), padx=8
-        )
         ttk.Label(marco, textvariable=self._merma_estado, foreground="#666").grid(
-            row=2, column=0, columnspan=len(campos), sticky="w", padx=4, pady=(6, 0)
+            row=len(campos), column=0, columnspan=2, sticky="w", padx=4, pady=(8, 0)
         )
+        botones = ttk.Frame(marco)
+        botones.grid(row=len(campos) + 1, column=0, columnspan=2, pady=(12, 0))
+        ttk.Button(
+            botones, text="Registrar merma", style="Primario.TButton", command=self._registrar_merma
+        ).pack(side="left", padx=6)
+        ttk.Button(botones, text="Cerrar", command=self.dlg_merma.withdraw).pack(side="left")
         for _titulo, widget in campos:
             widget.bind("<Return>", lambda _e: self._registrar_merma())
 
@@ -232,7 +279,8 @@ class PanelEntradaYAlertas(ttk.Frame):
         for variable in (self._merma_codigo, self._merma_cantidad, self._merma_obs):
             variable.set("")
         self._merma_motivo.set("")
-        self.refrescar()
+        self.dlg_merma.withdraw()
+        self._tras_cambio()
 
     def _registrar(self) -> None:
         # I-03: cada dato faltante o mal escrito se nombra en el mensaje.
@@ -276,7 +324,15 @@ class PanelEntradaYAlertas(ttk.Frame):
         self._cantidad.set("")
         self._codigo_lote.set("")
         self._vence.set("")
-        self.refrescar()
+        self.dlg_entrada.withdraw()
+        self._tras_cambio()
+
+    def _tras_cambio(self) -> None:
+        """Ingreso o merma hechos: refresca esta pestaña y las demás de la ventana."""
+        if self.al_cambiar is not None:
+            self.al_cambiar()
+        else:
+            self.refrescar()
 
     def al_mostrar(self) -> None:
         """Se llama al entrar a F3: las ventas y productos nuevos cambian las alertas."""
@@ -341,8 +397,10 @@ class VentanaInventario(ttk.Frame):
         repo_categorias: RepositorioCategorias | None = None,
     ) -> None:
         super().__init__(parent)
+        self._color, self._claro = MODULOS_COLOR["F3"]
+        barra = tk.Frame(self, bg=PAPEL)
+        barra.pack(fill="x", padx=12, pady=(8, 4))
         self._pestanas = ttk.Notebook(self)
-        self._pestanas.pack(fill="both", expand=True)
         self._panel_entrada = PanelEntradaYAlertas(
             self._pestanas,
             repo_productos,
@@ -353,30 +411,83 @@ class VentanaInventario(ttk.Frame):
             repo_existencias,
             sesion,
         )
-        self._pestanas.add(self._panel_entrada, text="Entrada y alertas")
         self._paneles: list = []
+        self._panel_entrada.al_cambiar = self.refrescar
+        acciones = [
+            ("Agregar a inventario", self._panel_entrada.abrir_entrada, "INS", "primario"),
+        ]
+        if registrar_merma is not None:
+            acciones.append(("Ajustes y mermas", self._panel_entrada.abrir_merma, "", "normal"))
+        if reporte_inventario is not None:
+            acciones.append(("Reporte de inventario", self.abrir_reporte, "", "normal"))
+        if consultar_movimientos is not None:
+            acciones.append(("Reporte de movimientos", self.abrir_movimientos, "", "normal"))
+        for texto, comando, tecla, variante in acciones:
+            BotonAccion(
+                barra, texto, comando, tecla, variante, color=self._color, fondo=PAPEL
+            ).pack(side="left", padx=(0, 6))
+        tk.Label(barra, textvariable=self._panel_entrada._mensaje, bg=PAPEL, fg=self._color).pack(
+            side="left", padx=10
+        )
+        self._pestanas.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        self._destinos: dict[str, int] = {}
         if consultar_existencias is not None and definir_minimo is not None:
             self.existencias = PanelExistencias(
                 self._pestanas, consultar_existencias, definir_minimo, repo_categorias
             )
+            self._destinos["existencias"] = len(self._pestanas.tabs())
             self._pestanas.add(self.existencias, text="Existencias")
             self._paneles.append(self.existencias)
+        self._destinos["lotes"] = len(self._pestanas.tabs())
+        self._pestanas.add(self._panel_entrada.marco_lotes, text="Lotes y vencimientos")
+        self._destinos["alertas"] = len(self._pestanas.tabs())
+        self._pestanas.add(self._panel_entrada.marco_alertas, text="Alertas")
+        # Los reportes viven en ventanas ocultas que abren los botones de la barra.
         if reporte_inventario is not None:
-            self.reporte = PanelReporteInventario(
-                self._pestanas, reporte_inventario, repo_categorias
+            self._ventana_reporte, self.reporte = self._modal_con_panel(
+                "Reporte de inventario",
+                lambda v: PanelReporteInventario(v, reporte_inventario, repo_categorias),
             )
-            self._pestanas.add(self.reporte, text="Reporte de inventario")
             self._paneles.append(self.reporte)
         if consultar_movimientos is not None:
-            self.movimientos = PanelMovimientos(self._pestanas, consultar_movimientos)
-            self._pestanas.add(self.movimientos, text="Movimientos")
+            self._ventana_movimientos, self.movimientos = self._modal_con_panel(
+                "Reporte de movimientos", lambda v: PanelMovimientos(v, consultar_movimientos)
+            )
             self._paneles.append(self.movimientos)
+
+    def _modal_con_panel(self, titulo: str, crear) -> tuple[tk.Toplevel, object]:
+        ventana = tk.Toplevel(self.winfo_toplevel())
+        ventana.title(titulo)
+        ventana.transient(self.winfo_toplevel())
+        ventana.geometry("1000x560")
+        ventana.withdraw()
+        ventana.bind("<Escape>", lambda _e: ventana.withdraw())
+        ventana.protocol("WM_DELETE_WINDOW", ventana.withdraw)
+        panel = crear(ventana)
+        panel.pack(fill="both", expand=True, padx=8, pady=8)
+        return ventana, panel
+
+    def abrir_reporte(self) -> None:
+        self.reporte.refrescar()
+        self._ventana_reporte.deiconify()
+        self._ventana_reporte.lift()
+
+    def abrir_movimientos(self) -> None:
+        self.movimientos.refrescar()
+        self._ventana_movimientos.deiconify()
+        self._ventana_movimientos.lift()
 
     def __getattr__(self, nombre: str):
         """La pestana de entrada conserva sus nombres de siempre (_codigo, _registrar, ...)."""
         if nombre.startswith("__") or nombre == "_panel_entrada":
             raise AttributeError(nombre)
         return getattr(self._panel_entrada, nombre)
+
+    def seleccionar_pestana(self, nombre: str) -> None:
+        """«alertas» y «existencias» (desde los avisos del resumen del dia)."""
+        destino = self._destinos.get(nombre)
+        if destino is not None:
+            self._pestanas.select(destino)
 
     def refrescar(self) -> None:
         self._panel_entrada.refrescar()

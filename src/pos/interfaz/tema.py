@@ -38,12 +38,38 @@ def fuente(tamano: int = 11, negrita: bool = False) -> tuple:
     return ("TkDefaultFont", tamano, "bold") if negrita else ("TkDefaultFont", tamano)
 
 
+def centrar(ventana: tk.Misc, referencia: tk.Misc | None = None) -> None:
+    """Pone un cuadro modal centrado sobre la ventana y siempre dentro de la pantalla."""
+    ventana.update_idletasks()
+    ancho, alto = ventana.winfo_reqwidth(), ventana.winfo_reqheight()
+    pantalla_x, pantalla_y = ventana.winfo_screenwidth(), ventana.winfo_screenheight()
+    if referencia is not None:
+        x = referencia.winfo_rootx() + (referencia.winfo_width() - ancho) // 2
+        y = referencia.winfo_rooty() + (referencia.winfo_height() - alto) // 2
+    else:
+        x, y = (pantalla_x - ancho) // 2, (pantalla_y - alto) // 2
+    x = max(0, min(x, pantalla_x - ancho))
+    y = max(30, min(y, pantalla_y - alto - 60))
+    ventana.geometry(f"+{x}+{y}")
+
+
 def aplicar_tema(raiz: tk.Misc) -> ttk.Style:
     """Deja los widgets ttk con el aspecto del prototipo. Se llama una vez al abrir la ventana."""
     estilo = ttk.Style(raiz)
     estilo.theme_use("clam")
     raiz.configure(bg=PAPEL)
     raiz.option_add("*Toplevel.background", PAPEL)  # cuadros de dialogo: fondo claro siempre
+    # Widgets tk "crudos": sin esto toman los colores del modo oscuro del sistema (texto blanco).
+    raiz.option_add("*Label.foreground", TINTA)
+    raiz.option_add("*Entry.background", PAPEL)
+    raiz.option_add("*Entry.foreground", TINTA)
+    raiz.option_add("*Entry.insertBackground", TINTA)
+    raiz.option_add("*Entry.disabledBackground", RELLENO)
+    raiz.option_add("*Entry.disabledForeground", TINTA_3)
+    raiz.option_add("*Entry.highlightBackground", LINEA)
+    raiz.option_add("*Entry.highlightColor", MARCA)
+    raiz.option_add("*Text.background", PAPEL)
+    raiz.option_add("*Text.foreground", TINTA)
     raiz.option_add("*Listbox.background", PAPEL)
     raiz.option_add("*Listbox.foreground", TINTA)
     raiz.option_add("*Listbox.highlightColor", LINEA)
@@ -214,17 +240,17 @@ class BotonAccion(tk.Frame):
                 font=fuente(9),
                 padx=4,
             )
-            insignia.pack(side="left", padx=(8, 4), pady=5)
+            insignia.pack(side="left", padx=(5, 3), pady=5)
             self._piezas.append(insignia)
         etiqueta = tk.Label(
             self,
             text=texto,
             bg=self._normal,
             fg=texto_color,
-            font=fuente(11, primario),
-            padx=0 if tecla else 10,
+            font=fuente(10, primario),
+            padx=0 if tecla else 8,
         )
-        etiqueta.pack(side="left", padx=(0, 10), pady=5)
+        etiqueta.pack(side="left", padx=(0, 7), pady=5)
         self._etiqueta = etiqueta
         for pieza in (self, etiqueta, *self._piezas):
             pieza.bind("<Button-1>", lambda _e: self.invoke())

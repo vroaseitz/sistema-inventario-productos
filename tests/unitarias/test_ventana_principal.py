@@ -44,7 +44,7 @@ def test_la_ventana_unica_monta_venta_y_productos_y_cambia_de_modulo(tmp_path, m
     ventana = construir_aplicacion()  # no sincroniza: solo arma el publicador si hay URL
     try:
         assert type(ventana._marcos["F1"]).__name__ == "VentanaVentas"
-        assert type(ventana._marcos["F2"]).__name__ == "VentanaProductos"
+        assert type(ventana._marcos["F2"]).__name__ == "VentanaCatalogo"
         assert ventana.modulo_activo == "F1"
 
         assert type(ventana._marcos["F3"]).__name__ == "VentanaInventario"

@@ -12,12 +12,15 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from tkinter import messagebox, ttk
 
+from pos.aplicacion.casos_uso.gestionar_proveedores import GestionarProveedores
 from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra
 from pos.aplicacion.puertos import RepositorioFacturasCompra, RepositorioProductos
 from pos.dominio.compras import FacturaCompra, LineaFactura, iva_de
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.interfaz import tema
 from pos.interfaz.campo_fecha import CampoFecha
+from pos.interfaz.dialogo_formulario import pedir_formulario
 
 
 class VentanaCompras(ttk.Frame):
@@ -27,8 +30,10 @@ class VentanaCompras(ttk.Frame):
         registrar: RegistrarFacturaCompra,
         repo_facturas: RepositorioFacturasCompra,
         repo_productos: RepositorioProductos,
+        gestion_proveedores: GestionarProveedores | None = None,
     ) -> None:
-        super().__init__(parent, padding=12)
+        super().__init__(parent)
+        self._gestion_proveedores = gestion_proveedores
         self._registrar = registrar
         self._facturas = repo_facturas
         self._productos = repo_productos
@@ -49,11 +54,36 @@ class VentanaCompras(ttk.Frame):
         self._l_costo = tk.StringVar()
         self._l_lote = tk.StringVar()
 
+        color = tema.MODULOS_COLOR["F5"][0]
+        barra = tk.Frame(self, bg=tema.PAPEL)
+        barra.pack(fill="x", padx=12, pady=(8, 4))
+        for texto, comando, tecla, variante in (
+            ("Registrar factura", self.ir_a_registrar, "INS", "primario"),
+            *(
+                [("Nuevo proveedor", self.nuevo_proveedor, "", "normal")]
+                if gestion_proveedores is not None
+                else []
+            ),
+            ("Confirmar factura", lambda: self._confirmar(), "Ctrl+↵", "normal"),
+            ("Limpiar", lambda: self._limpiar(), "", "normal"),
+        ):
+            tema.BotonAccion(
+                barra, texto, comando, tecla, variante, color=color, fondo=tema.PAPEL
+            ).pack(side="left", padx=(0, 6))
+        self._pestanas = ttk.Notebook(self)
+        self._pestanas.pack(fill="both", expand=True, padx=12, pady=(0, 8))
+        self._tab_facturas = ttk.Frame(self._pestanas, padding=8)
+        self._tab_registrar = ttk.Frame(self._pestanas, padding=8)
+        self._tab_proveedores = ttk.Frame(self._pestanas, padding=8)
+        self._pestanas.add(self._tab_facturas, text="Facturas de compra")
+        self._pestanas.add(self._tab_registrar, text="Registrar factura")
+        self._pestanas.add(self._tab_proveedores, text="Proveedores")
+
         # --- Datos de la factura -----------------------------------------------------------
-        datos = ttk.LabelFrame(self, text="Registrar factura de compra", padding=10)
+        datos = ttk.LabelFrame(self._tab_registrar, text="Registrar factura de compra", padding=10)
         datos.pack(fill="x")
         ttk.Label(datos, text="Proveedor").grid(row=0, column=0, sticky="w", padx=4)
-        self._proveedor = ttk.Combobox(datos, width=28, values=self._facturas.proveedores())
+        self._proveedor = ttk.Combobox(datos, width=28, values=self._nombres_proveedores())
         self._proveedor.grid(row=1, column=0, padx=4, pady=(2, 0), sticky="w")
         ttk.Label(datos, text="Numero de documento").grid(row=0, column=1, sticky="w", padx=4)
         ttk.Entry(datos, textvariable=self._numero, width=16).grid(
@@ -75,7 +105,9 @@ class VentanaCompras(ttk.Frame):
         entrada_imp.bind("<KeyRelease>", self._al_editar_impuestos)
 
         # --- Agregar linea -----------------------------------------------------------------
-        linea = ttk.LabelFrame(self, text="Detalle de productos adquiridos", padding=10)
+        linea = ttk.LabelFrame(
+            self._tab_registrar, text="Detalle de productos adquiridos", padding=10
+        )
         linea.pack(fill="x", pady=(8, 0))
         self._l_vence = CampoFecha(linea, width=14)
         campos = (
@@ -98,7 +130,7 @@ class VentanaCompras(ttk.Frame):
         )
 
         columnas = ("producto", "cantidad", "costo", "subtotal", "anterior")
-        self._tabla = ttk.Treeview(self, columns=columnas, show="headings", height=6)
+        self._tabla = ttk.Treeview(self._tab_registrar, columns=columnas, show="headings", height=6)
         for clave, titulo, ancho, ancla in (
             ("producto", "Producto", 280, "w"),
             ("cantidad", "Cantidad", 80, "e"),
@@ -111,7 +143,7 @@ class VentanaCompras(ttk.Frame):
         self._tabla.pack(fill="x", pady=(8, 0))
         self._tabla.bind("<Delete>", lambda _e: self._quitar_linea())
 
-        resumen = ttk.Frame(self)
+        resumen = ttk.Frame(self._tab_registrar)
         resumen.pack(fill="x", pady=4)
         ttk.Label(resumen, textvariable=self._suma).pack(side="left", padx=4)
         ttk.Label(resumen, textvariable=self._diferencia).pack(side="left", padx=16)
@@ -120,14 +152,13 @@ class VentanaCompras(ttk.Frame):
             side="right", padx=4
         )
         self.winfo_toplevel().bind("<Control-Return>", self._atajo_confirmar, add="+")
-        ttk.Label(self, textvariable=self._mensaje, foreground="#5B3E7E").pack(anchor="w")
+        ttk.Label(self._tab_registrar, textvariable=self._mensaje, foreground="#5B3E7E").pack(
+            anchor="w"
+        )
 
         # --- Facturas registradas ----------------------------------------------------------
-        ttk.Label(self, text="Facturas de compra", font=("TkDefaultFont", 12, "bold")).pack(
-            anchor="w", pady=(6, 0)
-        )
         cols = ("documento", "fecha", "proveedor", "neto", "impuestos", "total", "estado")
-        self._lista = ttk.Treeview(self, columns=cols, show="headings", height=6)
+        self._lista = ttk.Treeview(self._tab_facturas, columns=cols, show="headings", height=6)
         for clave, titulo, ancho, ancla in (
             ("documento", "Documento", 110, "w"),
             ("fecha", "Fecha", 100, "w"),
@@ -140,6 +171,27 @@ class VentanaCompras(ttk.Frame):
             self._lista.heading(clave, text=titulo)
             self._lista.column(clave, width=ancho, anchor=ancla)
         self._lista.pack(fill="both", expand=True, pady=4)
+        self._proveedores_tabla = ttk.Treeview(
+            self._tab_proveedores,
+            columns=("proveedor", "contacto", "facturas", "total", "ultima"),
+            show="headings",
+            height=14,
+        )
+        for clave, titulo, ancho, ancla in (
+            ("proveedor", "Proveedor", 260, "w"),
+            ("contacto", "Contacto", 200, "w"),
+            ("facturas", "Facturas", 90, "e"),
+            ("total", "Total comprado", 140, "e"),
+            ("ultima", "Última compra", 120, "w"),
+        ):
+            self._proveedores_tabla.heading(clave, text=titulo)
+            self._proveedores_tabla.column(clave, width=ancho, anchor=ancla)
+        self._proveedores_tabla.pack(fill="both", expand=True)
+        ttk.Label(
+            self._tab_proveedores,
+            text="Crea uno con «Nuevo proveedor» o escríbelo al registrar su primera factura.",
+            foreground="#666",
+        ).pack(anchor="w", pady=4)
         self._refrescar_lista()
 
     # ------------------------------------------------------------------ montos --
@@ -283,7 +335,7 @@ class VentanaCompras(ttk.Frame):
             f"({len(factura.lineas)} productos)"
         )
         self._limpiar()
-        self._proveedor.config(values=self._facturas.proveedores())
+        self._proveedor.config(values=self._nombres_proveedores())
         self._refrescar_lista()
 
     def _limpiar(self) -> None:
@@ -293,9 +345,75 @@ class VentanaCompras(ttk.Frame):
         self._proveedor.set("")
         self._refrescar_lineas()
 
+    def _nombres_proveedores(self) -> list[str]:
+        """Los creados a mano y los que ya salieron en una factura, sin repetir."""
+        if self._gestion_proveedores is not None:
+            return self._gestion_proveedores.nombres()
+        return self._facturas.proveedores()
+
+    def _contactos_proveedores(self) -> dict[str, str]:
+        if self._gestion_proveedores is None:
+            return {}
+        return {p.nombre: p.contacto for p in self._gestion_proveedores.repositorio.listar()}
+
+    def nuevo_proveedor(self) -> None:
+        """Formulario del proveedor nuevo; al crearlo queda elegido en la factura."""
+        if self._gestion_proveedores is None:
+            return
+
+        def aceptar(datos: dict[str, str]) -> bool:
+            try:
+                proveedor = self._gestion_proveedores.crear(datos["nombre"], datos["contacto"])
+            except ErrorDominio as error:
+                messagebox.showerror("Compras", str(error))
+                return False
+            self._proveedor.config(values=self._nombres_proveedores())
+            self._proveedor.set(proveedor.nombre)
+            self._mensaje.set(
+                f"Proveedor «{proveedor.nombre}» creado: ya se puede facturar con él."
+            )
+            self._refrescar_lista()
+            iid = f"prov-{proveedor.nombre}"
+            if self._proveedores_tabla.exists(iid):
+                self._proveedores_tabla.selection_set(iid)
+                self._proveedores_tabla.see(iid)
+            self._pestanas.select(self._tab_proveedores)
+            return True
+
+        self.dialogo = pedir_formulario(
+            self,
+            "Nuevo proveedor",
+            [("nombre", "Nombre (obligatorio)", "", None), ("contacto", "Contacto", "", None)],
+            aceptar,
+            "Crear proveedor",
+        )
+
+    def ir_a_registrar(self) -> None:
+        self._pestanas.select(self._tab_registrar)
+
     def _refrescar_lista(self) -> None:
         self._lista.delete(*self._lista.get_children())
-        for f in self._facturas.listar():
+        facturas = self._facturas.listar()
+        self._proveedores_tabla.delete(*self._proveedores_tabla.get_children())
+        por_proveedor: dict[str, list] = {}
+        for f in facturas:
+            por_proveedor.setdefault(f.proveedor, []).append(f)
+        contactos = self._contactos_proveedores()
+        for nombre in self._nombres_proveedores() or sorted(por_proveedor, key=str.lower):
+            lista = por_proveedor.get(nombre, [])
+            self._proveedores_tabla.insert(
+                "",
+                "end",
+                iid=f"prov-{nombre}",
+                values=(
+                    nombre,
+                    contactos.get(nombre, ""),
+                    len(lista),
+                    formatear_clp(sum(x.total for x in lista)) if lista else "—",
+                    max(x.fecha for x in lista).isoformat() if lista else "—",
+                ),
+            )
+        for f in facturas:
             self._lista.insert(
                 "",
                 "end",

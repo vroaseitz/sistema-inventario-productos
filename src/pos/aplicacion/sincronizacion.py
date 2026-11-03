@@ -36,6 +36,10 @@ def encolar_producto(
             "precio": producto.precio.monto,
             "unidad_venta": producto.unidad_venta.value,
             "activo": producto.activo,
+            "costo": producto.costo.neto.monto if producto.costo is not None else None,
+            "perecible": producto.perecible,
+            "dias_aviso": producto.dias_aviso,
+            "stock_minimo": producto.stock_minimo,
             # Nombre (no id local): el id de la categoria cambia entre la base local y la remota.
             "categoria": categoria,
         },
@@ -110,6 +114,7 @@ def encolar_venta(cola: ColaSincronizacion | None, venta: Venta, turno_uuid: str
             "turno_uuid": turno_uuid,
             "estado": venta.estado.value,
             "creado_en": venta.creado_en.isoformat(),
+            "nota": venta.nota,
             "detalles": [
                 {
                     "codigo": d.producto_codigo,
@@ -117,6 +122,7 @@ def encolar_venta(cola: ColaSincronizacion | None, venta: Venta, turno_uuid: str
                     "precio": d.precio_unitario.monto,
                     "costo": d.costo_unitario.monto if d.costo_unitario else None,
                     "descuento": d.descuento_linea.monto,
+                    "motivo_descuento": d.motivo_descuento,
                 }
                 for d in venta.detalles
             ],
@@ -155,6 +161,31 @@ def encolar_lote(cola: ColaSincronizacion | None, lote: Lote) -> None:
             "codigo_producto": lote.codigo_producto,
             "fecha_vencimiento": lote.fecha_vencimiento.isoformat(),
             "saldo": str(lote.saldo),
+            "codigo_lote": lote.codigo_lote,
         },
         str(uuid4()),
     )
+
+
+def encolar_categoria(cola: ColaSincronizacion | None, nombre: str, activa: bool = True) -> None:
+    """Una categoria se crea, se activa o se desactiva (el destino hace upsert por nombre)."""
+    if cola is None:
+        return
+    cola.encolar("categoria", "upsert", {"nombre": nombre, "activa": activa}, str(uuid4()))
+
+
+def encolar_categoria_renombrada(
+    cola: ColaSincronizacion | None, anterior: str, nuevo: str
+) -> None:
+    if cola is None:
+        return
+    cola.encolar(
+        "categoria_renombrar", "update", {"anterior": anterior, "nuevo": nuevo}, str(uuid4())
+    )
+
+
+def encolar_categoria_eliminada(cola: ColaSincronizacion | None, nombre: str) -> None:
+    """Despues de fusionar: el destino solo la borra si ya no tiene productos."""
+    if cola is None:
+        return
+    cola.encolar("categoria_eliminar", "delete", {"nombre": nombre}, str(uuid4()))

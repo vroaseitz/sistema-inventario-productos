@@ -36,6 +36,7 @@ class EditarProducto:
         costo: int | None = None,
         perecible: bool = False,
         dias_aviso: int | None = None,
+        motivo_precio: str = "",
     ) -> None:
         # 1. Obtener el producto actual
         producto = self.repositorio_productos.obtener_por_codigo(codigo)
@@ -72,6 +73,7 @@ class EditarProducto:
                 precio_anterior=precio_anterior,
                 precio_nuevo=nuevo_precio_dinero,
                 usuario=usuario,
+                motivo=motivo_precio.strip(),
             )
             self.repositorio_historial.guardar_registro_precio(registro)
             if self.auditor is not None:

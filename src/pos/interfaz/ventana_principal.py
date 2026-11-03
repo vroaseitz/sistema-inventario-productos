@@ -22,11 +22,11 @@ from pathlib import Path
 from tkinter import ttk
 
 from pos.interfaz.app_administracion import VentanaAdministracion
+from pos.interfaz.app_catalogo import VentanaCatalogo
 from pos.interfaz.app_clientes import VentanaClientes
 from pos.interfaz.app_compras import VentanaCompras
 from pos.interfaz.app_inventario import VentanaInventario
 from pos.interfaz.app_reportes import VentanaReportes
-from pos.interfaz.app_tkinter import VentanaProductos
 from pos.interfaz.app_ventas import VentanaVentas
 from pos.interfaz.login import pedir_acceso
 from pos.interfaz.sesion import Sesion
@@ -94,8 +94,8 @@ class VentanaPrincipal(tk.Tk):
         """`fabricas` mapea F1..F7 a una funcion que construye la pantalla dado su contenedor."""
         super().__init__()
         self.title("NaturalSur - Emporio")
-        self.geometry("1100x860")
-        self.minsize(980, 780)
+        self.geometry("1320x860")
+        self.minsize(1180, 780)
         self._estilo = aplicar_tema(self)
 
         self._permitidos: Callable[[], frozenset[str]] = lambda: frozenset(m.clave for m in MODULOS)
@@ -222,6 +222,13 @@ class VentanaPrincipal(tk.Tk):
         self._lbl_conexion.config(text=f"● {conexion}", fg=PELIGRO if pendiente else MARCA)
         self._lbl_jornada.config(text=jornada)
 
+    def ir_a(self, clave: str, pestana: str = "") -> None:
+        """Va a un modulo y, si la pantalla lo permite, a una de sus pestanas."""
+        self.mostrar(clave)
+        seleccionar = getattr(self._marcos.get(clave), "seleccionar_pestana", None)
+        if pestana and callable(seleccionar):
+            seleccionar(pestana)
+
     def fijar_subtitulo(self, texto: str) -> None:
         self._subtitulo.config(text=texto)
 
@@ -324,6 +331,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import (
         ConsultarAlertasVencimiento,
     )
+    from pos.aplicacion.casos_uso.consultar_catalogo import ConsultarCatalogo, ConsultarCategorias
     from pos.aplicacion.casos_uso.consultar_inventario import (
         ConsultarExistencias,
         ConsultarMovimientos,
@@ -331,7 +339,9 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
         ReporteInventario,
     )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
+    from pos.aplicacion.casos_uso.gestionar_categorias import GestionarCategorias
     from pos.aplicacion.casos_uso.gestionar_clientes import GestionarClientes, RegistrarAbono
+    from pos.aplicacion.casos_uso.gestionar_proveedores import GestionarProveedores
     from pos.aplicacion.casos_uso.gestionar_usuarios import GestionarUsuarios
     from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
     from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
@@ -342,6 +352,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
     from pos.aplicacion.casos_uso.reporte_rentabilidad import ReporteRentabilidad, ReporteRotacion
     from pos.aplicacion.casos_uso.reporte_ventas import ReporteVentas
+    from pos.aplicacion.casos_uso.resumen_del_dia import ResumenDelDia
     from pos.aplicacion.registro_movimientos import RegistroMovimientos
     from pos.dominio.usuarios import NOMBRES_ROL, Rol, modulos_permitidos
     from pos.infraestructura.config import Config
@@ -367,6 +378,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite
     from pos.infraestructura.sqlite.repositorio_movimientos import RepositorioMovimientosSQLite
     from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite
+    from pos.infraestructura.sqlite.repositorio_proveedores import RepositorioProveedoresSQLite
     from pos.infraestructura.sqlite.repositorio_tickets_espera import (
         RepositorioTicketsEsperaSQLite,
     )
@@ -388,6 +400,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     repo_categorias = RepositorioCategoriasSQLite(conexion)
     repo_usuarios = RepositorioUsuariosSQLite(conexion)
     repo_facturas = RepositorioFacturasCompraSQLite(conexion)
+    repo_proveedores = RepositorioProveedoresSQLite(conexion)
     repo_clientes = RepositorioClientesSQLite(conexion)
     cola = ColaSincronizacionSQLite(conexion)
     sesion = Sesion()
@@ -443,10 +456,23 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 repo_clientes=repo_clientes,
                 configuracion=repo_config,
                 imprimir=imprimir,
+                resumen_del_dia=ResumenDelDia(
+                    repo_ventas,
+                    repo_productos,
+                    ReporteRentabilidad(repo_ventas, repo_productos),
+                    ConsultarAlertasVencimiento(
+                        repo_lotes, repo_productos, configuracion=repo_config
+                    ),
+                    ConsultarExistencias(repo_productos, repo_existencias, repo_ventas),
+                    repo_config,
+                ),
+                auditor=auditor,
+                repo_categorias=repo_categorias,
             ),
-            "F2": lambda padre: VentanaProductos(
+            "F2": lambda padre: VentanaCatalogo(
                 padre,
-                repo_productos,
+                ConsultarCatalogo(repo_productos, repo_existencias, repo_categorias),
+                ConsultarCategorias(repo_categorias, repo_productos, repo_ventas),
                 RegistrarProducto(
                     repo_productos,
                     cola=cola,
@@ -460,7 +486,17 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     repositorio_categorias=repo_categorias,
                     auditor=auditor,
                 ),
+                CambiarEstadoProducto(
+                    repo_productos,
+                    cola=cola,
+                    repositorio_categorias=repo_categorias,
+                    auditor=auditor,
+                ),
+                GestionarCategorias(repo_categorias, repo_productos, cola, auditor),
+                DefinirStockMinimo(repo_productos, auditor, cola, repo_categorias),
+                repo_productos,
                 repo_categorias,
+                repo_historial,
                 sesion=sesion,
             ),
             "F4": lambda padre: VentanaClientes(
@@ -483,6 +519,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 ),
                 repo_facturas,
                 repo_productos,
+                GestionarProveedores(repo_proveedores, repo_facturas, auditor),
             ),
             "F6": lambda padre: VentanaReportes(
                 padre,
@@ -522,7 +559,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 consultar_existencias=ConsultarExistencias(
                     repo_productos, repo_existencias, repo_ventas
                 ),
-                definir_minimo=DefinirStockMinimo(repo_productos, auditor),
+                definir_minimo=DefinirStockMinimo(repo_productos, auditor, cola, repo_categorias),
                 reporte_inventario=ReporteInventario(repo_productos, repo_existencias),
                 consultar_movimientos=ConsultarMovimientos(repo_movimientos, repo_productos),
                 repo_categorias=repo_categorias,

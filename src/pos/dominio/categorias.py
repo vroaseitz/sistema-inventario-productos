@@ -7,6 +7,7 @@ las bases existentes. Las 4 de la primera version (`CATEGORIAS_ANTIGUAS`) se eli
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass
 
 from .errores import DatosProductoInvalidos
@@ -46,6 +47,15 @@ REASIGNACION_ANTIGUAS = {"frutas": "Frutas y verduras", "verduras": "Frutas y ve
 class Categoria:
     id: int
     nombre: str
+    activa: bool = True  # desactivar la saca del selector sin tocar los productos que la usan
+
+
+def clave_de_nombre(nombre: str) -> str:
+    """Para comparar nombres sin tildes, mayusculas ni espacios de mas."""
+    sin_tildes = "".join(
+        c for c in unicodedata.normalize("NFKD", nombre) if not unicodedata.combining(c)
+    )
+    return " ".join(sin_tildes.lower().split())
 
 
 def normalizar_nombre_categoria(nombre: str) -> str:

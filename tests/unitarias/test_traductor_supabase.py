@@ -23,7 +23,8 @@ def test_producto_es_upsert_por_codigo_en_schema_pos():
     assert "INSERT INTO pos.producto" in sql
     assert "ON CONFLICT (codigo) DO UPDATE" in sql
     # unidad_venta se pasa a mayusculas (el CHECK remoto exige UNIDAD/GRANEL); activo=True.
-    assert params == ("12345", "Nueces", "GRANEL", 8000, True)
+    # Sin costo ni perecible en la operacion (cola vieja): costo None, no cargado, no perecible.
+    assert params == ("12345", "Nueces", "GRANEL", 8000, True, None, False, False, None, None)
 
 
 def test_existencia_es_upsert_resuelto_por_codigo():
@@ -88,8 +89,9 @@ def test_venta_va_en_una_sola_sentencia_con_lineas_y_pagos():
     sql, params = sentencias[0]
     assert "ON CONFLICT (id_cliente) DO NOTHING" in sql
     assert sql.count("%s") == len(params)
-    assert params[:4] == ("v-1", "pagada", "2026-10-28T10:00", "t-1")
-    assert params[9:14] == ("B", "1", 2490, None, 0)  # costo ausente -> NULL, descuento 0
+    assert params[:5] == ("v-1", "pagada", "2026-10-28T10:00", None, "t-1")  # nota ausente -> NULL
+    # costo ausente -> NULL, descuento 0, motivo ausente -> NULL
+    assert params[11:17] == ("B", "1", 2490, None, 0, None)
 
 
 def test_venta_sin_pagos_o_sin_lineas_no_se_traduce():
@@ -110,3 +112,88 @@ def test_venta_sin_pagos_o_sin_lineas_no_se_traduce():
 def test_entidad_no_soportada_falla():
     with pytest.raises(ValueError):
         traducir_operacion(_op("cliente", {"nombre": "x"}))
+
+
+def test_producto_lleva_costo_perecible_dias_y_minimo():
+    ((_, params),) = traducir_operacion(
+        _op(
+            "producto",
+            {
+                "codigo": "YOG",
+                "nombre": "Yogurt",
+                "precio": 2000,
+                "unidad_venta": "unidad",
+                "costo": 1200,
+                "perecible": True,
+                "dias_aviso": 7,
+                "stock_minimo": 6,
+            },
+        )
+    )
+    assert params[-5:] == (1200, True, True, 7, 6)  # costo, cargado, perecible, dias, minimo
+
+
+def test_categoria_se_envia_con_su_estado():
+    ((sql, params),) = traducir_operacion(_op("categoria", {"nombre": "Mascotas", "activa": False}))
+    assert "pos.categoria" in sql and "ON CONFLICT (nombre) DO UPDATE" in sql
+    assert params == ("Mascotas", False)
+
+
+def test_categoria_renombrar_no_pisa_un_nombre_existente():
+    ((sql, params),) = traducir_operacion(
+        _op("categoria_renombrar", {"anterior": "Viejo", "nuevo": "Nuevo"})
+    )
+    assert "NOT EXISTS" in sql
+    assert params == ("Nuevo", "Viejo", "Nuevo")
+
+
+def test_categoria_eliminar_nunca_borra_una_con_productos():
+    ((sql, params),) = traducir_operacion(_op("categoria_eliminar", {"nombre": "Varios"}))
+    assert "DELETE FROM pos.categoria" in sql and "NOT EXISTS" in sql
+    assert params == ("Varios",)
+
+
+def test_venta_lleva_nota_y_motivo_del_descuento():
+    ((sql, params),) = traducir_operacion(
+        _op(
+            "venta",
+            {
+                "uuid": "v1",
+                "turno_uuid": "t1",
+                "estado": "pagada",
+                "creado_en": "2026-11-02T22:08:00",
+                "nota": "Para regalo",
+                "detalles": [
+                    {
+                        "codigo": "A",
+                        "cantidad": "1",
+                        "precio": 1000,
+                        "costo": 600,
+                        "descuento": 100,
+                        "motivo_descuento": "Cortesía",
+                    }
+                ],
+                "pagos": [{"medio": "efectivo", "monto": 900}],
+            },
+        )
+    )
+    assert "nota" in sql and "motivo_descuento" in sql
+    assert params[3] == "Para regalo"  # nota, antes del uuid del turno
+    assert params[4] == "t1"
+    assert "Cortesía" in params
+
+
+def test_lote_lleva_el_codigo_impreso():
+    ((_, params),) = traducir_operacion(
+        _op(
+            "lote",
+            {
+                "uuid": "l1",
+                "codigo_producto": "YOG",
+                "fecha_vencimiento": "2026-12-01",
+                "saldo": "10",
+                "codigo_lote": "LT-77",
+            },
+        )
+    )
+    assert params == ("l1", "2026-12-01", "10", "LT-77", "YOG")

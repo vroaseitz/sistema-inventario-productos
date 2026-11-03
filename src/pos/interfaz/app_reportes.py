@@ -15,7 +15,9 @@ from pos.aplicacion.casos_uso.reporte_rentabilidad import (
 from pos.aplicacion.casos_uso.reporte_ventas import SIN_CATEGORIA, ReporteVentas
 from pos.aplicacion.puertos import RepositorioCategorias
 from pos.dominio.errores import ErrorDominio
+from pos.dominio.formato import formatear_cantidad
 from pos.dominio.pagos import MedioPago
+from pos.interfaz import tema
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.exportar import exportar_con_dialogo
 
@@ -71,10 +73,24 @@ class VentanaReportes(ttk.Frame):
         for columna, (texto, campo) in enumerate((("Desde", self._desde), ("Hasta", self._hasta))):
             ttk.Label(filtros, text=texto).grid(row=0, column=columna, sticky="w", padx=4)
             campo.grid(row=1, column=columna, padx=4, sticky="w")
-        ttk.Button(filtros, text="Generar", command=self.generar).grid(row=1, column=2, padx=8)
-        ttk.Button(filtros, text="Exportar", command=self.exportar_ventas).grid(
-            row=1, column=3, padx=4
-        )
+        tema.BotonAccion(
+            filtros,
+            "Generar",
+            self.generar,
+            "",
+            "primario",
+            color=tema.MODULOS_COLOR["F6"][0],
+            fondo=tema.PAPEL,
+        ).grid(row=1, column=2, padx=8)
+        tema.BotonAccion(
+            filtros,
+            "Exportar",
+            self.exportar_ventas,
+            "F8",
+            "normal",
+            color=tema.MODULOS_COLOR["F6"][0],
+            fondo=tema.PAPEL,
+        ).grid(row=1, column=3, padx=4)
         ttk.Label(
             self._marco_ventas, textvariable=self._resumen, font=("TkDefaultFont", 11, "bold")
         ).pack(anchor="w", pady=8)
@@ -206,12 +222,24 @@ class VentanaReportes(ttk.Frame):
         ):
             ttk.Label(filtros, text=texto).grid(row=0, column=columna, sticky="w", padx=4)
             widget.grid(row=1, column=columna, padx=4, sticky="w")
-        ttk.Button(filtros, text="Generar", command=self.generar_rentabilidad).grid(
-            row=1, column=4, padx=8
-        )
-        ttk.Button(filtros, text="Exportar", command=self.exportar_rentabilidad).grid(
-            row=1, column=5, padx=4
-        )
+        tema.BotonAccion(
+            filtros,
+            "Generar",
+            self.generar_rentabilidad,
+            "",
+            "primario",
+            color=tema.MODULOS_COLOR["F6"][0],
+            fondo=tema.PAPEL,
+        ).grid(row=1, column=4, padx=8)
+        tema.BotonAccion(
+            filtros,
+            "Exportar",
+            self.exportar_rentabilidad,
+            "F8",
+            "normal",
+            color=tema.MODULOS_COLOR["F6"][0],
+            fondo=tema.PAPEL,
+        ).grid(row=1, column=5, padx=4)
         columnas = ("producto", "unidades", "venta", "costo", "ganancia", "margen")
         self._tabla_rentab = ttk.Treeview(marco, columns=columnas, show="headings", height=14)
         for clave, titulo, ancho, ancla in (
@@ -259,7 +287,7 @@ class VentanaReportes(ttk.Frame):
                 tags=("sin_costo",) if fila.sin_costo else (),
                 values=(
                     fila.nombre,
-                    "—" if fila.unidades is None else f"{fila.unidades:f}".rstrip("0").rstrip("."),
+                    "—" if fila.unidades is None else formatear_cantidad(fila.unidades),
                     _clp(fila.venta),
                     "sin costo" if fila.sin_costo else _clp(fila.costo),
                     "no disponible" if fila.sin_costo else _clp(fila.ganancia),
@@ -307,15 +335,33 @@ class VentanaReportes(ttk.Frame):
             ttk.Combobox(
                 filtros, textvariable=variable, values=valores, state="readonly", width=ancho
             ).grid(row=1, column=columna, padx=4, sticky="w")
-        ttk.Button(filtros, text="Generar", command=self.generar_rotacion).grid(
-            row=1, column=3, padx=8
-        )
-        ttk.Button(
-            filtros, text="Desactivar seleccionados", command=self._desactivar_seleccionados
+        tema.BotonAccion(
+            filtros,
+            "Generar",
+            self.generar_rotacion,
+            "",
+            "primario",
+            color=tema.MODULOS_COLOR["F6"][0],
+            fondo=tema.PAPEL,
+        ).grid(row=1, column=3, padx=8)
+        tema.BotonAccion(
+            filtros,
+            "Desactivar seleccionados",
+            self._desactivar_seleccionados,
+            "",
+            "peligro",
+            color=tema.MODULOS_COLOR["F6"][0],
+            fondo=tema.PAPEL,
         ).grid(row=1, column=4, padx=4)
-        ttk.Button(filtros, text="Exportar", command=self.exportar_rotacion).grid(
-            row=1, column=5, padx=4
-        )
+        tema.BotonAccion(
+            filtros,
+            "Exportar",
+            self.exportar_rotacion,
+            "F8",
+            "normal",
+            color=tema.MODULOS_COLOR["F6"][0],
+            fondo=tema.PAPEL,
+        ).grid(row=1, column=5, padx=4)
         columnas = ("producto", "ultima", "dias", "existencia", "estado")
         self._tabla_rotacion = ttk.Treeview(
             marco, columns=columnas, show="headings", height=14, selectmode="extended"
@@ -356,7 +402,7 @@ class VentanaReportes(ttk.Frame):
                     fila.nombre,
                     fila.ultima_venta.strftime("%d-%m-%Y") if fila.ultima_venta else "Nunca",
                     "—" if fila.dias_detenido is None else fila.dias_detenido,
-                    f"{fila.existencia:f}".rstrip("0").rstrip(".") or "0",
+                    formatear_cantidad(fila.existencia),
                     "Activo" if fila.activo else "Inactivo",
                 ),
             )
