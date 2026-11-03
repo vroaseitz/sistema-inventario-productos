@@ -108,6 +108,29 @@ verificar(
     "la auditoria guarda antes y despues de la configuracion",
 )
 
+# --- impresora: la prueba imprime (sin impresora configurada va a la carpeta «comprobantes») -----
+f7._var_impresora.set("")
+verificar(f7.imprimir_prueba() is True, "F7: imprimir prueba")
+carpeta = Path(os.environ["POS_SQLITE_PATH"]).resolve().parent / "comprobantes"
+pruebas = list(carpeta.glob("comprobante-*.txt"))
+verificar(
+    len(pruebas) == 1 and "PRUEBA DE IMPRESORA" in pruebas[0].read_text(encoding="utf-8"),
+    "el ticket de prueba quedo en la carpeta",
+)
+f7._var_impresora.set("Xprinter_58")
+f7.guardar_configuracion()
+verificar(
+    f7._config.obtener_texto("impresora_nombre") == "Xprinter_58",
+    "guarda el nombre de la impresora",
+)
+cambios = [f for f in f7._auditoria.listar() if f["registro"] == "Impresora de comprobantes"]
+verificar(
+    bool(cambios) and cambios[0]["despues"] == "Xprinter_58",
+    "la auditoria registra el cambio de impresora",
+)
+f7._var_impresora.set("")
+f7.guardar_configuracion()
+
 # --- cerrar sesion y entrar como vendedora ---------------------------------------------------
 credenciales.append(("mostrador", "clave-mostrador-1"))
 app._btn_salir.event_generate("<Button-1>")

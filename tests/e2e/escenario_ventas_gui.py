@@ -19,12 +19,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja  # noqa: E402
 from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja  # noqa: E402
+from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante  # noqa: E402
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja  # noqa: E402
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta  # noqa: E402
 from pos.dominio.inventario import Existencia  # noqa: E402
 from pos.dominio.pagos import ConteoDenominaciones  # noqa: E402
 from pos.dominio.productos import Producto, UnidadVenta  # noqa: E402
 from pos.dominio.value_objects import Dinero  # noqa: E402
+from pos.infraestructura.impresion.impresoras import ImpresoraEnArchivo  # noqa: E402
 from pos.infraestructura.sqlite.conexion import crear_conexion  # noqa: E402
 from pos.infraestructura.sqlite.esquema import crear_esquema  # noqa: E402
 from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite  # noqa: E402
@@ -55,6 +57,8 @@ app_ventas.VentanaVentas._contar_denominaciones_ui = lambda self, titulo: Conteo
 
 raiz = Tk()
 ruta = str(Path(tempfile.mkdtemp()) / "ventas.db")
+carpeta_comprobantes = Path(tempfile.mkdtemp())
+impresora = ImpresoraEnArchivo(carpeta_comprobantes)
 
 
 def verificar(condicion: bool, texto: str) -> None:
@@ -84,6 +88,7 @@ def construir() -> tuple:
         repo_tickets=RepositorioTicketsEsperaSQLite(con),
         auditoria=auditoria,
         repo_clientes=clientes,
+        imprimir=ImprimirComprobante(lambda: impresora, productos, ventas, cajera=lambda: "ana"),
     )
     ventana.pack(fill="both", expand=True)
     raiz.update()
@@ -465,6 +470,44 @@ verificar(productos3.obtener_por_codigo("7801").costo.neto.monto == 1000, "F5: a
 verificar(existencias3.obtener("7801").cantidad == Decimal("60"), "F5: ingresa el stock (50 + 10)")
 verificar(len(compras._lista.get_children()) == 1, "F5: aparece en la lista de facturas")
 compras.destroy()
+
+
+# --- HU-VTA-06: cobrar e imprimir, cobrar solo registrando, reimprimir y corte ---------------
+def vender_efectivo(imprimir):
+    ventana._registrar_venta.agregar_producto(ventana._venta, "7801", 1)
+    ventana._refrescar_ticket()
+    ventana._medio.set("efectivo")
+    ventana._entrada_monto_pago.delete(0, "end")
+    ventana._entrada_monto_pago.insert(0, "1.200")
+    ventana._agregar_pago()
+    ventana._cerrar_venta(imprimir)
+
+
+def comprobantes():
+    return sorted(carpeta_comprobantes.glob("comprobante-*.txt"))
+
+
+vender_efectivo(True)
+verificar(len(comprobantes()) == 1, "HU-VTA-06: «Cobrar e imprimir ticket» imprime el comprobante")
+texto = comprobantes()[0].read_text(encoding="utf-8")
+verificar(
+    "COMPROBANTE DE DETALLE" in texto and "Barra de cereal" in texto,
+    "el comprobante lleva el detalle",
+)
+verificar("se abriria el cajon" in texto, "con efectivo se abre el cajon")
+vender_efectivo(False)
+verificar(len(comprobantes()) == 1, "HU-VTA-06: «Cobrar solo registrando» no imprime")
+ventana._reimprimir_ultimo()
+verificar(len(comprobantes()) == 2, "HU-VTA-06: «Reimprimir ultimo» (F8) imprime de nuevo")
+verificar(
+    "cajon" not in comprobantes()[-1].read_text(encoding="utf-8"), "la reimpresion no abre el cajon"
+)
+ventana._imprimir_corte()
+verificar(
+    "CORTE DE CAJA" in comprobantes()[-1].read_text(encoding="utf-8"),
+    "HU-VTA-06: «Imprimir corte» imprime el corte de la jornada",
+)
+verificar(bool(raiz.bind("<F8>")), "F8 esta asignada a imprimir")
 
 # --- F4 Clientes: cuenta de credito, venta a credito desde F1, abonos y cierre ---------------
 from pos.aplicacion.casos_uso.gestionar_clientes import (  # noqa: E402

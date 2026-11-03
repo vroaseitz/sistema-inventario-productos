@@ -208,3 +208,6 @@ WhatsApp Chat*/
 WhatsApp Chat*.zip
 *.pem
 *.ppk
+
+# Comprobantes guardados como archivos cuando no hay impresora configurada (HU-VTA-06)
+comprobantes/

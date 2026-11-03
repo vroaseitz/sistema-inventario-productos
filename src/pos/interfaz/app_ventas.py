@@ -21,6 +21,7 @@ from tkinter import Listbox, Misc, StringVar, Toplevel, messagebox, ttk
 
 from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
 from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
+from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
 from pos.aplicacion.casos_uso.sincronizar_pendientes import SincronizarPendientes
@@ -37,7 +38,7 @@ from pos.aplicacion.puertos import (
 )
 from pos.dominio.caja import TipoMovimientoCaja, calcular_arqueo
 from pos.dominio.clientes import saldo_de
-from pos.dominio.errores import ErrorDominio
+from pos.dominio.errores import ErrorDominio, ErrorImpresion
 from pos.dominio.formato import formatear_clp, parsear_monto
 from pos.dominio.pagos import (
     DENOMINACIONES_CLP,
@@ -98,6 +99,7 @@ class VentanaVentas(ttk.Frame):
         auditoria: RepositorioAuditoria | None = None,
         repo_clientes: RepositorioClientes | None = None,
         configuracion: RepositorioConfiguracion | None = None,
+        imprimir: ImprimirComprobante | None = None,
     ) -> None:
         super().__init__(parent)
         self._sesion = sesion or Sesion(USUARIO_DEMO)
@@ -115,6 +117,7 @@ class VentanaVentas(ttk.Frame):
         self._auditoria = auditoria
         self._clientes = repo_clientes
         self._configuracion = configuracion
+        self._imprimir = imprimir
         self._ayuda_conteo = ""
         # O-25: no se guarda nada hasta haber restaurado lo guardado; si no, el primer
         # refresco al abrir la app sobrescribia los tickets en espera con una lista vacia.
@@ -217,6 +220,7 @@ class VentanaVentas(ttk.Frame):
         )
         # O-17: atajo F10 para buscar producto (solo cuando F1 esta a la vista).
         self.winfo_toplevel().bind("<F10>", self._atajo_buscar, add="+")
+        self.winfo_toplevel().bind("<F8>", self._atajo_imprimir, add="+")
         self.winfo_toplevel().bind("<F11>", self._atajo_cambiar_lote, add="+")
         self.winfo_toplevel().bind("<Insert>", self._atajo_nuevo_ticket, add="+")
 
@@ -282,8 +286,15 @@ class VentanaVentas(ttk.Frame):
         ttk.Button(fila_pago, text="Quitar pago", command=self._quitar_pago).grid(
             row=0, column=4, padx=4, pady=6
         )
-        ttk.Button(fila_pago, text="Cobrar y cerrar venta", command=self._cerrar_venta).grid(
-            row=0, column=5, padx=8, pady=6
+        # HU-VTA-06: «Cobrar e imprimir ticket» o «Cobrar solo registrando la venta».
+        ttk.Button(
+            fila_pago, text="Cobrar e imprimir ticket", command=lambda: self._cerrar_venta(True)
+        ).grid(row=0, column=5, padx=4, pady=6)
+        ttk.Button(
+            fila_pago, text="Cobrar solo registrando", command=lambda: self._cerrar_venta(False)
+        ).grid(row=0, column=6, padx=4, pady=6)
+        ttk.Button(fila_pago, text="Reimprimir último (F8)", command=self._reimprimir_ultimo).grid(
+            row=0, column=7, padx=4, pady=6
         )
 
         # D-18a: los pagos ya agregados quedan listados y se pueden quitar.
@@ -356,6 +367,9 @@ class VentanaVentas(ttk.Frame):
         self._lbl_en_caja = ttk.Label(marco, text="En caja: -", font=("TkDefaultFont", 14, "bold"))
         self._lbl_en_caja.pack(side="left", padx=8, pady=6)
         ttk.Button(marco, text="Abrir turno", command=self._abrir_turno_ui).pack(
+            side="right", padx=4, pady=6
+        )
+        ttk.Button(marco, text="Imprimir corte (F8)", command=self._imprimir_corte).pack(
             side="right", padx=4, pady=6
         )
         ttk.Button(marco, text="Movimiento de caja", command=self._movimiento_ui).pack(
@@ -1242,6 +1256,58 @@ class VentanaVentas(ttk.Frame):
         self.wait_window(dialogo)
         return elegido[0] if elegido else None
 
+    # ---------------------------------------------- Impresora y cajon (HU-VTA-06) --
+
+    def _imprimir_tras_cobrar(self, venta: Venta, imprimir: bool) -> None:
+        """La venta ya esta registrada: si la impresora falla solo se avisa, nunca se deshace."""
+        if self._imprimir is None:
+            return
+        try:
+            if imprimir:
+                self._imprimir.comprobante(venta)  # imprime y abre el cajon si hubo efectivo
+            else:
+                self._imprimir.abrir_cajon_si_hubo_efectivo(venta)  # igual entra plata a la gaveta
+        except ErrorImpresion as exc:
+            messagebox.showwarning(
+                "Impresora", f"La venta #{venta.id} quedo registrada, pero: {exc}"
+            )
+
+    def _reimprimir_ultimo(self) -> None:
+        if self._imprimir is None:
+            messagebox.showwarning("Impresora", "No hay impresora configurada")
+            return
+        try:
+            venta = self._imprimir.reimprimir_ultimo()
+        except ErrorImpresion as exc:
+            messagebox.showwarning("Impresora", str(exc))
+            return
+        messagebox.showinfo("Impresora", f"Se reimprimio el comprobante de la venta #{venta.id}")
+
+    def _imprimir_corte(self) -> None:
+        turno = self._repo_turnos.obtener_abierto()
+        if turno is None or self._imprimir is None:
+            messagebox.showwarning("Impresora", "No hay una jornada abierta para imprimir su corte")
+            return
+        abonos = Dinero(
+            self._clientes.abonos_en_efectivo_del_turno(turno.id) if self._clientes else 0
+        )
+        arqueo = calcular_arqueo(
+            turno, self._repo_ventas.obtener_por_turno(turno.id), Dinero(0), abonos_efectivo=abonos
+        )
+        try:
+            self._imprimir.corte(turno, arqueo)
+        except ErrorImpresion as exc:
+            messagebox.showwarning("Impresora", str(exc))
+
+    def _atajo_imprimir(self, _evento: object = None) -> None:
+        """F8: reimprime el ultimo comprobante en Venta, o imprime el corte en Caja y corte."""
+        if not self.winfo_ismapped():
+            return
+        if self._subpestanas.index("current") == 1:
+            self._imprimir_corte()
+        else:
+            self._reimprimir_ultimo()
+
     def _quitar_pago(self) -> None:
         venta = self._venta_actual()
         if venta is None:
@@ -1259,7 +1325,7 @@ class VentanaVentas(ttk.Frame):
             venta.cliente_id = None  # sin credito ya no hay cliente al que cargar
         self._refrescar_ticket()
 
-    def _cerrar_venta(self) -> None:
+    def _cerrar_venta(self, imprimir: bool = False) -> None:
         venta = self._venta_actual()
         if venta is None:
             return
@@ -1268,6 +1334,7 @@ class VentanaVentas(ttk.Frame):
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo cerrar la venta", str(exc))
             return
+        self._imprimir_tras_cobrar(venta, imprimir)
         messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con exito")
         self._refrescar_sync()
         self._refrescar_turno()

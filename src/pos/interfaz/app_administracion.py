@@ -13,6 +13,7 @@ from tkinter import messagebox, ttk
 
 from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.casos_uso.gestionar_usuarios import GestionarUsuarios
+from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
     RepositorioAuditoria,
@@ -61,6 +62,7 @@ class VentanaAdministracion(ttk.Frame):
         sesion: Sesion | None = None,
         cola: ColaSincronizacion | None = None,
         con_supabase: bool = False,
+        imprimir: ImprimirComprobante | None = None,
     ) -> None:
         super().__init__(parent, padding=8)
         self._gestion = gestion
@@ -71,6 +73,7 @@ class VentanaAdministracion(ttk.Frame):
         self._sesion = sesion or Sesion()
         self._cola = cola
         self._con_supabase = con_supabase
+        self._imprimir = imprimir
         self._mensaje = tk.StringVar()
 
         self._pestanas = ttk.Notebook(self)
@@ -332,6 +335,23 @@ class VentanaAdministracion(ttk.Frame):
             ttk.Label(reglas, text=parametro.ayuda, foreground="#666", wraplength=520).grid(
                 row=fila, column=2, sticky="w", padx=4
             )
+        equipos = ttk.LabelFrame(marco, text="Equipos conectados (HU-VTA-06)", padding=10)
+        equipos.pack(fill="x", pady=(8, 0))
+        ttk.Label(equipos, text="Impresora de comprobantes").grid(
+            row=0, column=0, sticky="w", padx=4
+        )
+        self._var_impresora = tk.StringVar()
+        ttk.Entry(equipos, textvariable=self._var_impresora, width=30).grid(row=0, column=1, padx=8)
+        ttk.Label(
+            equipos,
+            text="Nombre de la impresora instalada en el equipo (Xprinter 58 mm). Vacío: los "
+            "comprobantes se guardan como archivos en la carpeta «comprobantes».",
+            foreground="#666",
+            wraplength=520,
+        ).grid(row=0, column=2, sticky="w", padx=4)
+        ttk.Button(equipos, text="Imprimir prueba", command=self.imprimir_prueba).grid(
+            row=1, column=1, sticky="w", padx=8, pady=6
+        )
         ttk.Label(reglas, text="Redondeo en efectivo").grid(
             row=len(PARAMETROS), column=0, sticky="w", padx=4, pady=4
         )
@@ -354,14 +374,14 @@ class VentanaAdministracion(ttk.Frame):
         self._lbl_pendientes.pack(anchor="w")
         ttk.Label(
             estado,
-            text="Impresora de comprobantes y cajón de dinero: pendientes (HU-VTA-06), todavía "
-            "no se construye la impresión.",
-            foreground="#a11",
+            text="El lector de códigos se detecta solo (teclado USB).",
+            foreground="#666",
         ).pack(anchor="w", pady=(6, 0))
 
     def _refrescar_configuracion(self) -> None:
         for parametro in PARAMETROS:
             self._vars_config[parametro.clave].set(str(self._config.obtener(parametro.clave)))
+        self._var_impresora.set(self._config.obtener_texto("impresora_nombre"))
         self._lbl_conexion.config(
             text="Estado de la conexión: "
             + ("Supabase configurado" if self._con_supabase else "sin Supabase (modo local)")
@@ -393,8 +413,33 @@ class VentanaAdministracion(ttk.Frame):
                     formato(antes),
                     formato(despues),
                 )
+        antes_imp = self._config.obtener_texto("impresora_nombre")
+        despues_imp = self._var_impresora.get().strip()
+        if antes_imp != despues_imp:
+            self._config.guardar_texto("impresora_nombre", despues_imp)
+            if self._auditor is not None:
+                self._auditor.registrar(
+                    "Cambio de configuración",
+                    "Impresora de comprobantes",
+                    antes_imp or "(archivos)",
+                    despues_imp or "(archivos)",
+                )
         self._mensaje.set("Configuración guardada")
         self.refrescar()
+        return True
+
+    def imprimir_prueba(self) -> bool:
+        """Imprime un ticket de prueba (y abre el cajon) con lo que esta escrito en pantalla."""
+        if self._imprimir is None:
+            messagebox.showwarning("Configuración", "La impresión no está disponible")
+            return False
+        self.guardar_configuracion()
+        try:
+            self._imprimir.prueba(abrir_cajon=True)
+        except ErrorDominio as error:
+            messagebox.showerror("Impresora", str(error))
+            return False
+        self._mensaje.set("Prueba enviada a la impresora")
         return True
 
     def restaurar_configuracion(self) -> None:

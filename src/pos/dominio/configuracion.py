@@ -39,6 +39,15 @@ PARAMETROS = (
         "pendiente de confirmar con la Product Owner.",
     ),
     Parametro(
+        "abrir_cajon",
+        "Abrir el cajon al cobrar en efectivo",
+        1,
+        0,
+        1,
+        "1 = si, 0 = no",
+        "El cajon va conectado a la impresora y se abre con una venta en efectivo (HU-VTA-06).",
+    ),
+    Parametro(
         "inactividad_minutos",
         "Cierre de sesion por inactividad",
         15,

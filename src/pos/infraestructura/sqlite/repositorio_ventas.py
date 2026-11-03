@@ -100,6 +100,13 @@ class RepositorioVentasSQLite:
         ).fetchall()
         return [self._a_venta(f) for f in filas_venta]
 
+    def ultima(self) -> Venta | None:
+        """Ultima venta pagada (para reimprimir el ultimo comprobante)."""
+        fila = self._con.execute(
+            "SELECT * FROM ventas WHERE estado = 'pagada' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        return self._a_venta(fila) if fila else None
+
     def por_periodo(self, desde: date, hasta: date) -> list[Venta]:
         """Ventas pagadas con fecha entre `desde` y `hasta`, ambas inclusive."""
         filas = self._con.execute(

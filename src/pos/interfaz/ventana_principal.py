@@ -17,6 +17,7 @@ import time
 import tkinter as tk
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from tkinter import ttk
 
 from pos.interfaz.app_administracion import VentanaAdministracion
@@ -214,6 +215,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
     from pos.aplicacion.casos_uso.gestionar_clientes import GestionarClientes, RegistrarAbono
     from pos.aplicacion.casos_uso.gestionar_usuarios import GestionarUsuarios
+    from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
     from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
     from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra
     from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma
@@ -223,6 +225,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.reporte_ventas import ReporteVentas
     from pos.dominio.usuarios import NOMBRES_ROL, Rol, modulos_permitidos
     from pos.infraestructura.config import Config
+    from pos.infraestructura.impresion.impresoras import crear_impresora
     from pos.infraestructura.seguridad.hasheador_bcrypt import HasheadorBcrypt
     from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
     from pos.infraestructura.sqlite.conexion import crear_conexion
@@ -273,6 +276,17 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     # HU-USR-03: el nombre sale de la sesion en el momento de cada cambio (la sesion puede cambiar).
     auditor = Auditor(repo_auditoria, lambda: sesion.nombre)
     gestion_usuarios = GestionarUsuarios(repo_usuarios, hasheador, auditor)
+    carpeta_comprobantes = Path(config.sqlite_path).resolve().parent / "comprobantes"
+    imprimir = ImprimirComprobante(
+        lambda: crear_impresora(
+            repo_config.obtener_texto("impresora_nombre"), carpeta_comprobantes
+        ),
+        repo_productos,
+        repo_ventas,
+        repo_config,
+        repo_clientes,
+        cajera=lambda: sesion.nombre,
+    )
     # Sin SUPABASE_DB_URL la app vende igual y deja lo pendiente en la cola.
     publicador = AdaptadorSupabase(config.supabase_db_url) if config.supabase_db_url else None
 
@@ -304,6 +318,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 auditoria=repo_auditoria,
                 repo_clientes=repo_clientes,
                 configuracion=repo_config,
+                imprimir=imprimir,
             ),
             "F2": lambda padre: VentanaProductos(
                 padre,
@@ -373,6 +388,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 sesion=sesion,
                 cola=cola,
                 con_supabase=publicador is not None,
+                imprimir=imprimir,
             ),
         }
     )

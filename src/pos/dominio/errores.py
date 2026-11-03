@@ -17,6 +17,10 @@ class ReglaInventarioInvalida(ErrorDominio):
     """Operacion de inventario que viola una regla (p. ej. stock negativo)."""
 
 
+class ErrorImpresion(ErrorDominio):
+    """No se pudo imprimir o abrir el cajon (la venta ya quedo registrada)."""
+
+
 class ReglaClienteInvalida(ErrorDominio):
     """Cliente o movimiento de credito que viola una regla (sin nombre, abono mayor al saldo)."""
 
