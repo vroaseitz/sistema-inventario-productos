@@ -408,6 +408,11 @@ verificar(
 inventario.destroy()
 
 # --- R-02: F6 con nombres legibles y al mostrarse se regenera -------------------------------
+from pos.aplicacion.casos_uso.cambiar_estado_producto import CambiarEstadoProducto  # noqa: E402
+from pos.aplicacion.casos_uso.reporte_rentabilidad import (  # noqa: E402
+    ReporteRentabilidad,
+    ReporteRotacion,
+)
 from pos.aplicacion.casos_uso.reporte_ventas import ReporteVentas  # noqa: E402
 from pos.infraestructura.sqlite.repositorio_categorias import (  # noqa: E402
     RepositorioCategoriasSQLite,
@@ -416,7 +421,12 @@ from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLit
 from pos.interfaz.app_reportes import VentanaReportes  # noqa: E402
 
 reporte = VentanaReportes(
-    raiz, ReporteVentas(RV(con3), productos3), RepositorioCategoriasSQLite(con3)
+    raiz,
+    ReporteVentas(RV(con3), productos3),
+    RepositorioCategoriasSQLite(con3),
+    rentabilidad=ReporteRentabilidad(RV(con3), productos3),
+    rotacion=ReporteRotacion(RV(con3), productos3, existencias3),
+    cambiar_estado=CambiarEstadoProducto(productos3),
 )
 reporte.pack()
 raiz.update()
@@ -431,6 +441,33 @@ verificar(categorias == ["Frutos secos y semillas"], f"R-02: categoria con su no
 verificar(medios == ["Efectivo"], f"R-02: medio de pago legible {medios}")
 verificar(
     "1 ventas" in reporte._resumen.get(), "R-02: al mostrarse el reporte ya trae la venta nueva"
+)
+# --- HU-REP-03 / HU-REP-04 / HU-PRD-06 ---------------------------------------------------------
+filas_r = reporte.generar_rentabilidad()
+verificar(
+    any(f.codigo == "78012" and f.sin_costo for f in filas_r),
+    "HU-REP-03: la venta sin costo se informa",
+)
+textos = [reporte._tabla_rentab.item(i, "values") for i in reporte._tabla_rentab.get_children()]
+verificar(
+    any(t[3] == "sin costo" and t[4] == "no disponible" for t in textos),
+    f"HU-REP-03: «sin costo» en pantalla {textos}",
+)
+reporte._r_desde.set("2026-13-45")
+mensajes.clear()
+verificar(
+    reporte.generar_rentabilidad() == [] and mensajes[-1][0] == "showerror",
+    "HU-REP-03: fechas mal escritas",
+)
+reporte._r_desde.set(date.today().isoformat())
+rotacion = reporte.generar_rotacion()
+verificar(
+    "10" in {f.codigo for f in rotacion}, "HU-REP-04: un producto que nunca se vendio aparece"
+)
+verificar(reporte.desactivar_productos(["10"]) == 1, "HU-PRD-06: desactiva el producto elegido")
+verificar(
+    "10" not in {f.codigo for f in reporte.generar_rotacion()},
+    "HU-REP-04: ya no esta entre los activos",
 )
 reporte.destroy()
 

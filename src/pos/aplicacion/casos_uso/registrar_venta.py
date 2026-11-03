@@ -54,6 +54,8 @@ class RegistrarVenta:
         if producto is None:
             raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo_producto}")
 
+        if not producto.activo:
+            raise DatosProductoInvalidos(f"El producto {producto.nombre} esta desactivado")
         cantidad_dec = Decimal(str(cantidad))
         if producto.unidad_venta is UnidadVenta.UNIDAD and cantidad_dec % 1 != 0:
             raise DatosProductoInvalidos(

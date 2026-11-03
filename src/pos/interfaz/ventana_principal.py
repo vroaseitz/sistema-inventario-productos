@@ -208,6 +208,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.auditor import Auditor
     from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
     from pos.aplicacion.casos_uso.autenticar_usuario import AutenticarUsuario, CrearUsuario
+    from pos.aplicacion.casos_uso.cambiar_estado_producto import CambiarEstadoProducto
     from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
     from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import (
         ConsultarAlertasVencimiento,
@@ -222,6 +223,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
     from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
     from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
+    from pos.aplicacion.casos_uso.reporte_rentabilidad import ReporteRentabilidad, ReporteRotacion
     from pos.aplicacion.casos_uso.reporte_ventas import ReporteVentas
     from pos.dominio.usuarios import NOMBRES_ROL, Rol, modulos_permitidos
     from pos.infraestructura.config import Config
@@ -360,7 +362,17 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 repo_productos,
             ),
             "F6": lambda padre: VentanaReportes(
-                padre, ReporteVentas(repo_ventas, repo_productos), repo_categorias
+                padre,
+                ReporteVentas(repo_ventas, repo_productos),
+                repo_categorias,
+                rentabilidad=ReporteRentabilidad(repo_ventas, repo_productos),
+                rotacion=ReporteRotacion(repo_ventas, repo_productos, repo_existencias),
+                cambiar_estado=CambiarEstadoProducto(
+                    repo_productos,
+                    cola=cola,
+                    repositorio_categorias=repo_categorias,
+                    auditor=auditor,
+                ),
             ),
             "F3": lambda padre: VentanaInventario(
                 padre,
