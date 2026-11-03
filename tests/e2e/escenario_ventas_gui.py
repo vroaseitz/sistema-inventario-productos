@@ -140,6 +140,32 @@ escribir_y_esperar(ventana, "NOEXISTE")
 verificar(len(ventana._venta.detalles) == 2, "O-02b: un codigo inexistente no agrega nada")
 
 
+# --- O-02b: escribiendo a mano NO se agrega a medias (el «10» de «1050») --------------------
+productos.guardar(Producto("10", "Producto corto", Dinero(500), UnidadVenta.UNIDAD, 1))
+existencias.guardar(Existencia("10", Decimal("50")))
+antes = len(ventana._venta.detalles)
+ventana._entrada_codigo.delete(0, "end")
+for caracter in "1050":  # a ritmo humano: 300 ms entre teclas
+    ventana._entrada_codigo.insert("end", caracter)
+    ventana._al_escribir_codigo(type("E", (), {"keysym": caracter})())
+    fin = time.time() + 0.3
+    while time.time() < fin:
+        raiz.update()
+        time.sleep(0.02)
+verificar(
+    len(ventana._venta.detalles) == antes, "escribiendo a mano no se agrega el «10» de «1050»"
+)
+mensajes.clear()
+ventana._agregar_producto()  # Enter con un codigo que de verdad no existe
+verificar(
+    any("No existe un producto con codigo 1050" in m for t, m in mensajes if t == "showerror"),
+    "con Enter si avisa que «1050» no existe",
+)
+escribir_y_esperar(ventana, "10")
+verificar(len(ventana._venta.detalles) == antes, "un codigo de 2 caracteres tampoco se agrega solo")
+ventana._entrada_codigo.delete(0, "end")
+
+
 # --- O-02b: a granel se abre el cuadro del peso y muestra el importe ------------------------
 def buscar(raiz_widget, clase):
     for hijo in raiz_widget.winfo_children():

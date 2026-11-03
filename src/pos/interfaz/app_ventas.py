@@ -15,6 +15,7 @@ lo que hay que cobrar, no el total sin redondear.
 
 from __future__ import annotations
 
+import time
 import unicodedata
 from decimal import Decimal, InvalidOperation
 from tkinter import Listbox, Misc, StringVar, Toplevel, messagebox, ttk
@@ -124,6 +125,7 @@ class VentanaVentas(ttk.Frame):
         self._persistir = False
         self._temporizador_codigo: str | None = None
         self._dialogo_peso_abierto = False
+        self._tiempos_codigo: list[float] = []  # cuando llego cada tecla del codigo
         # O-01b: varios tickets abiertos a la vez; el activo es `_venta`.
         self._tickets: list[Venta | None] = [None]
         self._numeros = [1]  # numero que muestra la pestana de cada ticket
@@ -858,6 +860,7 @@ class VentanaVentas(ttk.Frame):
             messagebox.showerror("No se pudo agregar el producto", str(exc))
             return
         self._entrada_codigo.delete(0, "end")
+        self._tiempos_codigo = []
         self._entrada_cantidad.delete(0, "end")
         self._entrada_cantidad.insert(0, "1")  # D-23
         self._refrescar_ticket()
@@ -869,7 +872,25 @@ class VentanaVentas(ttk.Frame):
         if getattr(evento, "keysym", "") in ("Return", "KP_Enter", "Tab", "Escape"):
             return
         self._cancelar_autoagregado()
+        ahora = time.monotonic()
+        # Un codigo nuevo empieza cuando el campo estaba vacio o hace rato que no se tecleaba.
+        if len(self._entrada_codigo.get()) <= 1 or (
+            self._tiempos_codigo and ahora - self._tiempos_codigo[-1] > 1.0
+        ):
+            self._tiempos_codigo = []
+        self._tiempos_codigo.append(ahora)
         self._temporizador_codigo = self.after(150, self._autoagregar)
+
+    def _llego_a_ritmo_de_lector(self, codigo: str) -> bool:
+        """Un lector entrega el codigo entero en una rafaga (teclas a menos de 80 ms) o pegado de
+        una vez. A mano, a ritmo normal, el codigo puede quedar a medias: ahi se espera el Enter
+        (si no, el principio de «1050» agregaria el producto «10» y «50» daria «no existe»)."""
+        tiempos = self._tiempos_codigo
+        if len(tiempos) <= 1:
+            return len(codigo) >= 3  # pegado de una vez; con 1 o 2 caracteres no se arriesga
+        return len(tiempos) >= len(codigo) and all(
+            b - a <= 0.08 for a, b in zip(tiempos, tiempos[1:], strict=False)
+        )
 
     def _cancelar_autoagregado(self) -> None:
         if self._temporizador_codigo is not None:
@@ -884,6 +905,8 @@ class VentanaVentas(ttk.Frame):
             return
         if self._repo_productos.obtener_por_codigo(codigo) is None:
             return
+        if not self._llego_a_ritmo_de_lector(codigo):
+            return  # escribiendo a mano: se agrega con Enter
         if any(
             p.codigo != codigo and p.codigo.startswith(codigo)
             for p in self._repo_productos.listar()
