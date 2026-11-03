@@ -215,12 +215,18 @@ verificar(linea.cantidad == Decimal("0.350"), "O-02b: la linea a granel lleva el
 antes = len(ventana._venta.detalles)
 ventana._entrada_codigo.delete(0, "end")
 ventana._entrada_codigo.insert(0, "NUE")
-ventana.after(
-    100,
-    lambda: next(w for w in ventana.winfo_children() if isinstance(w, Toplevel)).event_generate(
-        "<Escape>"
-    ),
-)
+
+
+def pulsar_escape() -> None:
+    """Esc sobre el cuadro abierto. Sin gestor de ventanas (el Linux del CI) el cuadro no recibe
+    el foco solo, y una tecla enviada sin foco se pierde: se le da foco antes de pulsarla."""
+    dialogo = next(w for w in ventana.winfo_children() if isinstance(w, Toplevel))
+    dialogo.focus_force()
+    dialogo.update()
+    dialogo.event_generate("<Escape>")
+
+
+ventana.after(100, pulsar_escape)
 ventana._agregar_producto()
 verificar(len(ventana._venta.detalles) == antes, "O-02b/O-29: Esc cancela el peso y no agrega")
 
