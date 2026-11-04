@@ -93,8 +93,8 @@ def test_el_neto_debe_coincidir_con_el_detalle(app):
     "cambio, texto",
     [
         ({"proveedor": " "}, "Falta el proveedor"),
-        ({"numero": ""}, "Falta el numero de documento"),
-        ({"lineas": []}, "al menos una linea"),
+        ({"numero": ""}, "Falta el número de documento"),
+        ({"lineas": []}, "al menos una línea"),
     ],
 )
 def test_datos_obligatorios(app, cambio, texto):

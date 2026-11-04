@@ -70,7 +70,7 @@ class VentanaProductos(ttk.Frame):
         for categoria in self._lista_categorias():
             if categoria.nombre == nombre:
                 return categoria.id
-        raise ValueError(f"La categoria {nombre!r} no existe.")
+        raise ValueError(f"La categoría {nombre!r} no existe.")
 
     def _nombre_categoria(self, categoria_id: int | None) -> str | None:
         for categoria in self._lista_categorias():
@@ -183,7 +183,7 @@ class VentanaProductos(ttk.Frame):
             row=2, column=0, columnspan=2, sticky="w", padx=4
         )
 
-        # C-05: producto perecible requiere dias de aviso.
+        # C-05: producto perecible requiere días de aviso.
         self._perecible = tk.BooleanVar(value=False)
         ttk.Checkbutton(marco_form, text="Perecible", variable=self._perecible).grid(
             row=2, column=2, sticky="w", padx=4
@@ -198,7 +198,7 @@ class VentanaProductos(ttk.Frame):
         self._tabla = ttk.Treeview(self, columns=columnas, show="headings")
         for col, titulo in zip(
             columnas,
-            ("Codigo", "Nombre", "Precio", "Unidad", "Categoría", "Costo"),
+            ("Código", "Nombre", "Precio", "Unidad", "Categoría", "Costo"),
             strict=True,
         ):
             self._tabla.heading(col, text=titulo)
@@ -280,7 +280,7 @@ class VentanaProductos(ttk.Frame):
             unidad = UnidadVenta.GRANEL if self._granel.get() else UnidadVenta.UNIDAD
             cat_str = self._categoria.get().strip()
             if not cat_str:
-                raise ValueError("La categoria es obligatoria (C-04).")
+                raise ValueError("La categoría es obligatoria (C-04).")
             cat_id = self._id_categoria(cat_str)
             costo_str = self._costo_var.get().strip()
             costo_val = parsear_monto(costo_str) if costo_str else None
@@ -289,7 +289,7 @@ class VentanaProductos(ttk.Frame):
             dias_aviso = int(dias_str) if dias_str else None
 
             if perecible and dias_aviso is None:
-                raise ValueError("Un producto perecible requiere dias de aviso (C-05a).")
+                raise ValueError("Un producto perecible requiere días de aviso (C-05a).")
 
             producto = self._registrar.ejecutar(
                 codigo=self._entradas["codigo"].get().strip(),
@@ -378,7 +378,7 @@ class VentanaProductos(ttk.Frame):
         try:
             cat_str = self._categoria.get().strip()
             if not cat_str:
-                raise ValueError("La categoria es obligatoria (C-04).")
+                raise ValueError("La categoría es obligatoria (C-04).")
             cat_id = self._id_categoria(cat_str)
             costo_str = self._costo_var.get().strip()
             costo_val = parsear_monto(costo_str) if costo_str else None

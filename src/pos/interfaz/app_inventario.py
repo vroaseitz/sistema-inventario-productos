@@ -99,7 +99,7 @@ class PanelEntradaYAlertas:
         for clave, titulo, ancho in (
             ("producto", "Producto", 260),
             ("vence", "Vence", 100),
-            ("dias", "Dias", 70),
+            ("dias", "Días", 70),
             ("saldo", "Saldo", 70),
             ("precio", "Precio", 90),
             ("descuento", "Descuento", 90),
@@ -166,10 +166,10 @@ class PanelEntradaYAlertas:
         # R-01: "Vence" tiene calendario desplegable (tambien se puede escribir AAAA-MM-DD).
         self._vence = CampoFecha(marco, width=14)
         campos = (
-            ("Codigo de producto", self._codigo),
+            ("Código de producto", self._codigo),
             ("Cantidad", self._cantidad),
             ("Vence (calendario o AAAA-MM-DD)", self._vence),
-            ("Codigo de lote (impreso)", self._codigo_lote),
+            ("Código de lote (impreso)", self._codigo_lote),
             ("Motivo", self._motivo),
         )
         for fila, (etiqueta, variable) in enumerate(campos):
@@ -199,7 +199,7 @@ class PanelEntradaYAlertas:
         self._merma_obs = tk.StringVar()
         self._merma_estado = tk.StringVar(value="Existencia actual: -  ·  Resultante: -")
         campos = (
-            ("Codigo de producto", ttk.Entry(marco, textvariable=self._merma_codigo, width=28)),
+            ("Código de producto", ttk.Entry(marco, textvariable=self._merma_codigo, width=28)),
             (
                 "Cantidad a dar de baja",
                 ttk.Entry(marco, textvariable=self._merma_cantidad, width=14),

@@ -65,7 +65,7 @@ class VentanaReportes(ttk.Frame):
         self._marco_ventas = ttk.Frame(self._pestanas, padding=8)
         self._pestanas.add(self._marco_ventas, text="Ventas")
         filtros = ttk.LabelFrame(
-            self._marco_ventas, text="Ventas por periodo y categoria", padding=10
+            self._marco_ventas, text="Ventas por período y categoría", padding=10
         )
         filtros.pack(fill="x")
         self._desde = CampoFecha(filtros, date.today(), width=14)
@@ -95,7 +95,7 @@ class VentanaReportes(ttk.Frame):
             self._marco_ventas, textvariable=self._resumen, font=("TkDefaultFont", 11, "bold")
         ).pack(anchor="w", pady=8)
 
-        self._por_categoria = self._tabla("Por categoria", ("Categoria", "Vendido"))
+        self._por_categoria = self._tabla("Por categoría", ("Categoría", "Vendido"))
         self._por_medio = self._tabla("Por medio de pago", ("Medio", "Cobrado"))
         if rentabilidad is not None:
             self._construir_rentabilidad()
@@ -141,7 +141,8 @@ class VentanaReportes(ttk.Frame):
             messagebox.showerror("Reportes", f"Revisa las fechas: {error}")
             return
         self._resumen.set(
-            f"{datos.cantidad_ventas} ventas · total {_clp(datos.total)} · "
+            f"{datos.cantidad_ventas} {'venta' if datos.cantidad_ventas == 1 else 'ventas'}"
+            f" · total {_clp(datos.total)} · "
             f"ticket promedio {_clp(datos.ticket_promedio)}"
         )
         for tabla, filas in (
@@ -241,11 +242,11 @@ class VentanaReportes(ttk.Frame):
             fondo=tema.PAPEL,
         ).grid(row=1, column=5, padx=4)
         columnas = ("producto", "unidades", "venta", "costo", "ganancia", "margen")
-        self._tabla_rentab = ttk.Treeview(marco, columns=columnas, show="headings", height=14)
+        self._tabla_rentab = ttk.Treeview(marco, columns=columnas, show="headings", height=8)
         for clave, titulo, ancho, ancla in (
             ("producto", "Producto", 280, "w"),
             ("unidades", "Unidades", 80, "e"),
-            ("venta", "Venta", 110, "e"),
+            ("venta", "Venta neta", 110, "e"),
             ("costo", "Costo", 110, "e"),
             ("ganancia", "Ganancia", 120, "e"),
             ("margen", "Margen", 80, "e"),
@@ -253,16 +254,19 @@ class VentanaReportes(ttk.Frame):
             self._tabla_rentab.heading(clave, text=titulo)
             self._tabla_rentab.column(clave, width=ancho, anchor=ancla)
         self._tabla_rentab.tag_configure("sin_costo", foreground="#a11")
-        self._tabla_rentab.pack(fill="both", expand=True, pady=8)
-        self._lbl_rentab = ttk.Label(marco, text="", font=("TkDefaultFont", 11, "bold"))
-        self._lbl_rentab.pack(anchor="w")
+        # Lo de abajo se empaqueta primero: si la ventana es baja, la tabla cede espacio (no el
+        # resumen ni la nota, que antes se recortaban).
         ttk.Label(
             marco,
-            text="Usa el costo que tenía el producto cuando se vendió, no el de hoy. Un producto "
+            text="Usa el costo que tenía el producto cuando se vendió, no el de hoy, y la venta "
+            "sin IVA. Un producto "
             "sin costo cargado no se supone en cero: se informa y queda fuera del margen.",
             foreground="#666",
             wraplength=760,
-        ).pack(anchor="w", pady=(4, 0))
+        ).pack(side="bottom", anchor="w", pady=(4, 0))
+        self._lbl_rentab = ttk.Label(marco, text="", font=("TkDefaultFont", 11, "bold"))
+        self._lbl_rentab.pack(side="bottom", anchor="w")
+        self._tabla_rentab.pack(fill="both", expand=True, pady=8)
 
     def generar_rentabilidad(self) -> list:
         if self._rentabilidad is None:
@@ -288,7 +292,7 @@ class VentanaReportes(ttk.Frame):
                 values=(
                     fila.nombre,
                     "—" if fila.unidades is None else formatear_cantidad(fila.unidades),
-                    _clp(fila.venta),
+                    _clp(fila.venta_neta),
                     "sin costo" if fila.sin_costo else _clp(fila.costo),
                     "no disponible" if fila.sin_costo else _clp(fila.ganancia),
                     "—" if fila.margen is None else f"{fila.margen * 100:.1f}%".replace(".", ","),
@@ -296,7 +300,8 @@ class VentanaReportes(ttk.Frame):
             )
         margen = resumen.margen_total
         self._lbl_rentab.config(
-            text=f"Ganancia {_clp(resumen.ganancia_total)} sobre {_clp(resumen.venta_con_costo)}"
+            text=f"Ganancia {_clp(resumen.ganancia_total)} "
+            f"sobre {_clp(resumen.venta_neta_con_costo)} netos"
             + (f" (margen {margen * 100:.1f}%)".replace(".", ",") if margen is not None else "")
             + (
                 f" · {_clp(resumen.venta_sin_costo)} vendidos sin costo, fuera del margen"
@@ -310,7 +315,7 @@ class VentanaReportes(ttk.Frame):
         filas = [self._tabla_rentab.item(i, "values") for i in self._tabla_rentab.get_children()]
         exportar_con_dialogo(
             "rentabilidad.csv",
-            ("Producto", "Unidades", "Venta", "Costo", "Ganancia", "Margen"),
+            ("Producto", "Unidades", "Venta neta", "Costo", "Ganancia", "Margen"),
             filas,
         )
 

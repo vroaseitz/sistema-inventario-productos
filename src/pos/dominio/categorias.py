@@ -62,5 +62,5 @@ def normalizar_nombre_categoria(nombre: str) -> str:
     """Quita espacios sobrantes y exige un nombre no vacio."""
     limpio = " ".join(nombre.split())
     if not limpio:
-        raise DatosProductoInvalidos("La categoria requiere un nombre")
+        raise DatosProductoInvalidos("La categoría requiere un nombre")
     return limpio

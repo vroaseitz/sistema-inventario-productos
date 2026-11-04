@@ -57,6 +57,7 @@ from pos.dominio.productos import UnidadVenta
 from pos.dominio.value_objects import Dinero
 from pos.dominio.ventas import EstadoVenta, Venta
 from pos.interfaz.cobro import DialogoCobro, DialogoDescuento, DialogoEspera
+from pos.interfaz.desplazable import MarcoDesplazable
 from pos.interfaz.dialogo_formulario import pedir_formulario
 from pos.interfaz.panel_dia import PanelDelDia
 from pos.interfaz.sesion import Sesion
@@ -447,14 +448,14 @@ class VentanaVentas(ttk.Frame):
     def _sincronizar(self) -> None:
         if self._cola is None or self._publicador is None:
             messagebox.showwarning(
-                "Sincronizacion", "No hay Supabase configurado (variable SUPABASE_DB_URL)"
+                "Sincronización", "No hay Supabase configurado (variable SUPABASE_DB_URL)"
             )
             return
         resultado = SincronizarPendientes(self._cola, self._publicador).ejecutar()
         self._refrescar_sync()
         if resultado.fallo_en is not None:
             messagebox.showwarning(
-                "Sincronizacion",
+                "Sincronización",
                 f"Se sincronizaron {resultado.sincronizadas} operaciones y luego se corto "
                 "(sin conexion o error del servidor). Lo pendiente se reintenta despues; "
                 "no se pierde nada.",
@@ -464,6 +465,7 @@ class VentanaVentas(ttk.Frame):
 
     def _refrescar_turno(self) -> None:
         turno = self._repo_turnos.obtener_abierto()
+        ventas_turno: list = []  # las ventas del turno se leen una sola vez por refresco
         for fila in self._tabla_movimientos.get_children():
             self._tabla_movimientos.delete(fila)
         if turno is None:
@@ -475,7 +477,7 @@ class VentanaVentas(ttk.Frame):
                 f"{_formatear_clp(turno.fondo_inicial.monto)}"
             )
             # O-23: fondo + ventas en efectivo - vueltos + ingresos - retiros.
-            ventas = self._repo_ventas.obtener_por_turno(turno.id)
+            ventas = ventas_turno = self._repo_ventas.obtener_por_turno(turno.id)
             esperado = calcular_arqueo(turno, ventas, Dinero(0)).efectivo_esperado
             self._lbl_en_caja.config(text=f"En caja: {_formatear_clp(esperado)}")
             for movimiento in turno.movimientos:  # O-24
@@ -491,13 +493,15 @@ class VentanaVentas(ttk.Frame):
                     ),
                 )
         self._publicar_estado()
-        self._refrescar_corte(
-            turno, self._repo_ventas.obtener_por_turno(turno.id) if turno is not None else []
-        )
+        self._refrescar_corte(turno, ventas_turno)
         self._refrescar_resumen()
 
     def _construir_caja(self, padre: ttk.Frame) -> None:
         """Corte y arqueo de caja (prototipo v3): acciones, venta de la jornada y dinero en caja."""
+        # La pestaña es más alta que la ventana en pantallas chicas: con scroll, nada se recorta.
+        desplazable = MarcoDesplazable(padre)
+        desplazable.pack(fill="both", expand=True)
+        padre = desplazable.interior
         color, claro = MODULOS_COLOR["F1"]
         acciones = tk.Frame(padre, bg=claro)
         acciones.pack(fill="x")
@@ -594,7 +598,7 @@ class VentanaVentas(ttk.Frame):
         departamentos = ttk.LabelFrame(medios, text="Ventas por departamento", padding=8)
         departamentos.pack(side="left", fill="both", expand=True)
         self._tabla_departamentos = ttk.Treeview(
-            departamentos, columns=("departamento", "monto", "parte"), show="headings", height=2
+            departamentos, columns=("departamento", "monto", "parte"), show="headings", height=3
         )
         for clave, titulo, ancho, ancla in (
             ("departamento", "Departamento", 170, "w"),
@@ -908,7 +912,7 @@ class VentanaVentas(ttk.Frame):
                 if monto <= 0:
                     raise ValueError
             except ValueError:
-                messagebox.showerror("Monto invalido", "El monto debe ser un entero mayor a cero")
+                messagebox.showerror("Monto inválido", "El monto debe ser un entero mayor a cero")
                 return
             tipo = TipoMovimientoCaja(tipo_var.get())
             observacion = entrada_obs.get().strip()
@@ -1292,7 +1296,7 @@ class VentanaVentas(ttk.Frame):
             texto_cantidad = self._entrada_cantidad.get().strip().replace(",", ".")
             cantidad = Decimal(texto_cantidad or "1")
         except InvalidOperation:
-            messagebox.showerror("Cantidad invalida", "La cantidad debe ser un numero")
+            messagebox.showerror("Cantidad inválida", "La cantidad debe ser un número")
             return
         producto = self._repo_productos.obtener_por_codigo(codigo)
         if producto is not None and producto.unidad_venta is UnidadVenta.GRANEL:
@@ -1428,13 +1432,13 @@ class VentanaVentas(ttk.Frame):
             return
         seleccion = self._tabla.selection()
         if not seleccion:
-            messagebox.showwarning("Sin seleccion", "Selecciona una linea del ticket")
+            messagebox.showwarning("Sin selección", "Selecciona una línea del ticket")
             return
         codigo = self._tabla.item(seleccion[0], "values")[0]
         try:
             venta.quitar_detalle(codigo)
         except ErrorDominio as exc:
-            messagebox.showerror("No se pudo quitar la linea", str(exc))
+            messagebox.showerror("No se pudo quitar la línea", str(exc))
             return
         self._refrescar_ticket()
 
@@ -1577,7 +1581,7 @@ class VentanaVentas(ttk.Frame):
     def _linea_seleccionada(self) -> str | None:
         seleccion = self._tabla.selection()
         if not seleccion:
-            messagebox.showwarning("Sin seleccion", "Selecciona una linea del ticket")
+            messagebox.showwarning("Sin selección", "Selecciona una línea del ticket")
             return None
         return str(self._tabla.item(seleccion[0], "values")[0])
 
@@ -1591,7 +1595,7 @@ class VentanaVentas(ttk.Frame):
         try:
             if delta < 0 and detalle.cantidad + delta <= 0:
                 if messagebox.askyesno(
-                    "Quitar linea", f"La cantidad llegaria a 0. Quitar {codigo}?"
+                    "Quitar línea", f"La cantidad llegaría a 0. Quitar {codigo}?"
                 ):
                     venta.quitar_detalle(codigo)
             else:
@@ -1659,10 +1663,10 @@ class VentanaVentas(ttk.Frame):
         try:
             monto = parsear_monto(self._entrada_monto_pago.get())
         except ValueError:
-            messagebox.showerror("Monto invalido", "El monto debe ser un numero entero")
+            messagebox.showerror("Monto inválido", "El monto debe ser un número entero")
             return
         if monto <= 0:  # F-04
-            messagebox.showerror("Monto invalido", "El monto debe ser mayor que cero")
+            messagebox.showerror("Monto inválido", "El monto debe ser mayor que cero")
             return
 
         medio = MedioPago(self._medio.get())
@@ -1789,7 +1793,7 @@ class VentanaVentas(ttk.Frame):
             return
         seleccion = self._lista_pagos.curselection()
         if not seleccion:
-            messagebox.showwarning("Sin seleccion", "Selecciona un pago de la lista")
+            messagebox.showwarning("Sin selección", "Selecciona un pago de la lista")
             return
         try:
             venta.quitar_pago(seleccion[0])
@@ -1817,7 +1821,7 @@ class VentanaVentas(ttk.Frame):
                 despues=venta.nota,
             )
         self._imprimir_tras_cobrar(venta, imprimir)
-        messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con exito")
+        messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con éxito")
         self._refrescar_sync()
         self._refrescar_turno()
         self._quitar_ticket_actual()  # D-01a: queda lista para la siguiente

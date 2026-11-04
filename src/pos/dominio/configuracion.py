@@ -35,7 +35,7 @@ PARAMETROS = (
         1,
         365,
         "dias",
-        "Para productos sin «Dias aviso» propio (HU-INV-03). El prototipo propone 14: "
+        "Para productos sin «Días aviso» propio (HU-INV-03). El prototipo propone 14: "
         "pendiente de confirmar con la Product Owner.",
     ),
     Parametro(
@@ -76,7 +76,7 @@ PARAMETROS = (
     ),
     Parametro(
         "inactividad_minutos",
-        "Cierre de sesion por inactividad",
+        "Cierre de sesión por inactividad",
         15,
         0,
         600,
@@ -92,7 +92,7 @@ def validar_parametro(clave: str, texto: str) -> int:
     try:
         valor = int(texto.strip().replace(".", ""))
     except ValueError as exc:
-        raise ErrorDominio(f"{parametro.titulo}: escribe un numero entero") from exc
+        raise ErrorDominio(f"{parametro.titulo}: escribe un número entero") from exc
     if not parametro.minimo <= valor <= parametro.maximo:
         raise ErrorDominio(
             f"{parametro.titulo}: debe estar entre {parametro.minimo} y {parametro.maximo} "

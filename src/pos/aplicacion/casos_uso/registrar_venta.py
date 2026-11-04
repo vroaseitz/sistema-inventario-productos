@@ -55,10 +55,10 @@ class RegistrarVenta:
     ) -> DetalleVenta:
         producto = self.repositorio_productos.obtener_por_codigo(codigo_producto)
         if producto is None:
-            raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo_producto}")
+            raise DatosProductoInvalidos(f"No existe un producto con código {codigo_producto}")
 
         if not producto.activo:
-            raise DatosProductoInvalidos(f"El producto {producto.nombre} esta desactivado")
+            raise DatosProductoInvalidos(f"El producto {producto.nombre} está desactivado")
         cantidad_dec = Decimal(str(cantidad))
         if producto.unidad_venta is UnidadVenta.UNIDAD and cantidad_dec % 1 != 0:
             raise DatosProductoInvalidos(

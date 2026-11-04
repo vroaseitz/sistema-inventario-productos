@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from tkinter import messagebox
 
+sys.stdout.reconfigure(encoding="utf-8")  # consola de Windows: cp1252 no codifica todo
+sys.stderr.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 os.environ["POS_SQLITE_PATH"] = str(Path(tempfile.mkdtemp()) / "sesion.db")

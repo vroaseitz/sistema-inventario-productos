@@ -50,13 +50,13 @@ class DetalleVenta:
     def __post_init__(self) -> None:
         self.cantidad = Decimal(str(self.cantidad))
         if self.cantidad <= 0:
-            raise ReglaVentaInvalida("La cantidad de una linea debe ser mayor que cero")
+            raise ReglaVentaInvalida("La cantidad de una línea debe ser mayor que cero")
 
     @property
     def subtotal(self) -> Dinero:
         bruto = self.precio_unitario.multiplicado_por(self.cantidad)
         if self.descuento_linea.monto > bruto.monto:
-            raise ReglaVentaInvalida("El descuento de la linea no puede superar su monto bruto")
+            raise ReglaVentaInvalida("El descuento de la línea no puede superar su monto bruto")
         return Dinero(bruto.monto - self.descuento_linea.monto)
 
 
@@ -94,7 +94,7 @@ class Venta:
                     detalle.descuento_linea = Dinero(0)
                     detalle.motivo_descuento = ""
                 if detalle.cantidad <= 0:
-                    raise ReglaVentaInvalida("La cantidad de una linea debe ser mayor que cero")
+                    raise ReglaVentaInvalida("La cantidad de una línea debe ser mayor que cero")
                 return detalle
         detalle = DetalleVenta(
             producto_codigo=producto_codigo,
@@ -113,12 +113,12 @@ class Venta:
         """
         detalle = next((d for d in self.detalles if d.producto_codigo == producto_codigo), None)
         if detalle is None:
-            raise ReglaVentaInvalida("La linea no esta en el ticket")
+            raise ReglaVentaInvalida("La línea no está en el ticket")
         if monto < 0:
             raise ReglaVentaInvalida("El descuento no puede ser negativo")
         bruto = detalle.precio_unitario.multiplicado_por(detalle.cantidad).monto
         if monto > bruto:
-            raise ReglaVentaInvalida("El descuento no puede superar el importe de la linea")
+            raise ReglaVentaInvalida("El descuento no puede superar el importe de la línea")
         if monto and not motivo.strip():
             raise ReglaVentaInvalida("El descuento necesita un motivo")
         detalle.descuento_linea = Dinero(monto)
@@ -131,7 +131,7 @@ class Venta:
             if detalle.producto_codigo == producto_codigo:
                 self.detalles.remove(detalle)
                 return
-        raise ReglaVentaInvalida(f"No hay una linea para el producto {producto_codigo}")
+        raise ReglaVentaInvalida(f"No hay una línea para el producto {producto_codigo}")
 
     @property
     def total(self) -> Dinero:

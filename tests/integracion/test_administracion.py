@@ -160,7 +160,7 @@ def test_auditoria_de_productos_precio_merma_y_filtros(app):
 def test_configuracion_valida_guarda_y_restaura(app):
     assert app.config.obtener("fondo_habitual") == 15000  # defecto
     assert validar_parametro("fondo_habitual", "20.000") == 20000
-    with pytest.raises(ErrorDominio, match="numero entero"):
+    with pytest.raises(ErrorDominio, match="número entero"):
         validar_parametro("fondo_habitual", "mucho")
     with pytest.raises(ErrorDominio, match="entre 1 y 365"):
         validar_parametro("aviso_defecto_dias", "0")

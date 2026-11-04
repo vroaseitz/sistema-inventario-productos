@@ -31,7 +31,7 @@ class RegistrarProducto:
         dias_aviso: int | None = None,
     ) -> Producto:
         if self.repositorio.obtener_por_codigo(codigo) is not None:
-            raise DatosProductoInvalidos(f"Ya existe un producto con codigo {codigo}")
+            raise DatosProductoInvalidos(f"Ya existe un producto con código {codigo}")
 
         costo_obj = Costo(neto=Dinero(costo), iva=Dinero(0)) if costo is not None else None
 

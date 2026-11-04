@@ -13,6 +13,7 @@ Uso:
 
 from __future__ import annotations
 
+import sys
 import time
 import tkinter as tk
 from collections.abc import Callable
@@ -89,13 +90,46 @@ class _ModuloPendiente(ttk.Frame):
         ).pack()
 
 
+ANCHO_DISENO, ALTO_DISENO = 1320, 860
+ANCHO_MINIMO, ALTO_MINIMO = 1180, 780
+MARGEN_VENTANA = 12  # px libres alrededor de la ventana
+ALTO_BARRA_TITULO = 40  # barra de titulo y bordes de la ventana
+
+
+def tamano_de_ventana(ancho_util: int, alto_util: int) -> tuple[int, int, int, int]:
+    """Ancho, alto y minimos de la ventana, sin pasarse del area util de la pantalla.
+
+    El diseno es 1320x860, pero en un portatil (1366x768 o una pantalla escalada al 150 %) eso
+    se sale por abajo y deja el total a cobrar detras de la barra de tareas.
+    """
+    ancho = max(640, min(ANCHO_DISENO, ancho_util - 2 * MARGEN_VENTANA))
+    alto = max(480, min(ALTO_DISENO, alto_util - ALTO_BARRA_TITULO - MARGEN_VENTANA))
+    return ancho, alto, min(ANCHO_MINIMO, ancho), min(ALTO_MINIMO, alto)
+
+
+def area_de_trabajo(raiz: tk.Misc) -> tuple[int, int]:
+    """Ancho y alto utiles de la pantalla, sin la barra de tareas (en pixeles de este proceso)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            rect = wintypes.RECT()
+            if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0):  # type: ignore[attr-defined]
+                return rect.right - rect.left, rect.bottom - rect.top
+        except (AttributeError, OSError):
+            pass
+    return raiz.winfo_screenwidth(), raiz.winfo_screenheight() - 80  # sin API: margen de barra
+
+
 class VentanaPrincipal(tk.Tk):
     def __init__(self, fabricas: dict[str, Callable[[tk.Misc], ttk.Frame]] | None = None) -> None:
         """`fabricas` mapea F1..F7 a una funcion que construye la pantalla dado su contenedor."""
         super().__init__()
         self.title("NaturalSur - Emporio")
-        self.geometry("1320x860")
-        self.minsize(1180, 780)
+        ancho, alto, minimo_ancho, minimo_alto = tamano_de_ventana(*area_de_trabajo(self))
+        self.geometry(f"{ancho}x{alto}+{MARGEN_VENTANA}+{MARGEN_VENTANA}")
+        self.minsize(minimo_ancho, minimo_alto)
         self._estilo = aplicar_tema(self)
 
         self._permitidos: Callable[[], frozenset[str]] = lambda: frozenset(m.clave for m in MODULOS)

@@ -38,7 +38,7 @@ class Cliente:
         if not self.nombre:
             raise ReglaClienteInvalida("Falta el nombre del cliente")
         if not (self.telefono or self.correo):
-            raise ReglaClienteInvalida("Falta al menos un medio de contacto (telefono o correo)")
+            raise ReglaClienteInvalida("Falta al menos un medio de contacto (teléfono o correo)")
 
     @property
     def contacto(self) -> str:

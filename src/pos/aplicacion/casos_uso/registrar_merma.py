@@ -51,7 +51,7 @@ class RegistrarMerma:
         try:
             baja = Decimal(str(cantidad_a_dar_de_baja))
         except InvalidOperation as exc:
-            raise ReglaInventarioInvalida("La cantidad a dar de baja debe ser un numero") from exc
+            raise ReglaInventarioInvalida("La cantidad a dar de baja debe ser un número") from exc
         if baja <= 0:
             raise ReglaInventarioInvalida("La cantidad a dar de baja debe ser mayor que cero")
         existencia = self.repositorio_existencias.obtener(codigo_producto)

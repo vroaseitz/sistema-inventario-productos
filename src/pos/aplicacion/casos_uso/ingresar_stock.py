@@ -44,7 +44,7 @@ class IngresarStock:
     ) -> Lote | None:
         producto = self.repositorio_productos.obtener_por_codigo(codigo_producto)
         if producto is None:
-            raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo_producto}")
+            raise DatosProductoInvalidos(f"No existe un producto con código {codigo_producto}")
         if producto.perecible and fecha_vencimiento is None:
             raise ReglaInventarioInvalida(
                 "Un producto perecible requiere fecha de vencimiento para ingresar stock"

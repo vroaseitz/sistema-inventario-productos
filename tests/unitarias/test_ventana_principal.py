@@ -8,7 +8,11 @@ import pytest
 
 pytest.importorskip("tkinter")  # entornos sin Tk (p. ej. algunos Python de Homebrew)
 
-from pos.interfaz.ventana_principal import MODULOS, construir_aplicacion  # noqa: E402
+from pos.interfaz.ventana_principal import (  # noqa: E402
+    MODULOS,
+    construir_aplicacion,
+    tamano_de_ventana,
+)
 
 
 def test_hay_siete_modulos_con_atajo_y_color_del_prototipo():
@@ -61,3 +65,14 @@ def test_la_ventana_unica_monta_venta_y_productos_y_cambia_de_modulo(tmp_path, m
         assert ventana.modulo_activo == "F1"
     finally:
         ventana.destroy()
+
+
+def test_la_ventana_cabe_en_el_area_util_de_pantallas_pequenas():
+    # Caso real de la demo: area util 1280x752 (1920x1200 al 150 %) con el diseno de 1320x860.
+    ancho, alto, min_ancho, min_alto = tamano_de_ventana(1280, 752)
+    assert ancho <= 1280 and alto + 40 <= 752  # cabe con su barra de titulo
+    assert (min_ancho, min_alto) == (min(1180, ancho), min(780, alto))
+
+
+def test_en_pantallas_grandes_conserva_el_tamano_de_diseno():
+    assert tamano_de_ventana(1920, 1040) == (1320, 860, 1180, 780)

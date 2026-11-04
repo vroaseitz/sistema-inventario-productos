@@ -85,7 +85,7 @@ class VentanaCompras(ttk.Frame):
         ttk.Label(datos, text="Proveedor").grid(row=0, column=0, sticky="w", padx=4)
         self._proveedor = ttk.Combobox(datos, width=28, values=self._nombres_proveedores())
         self._proveedor.grid(row=1, column=0, padx=4, pady=(2, 0), sticky="w")
-        ttk.Label(datos, text="Numero de documento").grid(row=0, column=1, sticky="w", padx=4)
+        ttk.Label(datos, text="Número de documento").grid(row=0, column=1, sticky="w", padx=4)
         ttk.Entry(datos, textvariable=self._numero, width=16).grid(
             row=1, column=1, padx=4, pady=(2, 0), sticky="w"
         )
@@ -111,21 +111,21 @@ class VentanaCompras(ttk.Frame):
         linea.pack(fill="x", pady=(8, 0))
         self._l_vence = CampoFecha(linea, width=14)
         campos = (
-            ("Codigo de producto", ttk.Entry(linea, textvariable=self._l_codigo, width=18)),
+            ("Código de producto", ttk.Entry(linea, textvariable=self._l_codigo, width=18)),
             ("Cantidad", ttk.Entry(linea, textvariable=self._l_cantidad, width=10)),
             ("Costo unitario neto", ttk.Entry(linea, textvariable=self._l_costo, width=14)),
             ("Vence (si es perecible)", self._l_vence),
-            ("Codigo de lote (impreso)", ttk.Entry(linea, textvariable=self._l_lote, width=16)),
+            ("Código de lote (impreso)", ttk.Entry(linea, textvariable=self._l_lote, width=16)),
         )
         for columna, (titulo, widget) in enumerate(campos):
             ttk.Label(linea, text=titulo).grid(row=0, column=columna, sticky="w", padx=4)
             widget.grid(row=1, column=columna, padx=4, pady=(2, 0), sticky="w")
             if isinstance(widget, ttk.Entry):
                 widget.bind("<Return>", lambda _e: self._agregar_linea())
-        ttk.Button(linea, text="Agregar linea", command=self._agregar_linea).grid(
+        ttk.Button(linea, text="Agregar línea", command=self._agregar_linea).grid(
             row=1, column=len(campos), padx=8
         )
-        ttk.Button(linea, text="Quitar linea", command=self._quitar_linea).grid(
+        ttk.Button(linea, text="Quitar línea", command=self._quitar_linea).grid(
             row=1, column=len(campos) + 1, padx=4
         )
 

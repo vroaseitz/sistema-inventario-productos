@@ -25,7 +25,7 @@ class CambiarEstadoProducto:
     def ejecutar(self, codigo: str, activo: bool) -> Producto:
         producto = self.repositorio.obtener_por_codigo(codigo)
         if producto is None:
-            raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo}")
+            raise DatosProductoInvalidos(f"No existe un producto con código {codigo}")
         if producto.activo == activo:
             return producto
         producto.activo = activo

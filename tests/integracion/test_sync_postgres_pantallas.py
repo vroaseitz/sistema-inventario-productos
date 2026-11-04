@@ -24,7 +24,11 @@ from pos.infraestructura.sqlite.repositorio_categorias import (  # noqa: E402
     RepositorioCategoriasSQLite,
 )
 from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite  # noqa: E402
-from tests.integracion.test_sync_postgres import App, _uno, pg  # noqa: E402,F401
+from tests.integracion.test_sync_postgres import PG_URL, App, _uno, pg  # noqa: E402,F401
+
+pytestmark = pytest.mark.skipif(
+    not PG_URL, reason="define POS_TEST_PG_URL para probar contra PostgreSQL"
+)
 
 
 def _fila(cur, sql, params=()):

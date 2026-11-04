@@ -15,6 +15,8 @@ from decimal import Decimal
 from pathlib import Path
 from tkinter import Tk, Toplevel, messagebox, ttk
 
+sys.stdout.reconfigure(encoding="utf-8")  # consola de Windows: cp1252 no codifica todo
+sys.stderr.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja  # noqa: E402
@@ -158,7 +160,7 @@ verificar(
 mensajes.clear()
 ventana._agregar_producto()  # Enter con un codigo que de verdad no existe
 verificar(
-    any("No existe un producto con codigo 1050" in m for t, m in mensajes if t == "showerror"),
+    any("No existe un producto con código 1050" in m for t, m in mensajes if t == "showerror"),
     "con Enter si avisa que «1050» no existe",
 )
 escribir_y_esperar(ventana, "10")
@@ -509,7 +511,7 @@ medios = [reporte._por_medio.item(i, "values")[0] for i in reporte._por_medio.ge
 verificar(categorias == ["Frutos secos y semillas"], f"R-02: categoria con su nombre {categorias}")
 verificar(medios == ["Efectivo"], f"R-02: medio de pago legible {medios}")
 verificar(
-    "1 ventas" in reporte._resumen.get(), "R-02: al mostrarse el reporte ya trae la venta nueva"
+    "1 venta " in reporte._resumen.get(), "R-02: al mostrarse el reporte ya trae la venta nueva"
 )
 # --- HU-REP-03 / HU-REP-04 / HU-PRD-06 ---------------------------------------------------------
 filas_r = reporte.generar_rentabilidad()
