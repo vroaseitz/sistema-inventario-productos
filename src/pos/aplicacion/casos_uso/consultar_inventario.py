@@ -75,10 +75,17 @@ class ConsultarExistencias:
         categoria_id: int | None = None,
         mostrar: str = "Todos",
         orden: str = "Por urgencia",
+        con_ultima_venta: bool = True,
     ) -> list[FilaExistencia]:
+        """`con_ultima_venta=False` omite ese dato (caro con mucho historial) si no se muestra."""
         ultimas = (
-            self.repositorio_ventas.ultima_venta_por_producto() if self.repositorio_ventas else {}
+            self.repositorio_ventas.ultima_venta_por_producto()
+            if self.repositorio_ventas and con_ultima_venta
+            else {}
         )
+        # Una sola lectura de existencias si el repositorio la ofrece; si no, una por producto.
+        todas = getattr(self.repositorio_existencias, "todas", None)
+        existencias = todas() if todas is not None else None
         estado_pedido = MOSTRAR[mostrar]
         filas = []
         for producto in self.repositorio_productos.listar():
@@ -88,7 +95,10 @@ class ConsultarExistencias:
                 continue
             if buscar and _plano(buscar) not in _plano(f"{producto.nombre} {producto.codigo}"):
                 continue
-            existencia = self.repositorio_existencias.obtener(producto.codigo)
+            if existencias is not None:
+                existencia = existencias.get(producto.codigo)
+            else:
+                existencia = self.repositorio_existencias.obtener(producto.codigo)
             cantidad = existencia.cantidad if existencia else Decimal("0")
             granel = producto.unidad_venta is UnidadVenta.GRANEL
             estado = estado_de_existencia(cantidad, producto.stock_minimo, granel)
@@ -123,11 +133,11 @@ class DefinirStockMinimo:
     def ejecutar(self, codigo: str, minimo: int | None) -> Producto:
         producto = self.repositorio_productos.obtener_por_codigo(codigo)
         if producto is None:
-            raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo}")
+            raise DatosProductoInvalidos(f"No existe un producto con código {codigo}")
         if minimo is not None and minimo < 0:
-            raise DatosProductoInvalidos("El stock minimo no puede ser negativo")
+            raise DatosProductoInvalidos("El stock mínimo no puede ser negativo")
         if producto.unidad_venta is UnidadVenta.GRANEL and minimo is not None:
-            raise DatosProductoInvalidos("Un producto a granel no lleva stock minimo en unidades")
+            raise DatosProductoInvalidos("Un producto a granel no lleva stock mínimo en unidades")
         anterior = producto.stock_minimo
         producto.stock_minimo = minimo
         self.repositorio_productos.guardar(producto)

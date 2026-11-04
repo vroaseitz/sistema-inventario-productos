@@ -111,7 +111,7 @@ class ResumenDelDia:
             )
         bajos = [
             f
-            for f in self.existencias.ejecutar()
+            for f in self.existencias.ejecutar(con_ultima_venta=False)
             if f.estado in (ESTADO_AGOTADO, ESTADO_BAJO_MINIMO) and f.minimo is not None
         ]
         if bajos:

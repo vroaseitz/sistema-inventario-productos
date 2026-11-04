@@ -243,6 +243,25 @@ CREATE TABLE IF NOT EXISTS lotes (
     saldo              TEXT NOT NULL,
     FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
 );
+
+-- Indices de lectura. SQLite no indexa las claves foraneas por si solo: sin estos, cada reporte
+-- recorre las tablas completas (con un ano de ventas, rentabilidad pasaba de segundos).
+CREATE INDEX IF NOT EXISTS idx_venta_detalles_venta ON venta_detalles (venta_id);
+CREATE INDEX IF NOT EXISTS idx_venta_detalles_producto ON venta_detalles (producto_codigo);
+CREATE INDEX IF NOT EXISTS idx_venta_pagos_venta ON venta_pagos (venta_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_creado_en ON ventas (creado_en);
+CREATE INDEX IF NOT EXISTS idx_ventas_turno ON ventas (turno_caja_id);
+CREATE INDEX IF NOT EXISTS idx_movimientos_inventario_producto
+    ON movimientos_inventario (codigo_producto, fecha);
+CREATE INDEX IF NOT EXISTS idx_movimientos_inventario_fecha ON movimientos_inventario (fecha);
+CREATE INDEX IF NOT EXISTS idx_movimientos_caja_turno ON movimientos_caja (turno_id);
+CREATE INDEX IF NOT EXISTS idx_lotes_producto ON lotes (codigo_producto, fecha_vencimiento);
+CREATE INDEX IF NOT EXISTS idx_facturas_lineas_factura ON facturas_compra_lineas (factura_id);
+CREATE INDEX IF NOT EXISTS idx_movimientos_cliente_cliente
+    ON movimientos_cliente (cliente_id, fecha);
+-- La cola crece sin parar (lo sincronizado no se borra): solo se indexan las pendientes.
+CREATE INDEX IF NOT EXISTS idx_cola_pendientes ON cola_sincronizacion (estado)
+    WHERE estado = 'pending';
 """
 
 

@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import date, datetime
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -98,10 +99,7 @@ class RepositorioVentasSQLite:
             self._con.execute("COMMIT")
 
     def obtener_por_turno(self, turno_caja_id: int) -> list[Venta]:
-        filas_venta = self._con.execute(
-            "SELECT * FROM ventas WHERE turno_caja_id = ? ORDER BY id", (turno_caja_id,)
-        ).fetchall()
-        return [self._a_venta(f) for f in filas_venta]
+        return self._ventas_donde("v.turno_caja_id = ?", (turno_caja_id,))
 
     def ultima(self) -> Venta | None:
         """Ultima venta pagada (para reimprimir el ultimo comprobante)."""
@@ -113,25 +111,58 @@ class RepositorioVentasSQLite:
     def ultima_venta_por_producto(self) -> dict[str, date]:
         """Fecha de la ultima venta pagada de cada producto (para la rotacion)."""
         filas = self._con.execute(
-            "SELECT d.producto_codigo AS codigo, MAX(date(v.creado_en)) AS ultima "
+            "SELECT d.producto_codigo AS codigo, MAX(v.creado_en) AS ultima "
             "FROM venta_detalles d JOIN ventas v ON v.id = d.venta_id "
             "WHERE v.estado = 'pagada' GROUP BY d.producto_codigo"
         ).fetchall()
-        return {f["codigo"]: date.fromisoformat(f["ultima"]) for f in filas}
+        # creado_en es "AAAA-MM-DD hh:mm:ss": basta con los 10 primeros caracteres (la fecha).
+        return {f["codigo"]: date.fromisoformat(f["ultima"][:10]) for f in filas}
 
     def por_periodo(self, desde: date, hasta: date) -> list[Venta]:
-        """Ventas pagadas con fecha entre `desde` y `hasta`, ambas inclusive."""
-        filas = self._con.execute(
-            "SELECT * FROM ventas WHERE estado = 'pagada' "
-            "AND date(creado_en) BETWEEN ? AND ? ORDER BY id",
-            (desde.isoformat(), hasta.isoformat()),
-        ).fetchall()
-        return [self._a_venta(f) for f in filas]
+        """Ventas pagadas con fecha entre `desde` y `hasta`, ambas inclusive.
 
-    def _a_venta(self, fila: sqlite3.Row) -> Venta:
-        detalles_filas = self._con.execute(
-            "SELECT * FROM venta_detalles WHERE venta_id = ? ORDER BY id", (fila["id"],)
+        Se compara el texto de `creado_en` contra el inicio de `desde` y el de `hasta + 1 dia`
+        (sirve tanto con "AAAA-MM-DD hh:mm" como con "AAAA-MM-DDThh:mm") para poder usar el indice;
+        envolver la columna en `date(...)` lo impedia.
+        """
+        return self._ventas_donde(
+            "v.estado = 'pagada' AND v.creado_en >= ? AND v.creado_en < ?",
+            (desde.isoformat(), (hasta + timedelta(days=1)).isoformat()),
+        )
+
+    def _ventas_donde(self, condicion: str, parametros: tuple) -> list[Venta]:
+        """Carga ventas con sus lineas y pagos en 3 consultas (no 1 + 2 por venta)."""
+        filas = self._con.execute(
+            f"SELECT v.* FROM ventas v WHERE {condicion} ORDER BY v.id", parametros
         ).fetchall()
+        if not filas:
+            return []
+        detalles: dict[int, list[sqlite3.Row]] = defaultdict(list)
+        for d in self._con.execute(
+            "SELECT d.* FROM venta_detalles d JOIN ventas v ON v.id = d.venta_id "
+            f"WHERE {condicion} ORDER BY d.id",
+            parametros,
+        ):
+            detalles[d["venta_id"]].append(d)
+        pagos: dict[int, list[sqlite3.Row]] = defaultdict(list)
+        for p in self._con.execute(
+            "SELECT p.* FROM venta_pagos p JOIN ventas v ON v.id = p.venta_id "
+            f"WHERE {condicion} ORDER BY p.id",
+            parametros,
+        ):
+            pagos[p["venta_id"]].append(p)
+        return [self._a_venta(f, detalles[f["id"]], pagos[f["id"]]) for f in filas]
+
+    def _a_venta(
+        self,
+        fila: sqlite3.Row,
+        detalles_filas: list[sqlite3.Row] | None = None,
+        pagos_filas: list[sqlite3.Row] | None = None,
+    ) -> Venta:
+        if detalles_filas is None:
+            detalles_filas = self._con.execute(
+                "SELECT * FROM venta_detalles WHERE venta_id = ? ORDER BY id", (fila["id"],)
+            ).fetchall()
         detalles = [
             DetalleVenta(
                 producto_codigo=d["producto_codigo"],
@@ -146,9 +177,10 @@ class RepositorioVentasSQLite:
             for d in detalles_filas
         ]
 
-        pagos_filas = self._con.execute(
-            "SELECT * FROM venta_pagos WHERE venta_id = ? ORDER BY id", (fila["id"],)
-        ).fetchall()
+        if pagos_filas is None:
+            pagos_filas = self._con.execute(
+                "SELECT * FROM venta_pagos WHERE venta_id = ? ORDER BY id", (fila["id"],)
+            ).fetchall()
         pagos = []
         for p in pagos_filas:
             medio = MedioPago(p["medio_pago"])

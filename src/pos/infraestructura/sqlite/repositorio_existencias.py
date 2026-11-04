@@ -21,6 +21,13 @@ class RepositorioExistenciasSQLite(RepositorioExistencias):
             return None
         return Existencia(fila["codigo_producto"], Decimal(fila["cantidad"]))
 
+    def todas(self) -> dict[str, Existencia]:
+        """Todas las existencias de una vez (evita una consulta por producto en las listas)."""
+        return {
+            f["codigo_producto"]: Existencia(f["codigo_producto"], Decimal(f["cantidad"]))
+            for f in self._con.execute("SELECT codigo_producto, cantidad FROM existencias")
+        }
+
     def guardar(self, existencia: Existencia) -> None:
         self._con.execute(
             """
