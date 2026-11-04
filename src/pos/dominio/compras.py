@@ -13,9 +13,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from .errores import ReglaCompraInvalida
-from .value_objects import Dinero
-
-TASA_IVA = Decimal("0.19")
+from .value_objects import TASA_IVA, Dinero
 
 
 class EstadoFactura(StrEnum):
@@ -40,7 +38,7 @@ class LineaFactura:
     def __post_init__(self) -> None:
         self.cantidad = Decimal(str(self.cantidad))
         if self.cantidad <= 0:
-            raise ReglaCompraInvalida("La cantidad de cada linea debe ser mayor que cero")
+            raise ReglaCompraInvalida("La cantidad de cada línea debe ser mayor que cero")
         if self.costo_unitario_neto <= 0:
             raise ReglaCompraInvalida("El costo unitario neto debe ser mayor que cero")
 
@@ -77,9 +75,9 @@ class FacturaCompra:
         if not self.proveedor.strip():
             raise ReglaCompraInvalida("Falta el proveedor")
         if not self.numero.strip():
-            raise ReglaCompraInvalida("Falta el numero de documento")
+            raise ReglaCompraInvalida("Falta el número de documento")
         if not self.lineas:
-            raise ReglaCompraInvalida("La factura no tiene productos: agrega al menos una linea")
+            raise ReglaCompraInvalida("La factura no tiene productos: agrega al menos una línea")
         if self.neto <= 0:
             raise ReglaCompraInvalida("El monto neto debe ser mayor que cero")
         if self.impuestos < 0:

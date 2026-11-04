@@ -11,6 +11,8 @@ import tempfile
 from pathlib import Path
 from tkinter import messagebox
 
+sys.stdout.reconfigure(encoding="utf-8")  # consola de Windows: cp1252 no codifica todo
+sys.stderr.reconfigure(encoding="utf-8")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 os.environ["POS_SQLITE_PATH"] = str(Path(tempfile.mkdtemp()) / "catalogo.db")
 os.environ["SUPABASE_DB_URL"] = ""
@@ -48,9 +50,9 @@ v["categoria"].set(nombres[0])
 v["costo"].set("14.000")
 v["precio"].set("22.220")
 app.update()
-verificar(v["ganancia"].get() == "$8.220", "ganancia en vivo = precio − costo")
-verificar(v["margen"].get() == "37,0%", "margen en vivo")
-verificar(v["markup"].get() == "58,7%", "markup en vivo")
+verificar(v["ganancia"].get() == "$4.672", "ganancia en vivo = precio sin IVA − costo")
+verificar(v["margen"].get() == "25,0%", "margen en vivo sobre el precio sin IVA")
+verificar(v["markup"].get() == "33,4%", "markup en vivo")
 verificar(v["iva"].get() == "$3.548", "IVA 19 % incluido informativo")
 v["minimo"].set("3")
 cat._guardar_ficha(cat.ficha, False)

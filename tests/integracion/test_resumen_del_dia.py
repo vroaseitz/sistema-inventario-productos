@@ -75,11 +75,12 @@ def _vender(a, lineas, medio=MedioPago.TARJETA):
 
 
 def test_venta_ganancia_medios_y_ranking(app):
-    _vender(app, [("CAS", 10), ("PAN", 5)])  # 10.000 + 10.000, ganancia 4.000 + 5.000
+    # 10.000 + 10.000 con IVA (neto 8.403 c/u): ganancia 2.403 + 3.403
+    _vender(app, [("CAS", 10), ("PAN", 5)])
     _vender(app, [("CRE", 1)], MedioPago.TRANSFERENCIA)  # 4.000 sin costo
     r = app.resumen.ejecutar()
     assert (r.venta_hoy, r.transacciones) == (24000, 2)
-    assert r.ganancia_hoy == 9000 and r.margen_hoy == pytest.approx(9000 / 20000)
+    assert r.ganancia_hoy == 5806 and r.margen_hoy == pytest.approx(5806 / 16806)
     assert r.por_medio[MedioPago.TARJETA] == (20000, 1)
     assert r.por_medio[MedioPago.TRANSFERENCIA] == (4000, 1)
     assert r.por_medio[MedioPago.EFECTIVO] == (0, 0)
@@ -94,10 +95,10 @@ def test_sin_meta_cargada_no_se_inventa_un_cumplimiento(app):
 
 
 def test_meta_por_tipo_de_dia_y_cumplimiento(app):
-    _vender(app, [("CAS", 10)])  # ganancia 4.000
-    app.config.guardar(clave_de_meta(HOY), 8000)
+    _vender(app, [("CAS", 10)])  # ganancia 2.403 (venta neta 8.403 - costo 6.000)
+    app.config.guardar(clave_de_meta(HOY), 4806)
     assert app.resumen.ejecutar().cumplimiento == pytest.approx(0.5)
-    app.config.guardar(clave_de_meta(HOY), 4000)
+    app.config.guardar(clave_de_meta(HOY), 2403)
     assert app.resumen.ejecutar().cumplimiento == pytest.approx(1.0)
     assert clave_de_meta(date(2026, 11, 7)) == "meta_sabado"
     assert clave_de_meta(date(2026, 11, 8)) == "meta_domingo"

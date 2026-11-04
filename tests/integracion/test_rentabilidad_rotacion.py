@@ -78,16 +78,18 @@ def _fechar(a, venta, dias_atras):
     )
 
 
-def test_rentabilidad_calcula_ganancia_y_margen_sobre_costo_neto(app):
+def test_rentabilidad_calcula_ganancia_y_margen_sobre_venta_y_costo_netos(app):
     _vender(app, [("CAS", 10), ("ALM", 4)])
     resumen = app.rentabilidad.ejecutar(HOY, HOY)
     por_codigo = {f.codigo: f for f in resumen.filas}
     cas, alm = por_codigo["CAS"], por_codigo["ALM"]
-    assert (cas.venta, cas.costo, cas.ganancia) == (10000, 6000, 4000)
-    assert cas.margen == pytest.approx(0.4)
-    assert (alm.venta, alm.costo, alm.ganancia) == (8000, 6000, 2000)
-    assert resumen.ganancia_total == 6000 and resumen.venta_con_costo == 18000
-    assert resumen.margen_total == pytest.approx(6000 / 18000)
+    # El precio incluye IVA: 10000 / 1,19 = 8403 neto; la ganancia es neto - costo.
+    assert (cas.venta, cas.venta_neta, cas.costo, cas.ganancia) == (10000, 8403, 6000, 2403)
+    assert cas.margen == pytest.approx(2403 / 8403)
+    assert (alm.venta, alm.venta_neta, alm.costo, alm.ganancia) == (8000, 6723, 6000, 723)
+    assert resumen.ganancia_total == 3126 and resumen.venta_con_costo == 18000
+    assert resumen.venta_neta_con_costo == 15126
+    assert resumen.margen_total == pytest.approx(3126 / 15126)
     assert [f.codigo for f in resumen.filas] == ["CAS", "ALM"]  # mayor ganancia primero
 
 
@@ -98,7 +100,7 @@ def test_un_producto_sin_costo_se_informa_y_no_infla_la_ganancia(app):
     assert crema.sin_costo and crema.ganancia is None and crema.margen is None
     assert crema.venta == 20000
     assert resumen.venta_sin_costo == 20000
-    assert resumen.venta_con_costo == 1000 and resumen.ganancia_total == 400  # solo la castana
+    assert resumen.venta_con_costo == 1000 and resumen.ganancia_total == 240  # solo la castana
     assert resumen.filas[-1].codigo == "CRE"  # los sin costo van al final al ordenar por ganancia
 
 
@@ -120,14 +122,14 @@ def test_la_rentabilidad_usa_el_costo_de_cuando_se_vendio(app):
         )
     )
     fila = next(f for f in app.rentabilidad.ejecutar(HOY, HOY).filas if f.codigo == "CAS")
-    assert fila.costo == 6000 and fila.ganancia == 4000  # sigue el de la venta, no el de hoy
+    assert fila.costo == 6000 and fila.ganancia == 2403  # sigue el de la venta, no el de hoy
 
 
 def test_granel_no_muestra_unidades_y_se_filtra_por_categoria_y_orden(app):
     _vender(app, [("QUI", "0.5"), ("CAS", 2), ("ALM", 1)])
     todas = app.rentabilidad.ejecutar(HOY, HOY)
     quinoa = next(f for f in todas.filas if f.codigo == "QUI")
-    assert quinoa.unidades is None and quinoa.venta == 5000 and quinoa.ganancia == 2000
+    assert quinoa.unidades is None and quinoa.venta == 5000 and quinoa.ganancia == 1202
     solo_cat2 = app.rentabilidad.ejecutar(HOY, HOY, categoria_id=2)
     assert {f.codigo for f in solo_cat2.filas} == {"QUI", "ALM"}
     por_nombre = app.rentabilidad.ejecutar(HOY, HOY, orden="Nombre")

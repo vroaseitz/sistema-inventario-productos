@@ -21,6 +21,7 @@ from pos.aplicacion.puertos import RepositorioCategorias, RepositorioHistorial, 
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_clp, parsear_monto
 from pos.dominio.productos import UnidadVenta
+from pos.dominio.value_objects import neto_de_precio
 from pos.interfaz import tema
 from pos.interfaz.dialogo_formulario import pedir_formulario
 from pos.interfaz.exportar import exportar_con_dialogo
@@ -414,8 +415,8 @@ class VentanaCatalogo(ttk.Frame):
             ttk.Entry(c, textvariable=v["precio"], width=14),
         )
         fila(c, 1, f"IVA {IVA} % incluido", ttk.Label(c, textvariable=v["iva"]))
-        fila(c, 2, "Ganancia por unidad", ttk.Label(c, textvariable=v["ganancia"]))
-        fila(c, 3, "Margen (sobre el precio)", ttk.Label(c, textvariable=v["margen"]))
+        fila(c, 2, "Ganancia por unidad (sin IVA)", ttk.Label(c, textvariable=v["ganancia"]))
+        fila(c, 3, "Margen (sobre el precio sin IVA)", ttk.Label(c, textvariable=v["margen"]))
         fila(c, 4, "Markup (sobre el costo)", ttk.Label(c, textvariable=v["markup"]))
         if editando:
             fila(
@@ -477,14 +478,17 @@ class VentanaCatalogo(ttk.Frame):
             for clave in ("iva", "ganancia", "margen", "markup"):
                 v[clave].set("—")
             return
-        v["iva"].set(formatear_clp(precio - round(precio / (1 + IVA / 100))))
+        # ADR 0004: el precio incluye IVA y el costo es neto; la ganancia se mide sin IVA.
+        precio_neto = neto_de_precio(precio)
+        v["iva"].set(formatear_clp(precio - precio_neto))
         if not costo:
             for clave in ("ganancia", "margen", "markup"):
                 v[clave].set("falta costo")
             return
-        v["ganancia"].set(formatear_clp(precio - costo))
-        v["margen"].set(_porcentaje((precio - costo) / precio) if precio else "—")
-        v["markup"].set(_porcentaje((precio - costo) / costo))
+        ganancia = precio_neto - costo
+        v["ganancia"].set(formatear_clp(ganancia))
+        v["margen"].set(_porcentaje(ganancia / precio_neto) if precio_neto else "—")
+        v["markup"].set(_porcentaje(ganancia / costo))
 
     def _guardar_ficha(self, ventana: tk.Toplevel, editando: bool) -> bool:
         """Valida, avisa si se vende bajo el costo, y registra o edita. True si quedó guardado."""

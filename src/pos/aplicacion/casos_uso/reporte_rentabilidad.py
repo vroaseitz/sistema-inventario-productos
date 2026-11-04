@@ -1,9 +1,11 @@
 """Casos de uso de F6: rentabilidad por producto (HU-REP-03) y rotacion de productos (HU-REP-04).
 
 Rentabilidad: usa el costo que tenia el producto CUANDO SE VENDIO (queda en la linea de la venta),
-no el de hoy, y el costo neto (ADR 0004). Un producto sin costo cargado (o con costo 0) NO se
-supone en cero: se informa «sin costo» y su venta queda fuera de la ganancia y del margen, para
-no declarar 100 % de ganancia.
+no el de hoy, y el costo neto (ADR 0004). El precio de venta incluye IVA: ganancia y margen
+se calculan sobre la venta NETA (venta / 1,19), porque el IVA cobrado no es ganancia del
+negocio (`venta` es lo cobrado en caja; `venta_neta` es la base del margen). Un producto
+sin costo cargado (o con costo 0) NO se supone en cero: se informa «sin costo» y su venta
+queda fuera de la ganancia y del margen, para no declarar 100 % de ganancia.
 
 Rotacion: productos sin una sola venta en los ultimos N dias, del mas antiguo al mas reciente.
 """
@@ -16,6 +18,7 @@ from decimal import Decimal
 
 from pos.aplicacion.puertos import RepositorioExistencias, RepositorioProductos, RepositorioVentas
 from pos.dominio.productos import UnidadVenta
+from pos.dominio.value_objects import neto_de_precio
 
 
 @dataclass(frozen=True)
@@ -24,7 +27,8 @@ class FilaRentabilidad:
     nombre: str
     categoria_id: int | None
     unidades: Decimal | None  # None en granel (se vende por peso)
-    venta: int
+    venta: int  # lo cobrado, con IVA
+    venta_neta: int  # sin IVA: base de la ganancia y del margen
     costo: int | None  # None = sin costo
     ganancia: int | None
     margen: float | None
@@ -37,13 +41,16 @@ class FilaRentabilidad:
 @dataclass(frozen=True)
 class ResumenRentabilidad:
     filas: list[FilaRentabilidad]
-    venta_con_costo: int
+    venta_con_costo: int  # cobrado (con IVA) de los productos con costo
+    venta_neta_con_costo: int  # sin IVA: base del margen total
     ganancia_total: int
     venta_sin_costo: int
 
     @property
     def margen_total(self) -> float | None:
-        return self.ganancia_total / self.venta_con_costo if self.venta_con_costo else None
+        return (
+            self.ganancia_total / self.venta_neta_con_costo if self.venta_neta_con_costo else None
+        )
 
 
 ORDENES_RENTABILIDAD = ("Mayor ganancia", "Mayor venta", "Mayor margen", "Nombre")
@@ -77,20 +84,28 @@ class ReporteRentabilidad:
                     dato["sin_costo"] = True
                 else:
                     dato["costo"] += costo.multiplicado_por(linea.cantidad).monto
+        # Pocos productos: uno a uno. Muchos (un mes o un ano): el catalogo de una sola vez, no
+        # una consulta por producto.
+        if len(acumulado) > 1000:
+            catalogo = {p.codigo: p for p in self.repositorio_productos.listar()}
+            buscar_producto = catalogo.get
+        else:
+            buscar_producto = self.repositorio_productos.obtener_por_codigo
         filas = []
         for codigo, dato in acumulado.items():
-            producto = self.repositorio_productos.obtener_por_codigo(codigo)
+            producto = buscar_producto(codigo)
             if categoria_id is not None and (
                 producto is None or producto.categoria_id != categoria_id
             ):
                 continue
             granel = producto is not None and producto.unidad_venta is UnidadVenta.GRANEL
+            venta_neta = neto_de_precio(dato["venta"])
             if dato["sin_costo"]:
                 costo = ganancia = margen = None
             else:
                 costo = dato["costo"]
-                ganancia = dato["venta"] - costo
-                margen = ganancia / dato["venta"] if dato["venta"] else None
+                ganancia = venta_neta - costo
+                margen = ganancia / venta_neta if venta_neta else None
             filas.append(
                 FilaRentabilidad(
                     codigo,
@@ -98,6 +113,7 @@ class ReporteRentabilidad:
                     producto.categoria_id if producto else None,
                     None if granel else dato["unidades"],
                     dato["venta"],
+                    venta_neta,
                     costo,
                     ganancia,
                     margen,
@@ -108,6 +124,7 @@ class ReporteRentabilidad:
         return ResumenRentabilidad(
             filas,
             sum(f.venta for f in con_costo),
+            sum(f.venta_neta for f in con_costo),
             sum(f.ganancia for f in con_costo),
             sum(f.venta for f in filas if f.sin_costo),
         )

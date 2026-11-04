@@ -98,7 +98,7 @@ class TestIndicadoresCosto:
 
     def test_costo_valido_calcula_porcentajes(self, vista):
         vista._costo_var.get.return_value = "1000"
-        vista._precio_var.get.return_value = "2000"
+        vista._precio_var.get.return_value = "2380"  # neto 2000
 
         vista._actualizar_indicadores()
 
