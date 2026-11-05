@@ -245,6 +245,9 @@ cat.tabla_categorias.selection_set(id_de("Temporal A"))
 cat.fusionar_categoria()
 app.update()
 combo_destino = next(w for w in cat.dialogo.winfo_children() if isinstance(w, ComboFiltrable))
+cat.dialogo.focus_force()  # sin gestor de ventanas (CI) la tecla se pierde sin foco
+cat.dialogo.update()
+combo_destino.focus_force()
 combo_destino.delete(0, "end")
 combo_destino.insert(0, "LACTEOS")  # sin tilde y en mayusculas
 combo_destino.event_generate("<KeyRelease>", keysym="S")
