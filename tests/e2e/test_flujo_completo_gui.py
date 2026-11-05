@@ -167,7 +167,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         ventas._entrada_monto_pago.insert(0, "3000")
         ventas._agregar_pago()
         ventas._cerrar_venta()
-        assert any("registrada con exito" in m[2] for m in mensajes)
+        assert any("registrada con éxito" in m[2] for m in mensajes)
 
         # --- 4b) O-27: con efectivo el total se ve redondeado desde el inicio ------------------
         assert [ventas._subpestanas.tab(i, "text") for i in (0, 1, 2)] == [
