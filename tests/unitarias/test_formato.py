@@ -30,3 +30,30 @@ def test_parsear_monto_rechaza_lo_que_no_es_entero(texto):
 def test_los_mensajes_de_error_del_dominio_usan_punto_de_miles():
     with pytest.raises(ReglaVentaInvalida, match=r"\$15\.000.*\$15\.300"):
         calcular_cobro_efectivo(Dinero(15296), monto_entregado=Dinero(15000))
+
+
+def test_formatear_cantidad_no_le_quita_ceros_a_los_enteros():
+    from decimal import Decimal
+
+    from pos.dominio.formato import formatear_cantidad
+
+    assert formatear_cantidad(Decimal("30")) == "30"
+    assert formatear_cantidad(Decimal("100")) == "100"
+    assert formatear_cantidad(Decimal("10")) == "10"
+    assert formatear_cantidad(Decimal("0")) == "0"
+    assert formatear_cantidad(Decimal("2.500")) == "2,5"
+    assert formatear_cantidad(Decimal("0.350")) == "0,35"
+    assert formatear_cantidad(Decimal("29.650")) == "29,65"
+
+
+def test_rango_de_busqueda_ordena_el_nombre_que_empieza_antes_que_una_palabra_que_empieza():
+    from pos.dominio.formato import rango_de_busqueda
+
+    assert rango_de_busqueda("Té verde hojas 100 g", "te") == 0  # el nombre empieza con «te»
+    assert rango_de_busqueda("Barra de té", "te") == 1  # una palabra empieza con «te»
+    assert rango_de_busqueda("Aceite de coco", "te") == 2  # solo lo contiene
+    assert rango_de_busqueda("Miel", "te") == 3  # no coincide
+    assert rango_de_busqueda("Cualquiera", "") == 0
+    nombres = ["Aceite de coco", "Barra de té", "Té verde hojas 100 g", "Castaña de cajú"]
+    ordenados = sorted(nombres, key=lambda n: (rango_de_busqueda(n, "TE"), n.lower()))
+    assert ordenados[0] == "Té verde hojas 100 g"  # CA-15: sale primero

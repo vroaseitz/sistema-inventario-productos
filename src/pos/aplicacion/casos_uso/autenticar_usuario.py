@@ -41,4 +41,6 @@ class AutenticarUsuario:
             raise CredencialesInvalidas("Usuario o clave incorrectos")
         if not self.hasheador.verificar(clave, usuario.clave_hash):
             raise CredencialesInvalidas("Usuario o clave incorrectos")
+        if usuario.id is not None:
+            self.repositorio.registrar_acceso(usuario.id)  # «Ultimo acceso» de F7
         return usuario

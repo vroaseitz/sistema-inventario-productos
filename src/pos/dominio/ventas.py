@@ -45,17 +45,18 @@ class DetalleVenta:
     precio_unitario: Dinero
     costo_unitario: Dinero | None = None
     descuento_linea: Dinero = field(default_factory=lambda: Dinero(0))
+    motivo_descuento: str = ""
 
     def __post_init__(self) -> None:
         self.cantidad = Decimal(str(self.cantidad))
         if self.cantidad <= 0:
-            raise ReglaVentaInvalida("La cantidad de una linea debe ser mayor que cero")
+            raise ReglaVentaInvalida("La cantidad de una línea debe ser mayor que cero")
 
     @property
     def subtotal(self) -> Dinero:
         bruto = self.precio_unitario.multiplicado_por(self.cantidad)
         if self.descuento_linea.monto > bruto.monto:
-            raise ReglaVentaInvalida("El descuento de la linea no puede superar su monto bruto")
+            raise ReglaVentaInvalida("El descuento de la línea no puede superar su monto bruto")
         return Dinero(bruto.monto - self.descuento_linea.monto)
 
 
@@ -72,6 +73,8 @@ class Venta:
     uuid: str = field(default_factory=lambda: str(uuid4()))
     # Lote elegido a mano por producto (F5 Cambiar lote); solo vive durante la venta.
     lote_elegido: dict[str, str] = field(default_factory=dict, repr=False)
+    # Nota libre de la venta (un cambio de producto, un cobro pendiente...). No se imprime.
+    nota: str = ""
 
     def agregar_detalle(
         self,
@@ -86,8 +89,12 @@ class Venta:
         for detalle in self.detalles:
             if detalle.producto_codigo == producto_codigo:
                 detalle.cantidad += cantidad_dec
+                if detalle.descuento_linea.monto:
+                    # El descuento era de la cantidad anterior: al cambiar la cantidad se retira.
+                    detalle.descuento_linea = Dinero(0)
+                    detalle.motivo_descuento = ""
                 if detalle.cantidad <= 0:
-                    raise ReglaVentaInvalida("La cantidad de una linea debe ser mayor que cero")
+                    raise ReglaVentaInvalida("La cantidad de una línea debe ser mayor que cero")
                 return detalle
         detalle = DetalleVenta(
             producto_codigo=producto_codigo,
@@ -98,13 +105,33 @@ class Venta:
         self.detalles.append(detalle)
         return detalle
 
+    def aplicar_descuento(self, producto_codigo: str, monto: int, motivo: str) -> DetalleVenta:
+        """Descuento a la linea (prototipo v3): campo propio, con motivo obligatorio.
+
+        No baja el precio del producto: asi el reporte de rentabilidad dice por que hay menos
+        margen. Para liquidar por vencimiento no se usa esto sino el cambio de precio.
+        """
+        detalle = next((d for d in self.detalles if d.producto_codigo == producto_codigo), None)
+        if detalle is None:
+            raise ReglaVentaInvalida("La línea no está en el ticket")
+        if monto < 0:
+            raise ReglaVentaInvalida("El descuento no puede ser negativo")
+        bruto = detalle.precio_unitario.multiplicado_por(detalle.cantidad).monto
+        if monto > bruto:
+            raise ReglaVentaInvalida("El descuento no puede superar el importe de la línea")
+        if monto and not motivo.strip():
+            raise ReglaVentaInvalida("El descuento necesita un motivo")
+        detalle.descuento_linea = Dinero(monto)
+        detalle.motivo_descuento = motivo.strip() if monto else ""
+        return detalle
+
     def quitar_detalle(self, producto_codigo: str) -> None:
         """Elimina una linea del ticket antes de cobrar (HU-VTA-01)."""
         for detalle in self.detalles:
             if detalle.producto_codigo == producto_codigo:
                 self.detalles.remove(detalle)
                 return
-        raise ReglaVentaInvalida(f"No hay una linea para el producto {producto_codigo}")
+        raise ReglaVentaInvalida(f"No hay una línea para el producto {producto_codigo}")
 
     @property
     def total(self) -> Dinero:
