@@ -7,6 +7,7 @@ o se elige entre los de facturas anteriores. Los gastos generales del local qued
 
 from __future__ import annotations
 
+import re
 import tkinter as tk
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -17,7 +18,8 @@ from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCo
 from pos.aplicacion.puertos import RepositorioFacturasCompra, RepositorioProductos
 from pos.dominio.compras import FacturaCompra, LineaFactura, iva_de
 from pos.dominio.errores import ErrorDominio
-from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.dominio.formato import formatear_cantidad, formatear_clp, parsear_monto
+from pos.dominio.productos import UnidadVenta
 from pos.interfaz import tema
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.dialogo_formulario import pedir_formulario
@@ -41,6 +43,7 @@ class VentanaCompras(ttk.Frame):
         self._neto_manual = False
         self._impuestos_manual = False
         self._actualizando = False
+        self._avisando = False
 
         self._numero = tk.StringVar()
         self._neto = tk.StringVar()
@@ -58,13 +61,17 @@ class VentanaCompras(ttk.Frame):
         barra = tk.Frame(self, bg=tema.PAPEL)
         barra.pack(fill="x", padx=12, pady=(8, 4))
         for texto, comando, tecla, variante in (
-            ("Registrar factura", self.ir_a_registrar, "INS", "primario"),
+            ("Registrar factura", self.ir_a_registrar, "INS", "normal"),
             *(
-                [("Nuevo proveedor", self.nuevo_proveedor, "", "normal")]
+                [
+                    ("Nuevo proveedor", self.nuevo_proveedor, "", "normal"),
+                    ("Editar proveedor", self.editar_proveedor, "", "normal"),
+                ]
                 if gestion_proveedores is not None
                 else []
             ),
-            ("Confirmar factura", lambda: self._confirmar(), "Ctrl+↵", "normal"),
+            # CO-04: confirmar es la accion principal: sin ella la factura no se guarda.
+            ("Confirmar factura", lambda: self._confirmar(), "Ctrl+↵", "primario"),
             ("Limpiar", lambda: self._limpiar(), "", "normal"),
         ):
             tema.BotonAccion(
@@ -78,6 +85,9 @@ class VentanaCompras(ttk.Frame):
         self._pestanas.add(self._tab_facturas, text="Facturas de compra")
         self._pestanas.add(self._tab_registrar, text="Registrar factura")
         self._pestanas.add(self._tab_proveedores, text="Proveedores")
+        self._pestana_actual = self._pestanas.select()
+        # CO-04: avisa si se deja una factura a medio hacer.
+        self._pestanas.bind("<<NotebookTabChanged>>", self._al_cambiar_pestana)
 
         # --- Datos de la factura -----------------------------------------------------------
         datos = ttk.LabelFrame(self._tab_registrar, text="Registrar factura de compra", padding=10)
@@ -118,10 +128,14 @@ class VentanaCompras(ttk.Frame):
             ("Código de lote (impreso)", ttk.Entry(linea, textvariable=self._l_lote, width=16)),
         )
         for columna, (titulo, widget) in enumerate(campos):
-            ttk.Label(linea, text=titulo).grid(row=0, column=columna, sticky="w", padx=4)
+            etiqueta = ttk.Label(linea, text=titulo)
+            etiqueta.grid(row=0, column=columna, sticky="w", padx=4)
+            if titulo == "Cantidad":
+                self._lbl_cantidad = etiqueta
             widget.grid(row=1, column=columna, padx=4, pady=(2, 0), sticky="w")
             if isinstance(widget, ttk.Entry):
                 widget.bind("<Return>", lambda _e: self._agregar_linea())
+        self._l_codigo.trace_add("write", self._actualizar_unidad)  # CO-05
         ttk.Button(linea, text="Agregar línea", command=self._agregar_linea).grid(
             row=1, column=len(campos), padx=8
         )
@@ -142,15 +156,19 @@ class VentanaCompras(ttk.Frame):
             self._tabla.column(clave, width=ancho, anchor=ancla)
         self._tabla.pack(fill="x", pady=(8, 0))
         self._tabla.bind("<Delete>", lambda _e: self._quitar_linea())
+        self._tabla.bind("<Double-1>", self._editar_linea)  # CO-06
 
         resumen = ttk.Frame(self._tab_registrar)
         resumen.pack(fill="x", pady=4)
         ttk.Label(resumen, textvariable=self._suma).pack(side="left", padx=4)
         ttk.Label(resumen, textvariable=self._diferencia).pack(side="left", padx=16)
         ttk.Button(resumen, text="Limpiar", command=self._limpiar).pack(side="right", padx=4)
-        ttk.Button(resumen, text="Confirmar factura (Ctrl+Enter)", command=self._confirmar).pack(
-            side="right", padx=4
-        )
+        ttk.Button(
+            resumen,
+            text="Confirmar factura (Ctrl+Enter)",
+            style="Primario.TButton",
+            command=self._confirmar,
+        ).pack(side="right", padx=4)
         self.winfo_toplevel().bind("<Control-Return>", self._atajo_confirmar, add="+")
         ttk.Label(self._tab_registrar, textvariable=self._mensaje, foreground="#5B3E7E").pack(
             anchor="w"
@@ -187,6 +205,7 @@ class VentanaCompras(ttk.Frame):
             self._proveedores_tabla.heading(clave, text=titulo)
             self._proveedores_tabla.column(clave, width=ancho, anchor=ancla)
         self._proveedores_tabla.pack(fill="both", expand=True)
+        self._proveedores_tabla.bind("<Double-1>", lambda _e: self.editar_proveedor())  # CO-02
         ttk.Label(
             self._tab_proveedores,
             text="Crea uno con «Nuevo proveedor» o escríbelo al registrar su primera factura.",
@@ -242,6 +261,8 @@ class VentanaCompras(ttk.Frame):
         if not texto:
             messagebox.showerror("Compras", "Falta la cantidad")
             return
+        if producto.unidad_venta is UnidadVenta.GRANEL:  # CO-05: «1k» y «1,5 kg» valen en granel
+            texto = re.sub(r"\s*k(g|ilos?)?$", "", texto, flags=re.IGNORECASE)
         try:
             cantidad = Decimal(texto)
         except InvalidOperation:
@@ -274,6 +295,57 @@ class VentanaCompras(ttk.Frame):
         self._l_vence.set("")
         self._refrescar_lineas()
 
+    def _editar_linea(self, _evento: object = None) -> None:
+        """CO-06: doble clic en una linea carga sus datos para corregirla y volver a agregarla."""
+        seleccion = self._tabla.selection()
+        if not seleccion:
+            return
+        linea = self._lineas.pop(self._tabla.index(seleccion[0]))
+        self._l_codigo.set(linea.codigo_producto)
+        self._l_cantidad.set(formatear_cantidad(linea.cantidad))
+        self._l_costo.set(formatear_clp(linea.costo_unitario_neto).lstrip("$"))
+        self._l_vence.set(linea.fecha_vencimiento.isoformat() if linea.fecha_vencimiento else "")
+        self._l_lote.set(linea.codigo_lote)
+        self._refrescar_lineas()
+        self._mensaje.set("Corrige la línea y vuelve a agregarla.")
+
+    def _actualizar_unidad(self, *_args: object) -> None:
+        """CO-05: junto a la cantidad se ve la unidad del producto (kg si es a granel)."""
+        producto = self._productos.obtener_por_codigo(self._l_codigo.get().strip())
+        if producto is None:
+            self._lbl_cantidad.config(text="Cantidad")
+        elif producto.unidad_venta is UnidadVenta.GRANEL:
+            self._lbl_cantidad.config(text="Cantidad (kg)")
+        else:
+            self._lbl_cantidad.config(text="Cantidad (unid.)")
+
+    def _al_cambiar_pestana(self, _evento: object = None) -> None:
+        """CO-04: si se deja una factura sin confirmar, se avisa (no se pierde en silencio)."""
+        actual = self._pestanas.select()
+        anterior, self._pestana_actual = self._pestana_actual, actual
+        registrar = str(self._tab_registrar)
+        if self._avisando or anterior != registrar or actual == registrar or not self._lineas:
+            return
+        self._avisando = True
+        try:
+            if messagebox.askyesno(
+                "Factura sin confirmar",
+                f"Hay una factura sin confirmar ({len(self._lineas)} líneas). Si no la "
+                "confirmas, no se guarda y el stock no sube.\n\n¿Volver a ella para confirmarla?",
+            ):
+                self._pestanas.select(self._tab_registrar)
+        finally:
+            self._avisando = False
+
+    def puede_salir(self) -> bool:
+        """CO-04: al cambiar de modulo con una factura sin confirmar, se pregunta antes."""
+        if not self._lineas:
+            return True
+        return messagebox.askyesno(
+            "Factura sin confirmar",
+            "Hay una factura sin confirmar: si sales ahora no se guarda.\n\n¿Salir igual?",
+        )
+
     def _quitar_linea(self) -> None:
         seleccion = self._tabla.selection()
         if not seleccion:
@@ -291,7 +363,11 @@ class VentanaCompras(ttk.Frame):
                 "end",
                 values=(
                     producto.nombre if producto else linea.codigo_producto,
-                    linea.cantidad,
+                    (
+                        f"{formatear_cantidad(linea.cantidad)} kg"
+                        if producto and producto.unidad_venta is UnidadVenta.GRANEL
+                        else formatear_cantidad(linea.cantidad)
+                    ),
                     formatear_clp(linea.costo_unitario_neto),
                     formatear_clp(linea.subtotal),
                     formatear_clp(anterior) if anterior is not None else "sin costo",
@@ -343,6 +419,10 @@ class VentanaCompras(ttk.Frame):
         self._neto_manual = self._impuestos_manual = False
         self._numero.set("")
         self._proveedor.set("")
+        self._fecha.set(date.today().isoformat())
+        for variable in (self._l_codigo, self._l_cantidad, self._l_costo, self._l_lote):
+            variable.set("")
+        self._l_vence.set("")
         self._refrescar_lineas()
 
     def _nombres_proveedores(self) -> list[str]:
@@ -368,16 +448,25 @@ class VentanaCompras(ttk.Frame):
                 messagebox.showerror("Compras", str(error))
                 return False
             self._proveedor.config(values=self._nombres_proveedores())
-            self._proveedor.set(proveedor.nombre)
-            self._mensaje.set(
-                f"Proveedor «{proveedor.nombre}» creado: ya se puede facturar con él."
-            )
+            en_curso = self._proveedor.get().strip() if self._lineas else ""
+            if en_curso:
+                # CO-03: no se cambia el proveedor de una factura a medio hacer sin avisar.
+                self._mensaje.set(
+                    f"Proveedor «{proveedor.nombre}» creado. La factura en curso sigue con "
+                    f"«{en_curso}»: cámbialo si corresponde."
+                )
+            else:
+                self._proveedor.set(proveedor.nombre)
+                self._mensaje.set(
+                    f"Proveedor «{proveedor.nombre}» creado: ya se puede facturar con él."
+                )
             self._refrescar_lista()
             iid = f"prov-{proveedor.nombre}"
             if self._proveedores_tabla.exists(iid):
                 self._proveedores_tabla.selection_set(iid)
                 self._proveedores_tabla.see(iid)
-            self._pestanas.select(self._tab_proveedores)
+            if self._lineas:  # con una factura en curso se queda ahi, con sus lineas a la vista
+                self._pestanas.select(self._tab_registrar)
             return True
 
         self.dialogo = pedir_formulario(
@@ -386,6 +475,48 @@ class VentanaCompras(ttk.Frame):
             [("nombre", "Nombre (obligatorio)", "", None), ("contacto", "Contacto", "", None)],
             aceptar,
             "Crear proveedor",
+        )
+
+    def editar_proveedor(self) -> None:
+        """CO-02: cambia nombre y contacto del proveedor elegido en la pestaña Proveedores."""
+        if self._gestion_proveedores is None:
+            return
+        seleccion = self._proveedores_tabla.selection()
+        if not seleccion:
+            messagebox.showinfo(
+                "Compras", "Elige un proveedor de la lista (pestaña Proveedores) para editarlo."
+            )
+            return
+        actual = str(self._proveedores_tabla.item(seleccion[0], "values")[0])
+        contacto = self._contactos_proveedores().get(actual, "")
+
+        def aceptar(datos: dict[str, str]) -> bool:
+            try:
+                proveedor = self._gestion_proveedores.modificar(
+                    actual, datos["nombre"], datos["contacto"]
+                )
+            except ErrorDominio as error:
+                messagebox.showerror("Compras", str(error))
+                return False
+            self._proveedor.config(values=self._nombres_proveedores())
+            if self._proveedor.get().strip() == actual:
+                self._proveedor.set(proveedor.nombre)  # la factura en curso sigue con el mismo
+            self._mensaje.set(f"Proveedor «{proveedor.nombre}» actualizado.")
+            self._refrescar_lista()
+            iid = f"prov-{proveedor.nombre}"
+            if self._proveedores_tabla.exists(iid):
+                self._proveedores_tabla.selection_set(iid)
+            return True
+
+        self.dialogo = pedir_formulario(
+            self,
+            "Editar proveedor",
+            [
+                ("nombre", "Nombre (obligatorio)", actual, None),
+                ("contacto", "Contacto", contacto, None),
+            ],
+            aceptar,
+            "Guardar",
         )
 
     def ir_a_registrar(self) -> None:

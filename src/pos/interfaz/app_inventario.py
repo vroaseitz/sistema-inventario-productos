@@ -153,7 +153,22 @@ class PanelEntradaYAlertas:
         ventana.focus_force()
 
     def abrir_entrada(self) -> None:
+        self._limpiar_entrada()  # I-05: el cuadro siempre se abre vacio
         self._mostrar(self.dlg_entrada)
+
+    def _limpiar_entrada(self) -> None:
+        """Deja el cuadro de ingreso como nuevo: sin el codigo ni la cantidad de la vez anterior
+        (se podia ingresar stock al producto equivocado sin darse cuenta)."""
+        self._codigo.set("")
+        self._cantidad.set("")
+        self._codigo_lote.set("")
+        self._vence.set("")
+        self._motivo.set("Compra a proveedor")
+
+    def hay_dialogo_abierto(self) -> bool:
+        return any(
+            d.winfo_viewable() for d in (self.dlg_entrada, getattr(self, "dlg_merma", None)) if d
+        )
 
     def abrir_merma(self) -> None:
         if self._merma is not None:
@@ -321,9 +336,7 @@ class PanelEntradaYAlertas:
             messagebox.showerror("Inventario", str(error))
             return
         self._mensaje.set(f"Stock ingresado: {codigo}")
-        self._cantidad.set("")
-        self._codigo_lote.set("")
-        self._vence.set("")
+        self._limpiar_entrada()
         self.dlg_entrada.withdraw()
         self._tras_cambio()
 
@@ -429,6 +442,7 @@ class VentanaInventario(ttk.Frame):
         tk.Label(barra, textvariable=self._panel_entrada._mensaje, bg=PAPEL, fg=self._color).pack(
             side="left", padx=10
         )
+        self.bind_all("<Insert>", self._atajo_entrada, add="+")  # I-04: el boton dice «INS»
         self._pestanas.pack(fill="both", expand=True, padx=12, pady=(0, 8))
         self._destinos: dict[str, int] = {}
         if consultar_existencias is not None and definir_minimo is not None:
@@ -488,6 +502,11 @@ class VentanaInventario(ttk.Frame):
         destino = self._destinos.get(nombre)
         if destino is not None:
             self._pestanas.select(destino)
+
+    def _atajo_entrada(self, _evento=None) -> None:
+        """Insert abre «Agregar a inventario» desde esta pantalla (como en F2 y F5)."""
+        if self.winfo_ismapped() and not self._panel_entrada.hay_dialogo_abierto():
+            self._panel_entrada.abrir_entrada()
 
     def refrescar(self) -> None:
         self._panel_entrada.refrescar()

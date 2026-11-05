@@ -304,10 +304,9 @@ for tipo, esperado in (
         (
             "Retiro planificado para deposito bancario",
             "Retiro por resguardo durante la jornada",
-            "Propinas en fechas especiales",
         ),
     ),
-    ("ingreso", ("Ingreso de sencillo",)),
+    ("ingreso", ("Ingreso de sencillo", "Propinas en fechas especiales")),
 ):
     combo_tipo.set(tipo)
     combo_tipo.event_generate("<<ComboboxSelected>>")
@@ -806,8 +805,23 @@ verificar(
     "su cambio $1.600" in cobro._resumen.cget("text"),
     f"cambio con billete de $5.000: {cobro._resumen.cget('text')}",
 )
+verificar(cobro.agregar_pago() is True, "agrega el pago en efectivo")
+filas_pagos = [cobro._tabla.item(i, "values") for i in cobro._tabla.get_children()]
+verificar(  # O-36: la lista muestra lo entregado y el cambio
+    filas_pagos[-1] == ("Efectivo", "$3.400", "$5.000", "$1.600"),
+    f"O-36: el pago en efectivo muestra lo que entrego y el cambio {filas_pagos}",
+)
+verificar(  # O-36: el cambio sigue a la vista despues de agregar el pago
+    "su cambio $1.600" in cobro._resumen.cget("text")
+    and "Pagó con $0" not in cobro._resumen.cget("text"),
+    f"O-36: el cambio no vuelve a $0: {cobro._resumen.cget('text')}",
+)
 mensajes.clear()
 verificar(cobro.cobrar(False) is True, "cobra solo registrando (pago mixto)")
+verificar(
+    any("Cambio a entregar: $1.600" in m for _, m in mensajes),
+    f"O-36: al cerrar la venta se avisa el cambio a entregar {mensajes}",
+)
 verificar(not cobro.winfo_exists(), "el cuadro de cobro se cierra al cobrar")
 ultima = RV(con3).ultima()
 verificar(
@@ -878,7 +892,15 @@ ventana._cerrar_venta()
 verificar(sum(m.efecto for m in repo_cli.movimientos(cli_id)) == 1200, "HU-CLI-02: carga $1.200")
 f4.mostrar_cuenta(cli_id)
 filas = [f4._tabla_cuenta.item(i, "values") for i in f4._tabla_cuenta.get_children()]
-verificar(filas[-1][1] == "Consumo" and filas[-1][3] == "$1.200", f"HU-CLI-03: la cuenta {filas}")
+consumos = [f for f in filas if f[1] == "Consumo"]
+verificar(
+    len(consumos) == 1 and consumos[0][3] == "$1.200",
+    f"HU-CLI-03: la cuenta muestra el consumo {filas}",
+)
+verificar(  # CL-02: y debajo, el producto que se llevo
+    filas[-1][1] == "" and "1 × Barra de cereal" in filas[-1][2] and filas[-1][3] == "$1.200",
+    f"CL-02: la pestaña Cuenta lista el producto bajo el consumo {filas}",
+)
 verificar("$1.200" in f4._lbl_saldo.cget("text"), "HU-CLI-03: saldo actual $1.200")
 
 # Abonos: efectivo entra a la gaveta; el saldo no puede quedar negativo

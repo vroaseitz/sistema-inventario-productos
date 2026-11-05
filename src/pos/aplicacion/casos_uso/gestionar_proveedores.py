@@ -16,7 +16,7 @@ from pos.aplicacion.puertos import (
     RepositorioFacturasCompra,
     RepositorioProveedores,
 )
-from pos.aplicacion.sincronizacion import encolar_proveedor
+from pos.aplicacion.sincronizacion import encolar_proveedor, encolar_proveedor_renombrado
 from pos.dominio.compras import Proveedor
 from pos.dominio.errores import ReglaCompraInvalida
 
@@ -61,4 +61,35 @@ class GestionarProveedores:
         encolar_proveedor(self.cola, nombre, contacto)
         if self.auditor is not None:
             self.auditor.registrar("Nuevo proveedor", nombre, "—", "creado")
+        return Proveedor(nombre, contacto)
+
+    def modificar(self, nombre_actual: str, nombre: str, contacto: str = "") -> Proveedor:
+        """Cambia el nombre y el contacto de un proveedor (CO-02). No puede repetir el de otro;
+        las facturas ya registradas siguen con el proveedor y queda en la auditoria."""
+        nombre = " ".join(nombre.split())
+        contacto = contacto.strip()
+        if not nombre:
+            raise ReglaCompraInvalida("Falta el nombre del proveedor")
+        if len(nombre) > LARGO_MAXIMO:
+            raise ReglaCompraInvalida(f"El nombre no puede pasar de {LARGO_MAXIMO} caracteres")
+        for existente in self.nombres():
+            if _plano(existente) == _plano(nombre) and _plano(existente) != _plano(nombre_actual):
+                raise ReglaCompraInvalida(f"Ya existe el proveedor «{existente}»")
+        anterior = next(
+            (p for p in self.repositorio.listar() if _plano(p.nombre) == _plano(nombre_actual)),
+            None,
+        )
+        contacto_anterior = anterior.contacto if anterior else ""
+        nombre_anterior = anterior.nombre if anterior else nombre_actual
+        if nombre == nombre_anterior and contacto == contacto_anterior:
+            return Proveedor(nombre, contacto)  # sin cambios: no se registra nada
+        self.repositorio.actualizar(nombre_anterior, nombre, contacto)
+        encolar_proveedor_renombrado(self.cola, nombre_anterior, nombre, contacto)
+        if self.auditor is not None:
+            self.auditor.registrar(
+                "Edición de proveedor",
+                nombre,
+                f"{nombre_anterior} · {contacto_anterior or 'sin contacto'}",
+                f"{nombre} · {contacto or 'sin contacto'}",
+            )
         return Proveedor(nombre, contacto)

@@ -251,6 +251,20 @@ def encolar_proveedor(cola: ColaSincronizacion | None, nombre: str, contacto: st
     cola.encolar("proveedor", "upsert", {"nombre": nombre, "contacto": contacto}, str(uuid4()))
 
 
+def encolar_proveedor_renombrado(
+    cola: ColaSincronizacion | None, anterior: str, nuevo: str, contacto: str = ""
+) -> None:
+    """Un proveedor cambia de nombre o de contacto: el destino lo renombra, no crea otro."""
+    if cola is None:
+        return
+    cola.encolar(
+        "proveedor_renombrar",
+        "update",
+        {"anterior": anterior, "nuevo": nuevo, "contacto": contacto},
+        str(uuid4()),
+    )
+
+
 def encolar_factura_compra(cola: ColaSincronizacion | None, factura: FacturaCompra) -> None:
     """Una factura confirmada no se edita: se envia una vez, con el proveedor y todas sus lineas."""
     if cola is None:

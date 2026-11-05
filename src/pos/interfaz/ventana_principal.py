@@ -273,6 +273,9 @@ class VentanaPrincipal(tk.Tk):
         if clave not in self._permitidos():
             return  # HU-USR-02: la vendedora no entra a los modulos de la administradora
         if self._activo is not None:
+            puede_salir = getattr(self._marcos[self._activo], "puede_salir", None)
+            if callable(puede_salir) and not puede_salir():
+                return  # p. ej. F5 con una factura sin confirmar (CO-04)
             self._marcos[self._activo].pack_forget()
             self._pintar_pestana(self._activo, activa=False)
         modulo = next(m for m in MODULOS if m.clave == clave)

@@ -82,15 +82,11 @@ MOTIVOS_MOVIMIENTO_CAJA = (
     "Retiro por resguardo durante la jornada",
     "Propinas en fechas especiales",
 )
-# O-35: cada tipo muestra solo sus motivos. Las propinas son un retiro: segun la Product Owner
-# (acta del 22-09) «se entregan propinas en fechas especiales», es decir, sale plata de la caja.
+# O-35 (Excel de hallazgos): cada tipo muestra solo sus motivos. Ingreso: «Ingreso de sencillo» y
+# «Propinas»; retiro: el deposito bancario y el resguardo.
 MOTIVOS_POR_TIPO = {
-    TipoMovimientoCaja.INGRESO: (MOTIVOS_MOVIMIENTO_CAJA[0],),
-    TipoMovimientoCaja.RETIRO: (
-        MOTIVOS_MOVIMIENTO_CAJA[1],
-        MOTIVOS_MOVIMIENTO_CAJA[2],
-        MOTIVOS_MOVIMIENTO_CAJA[3],
-    ),
+    TipoMovimientoCaja.INGRESO: (MOTIVOS_MOVIMIENTO_CAJA[0], MOTIVOS_MOVIMIENTO_CAJA[3]),
+    TipoMovimientoCaja.RETIRO: (MOTIVOS_MOVIMIENTO_CAJA[1], MOTIVOS_MOVIMIENTO_CAJA[2]),
 }
 
 NOMBRES_MEDIO_PAGO = {
@@ -635,9 +631,31 @@ class VentanaVentas(ttk.Frame):
             self._tabla_movimientos.column(col, width=ancho, anchor="w")
         self._tabla_movimientos.pack(fill="both", expand=True, padx=12, pady=4)
 
+        # O-33: cada venta del turno con su nota, para revisarla despues de cobrar.
+        ttk.Label(padre, text="Ventas del turno (nota de cada venta)").pack(
+            anchor="w", padx=14, pady=(8, 0)
+        )
+        self._tabla_ventas_turno = ttk.Treeview(
+            padre, columns=("hora", "total", "pago", "nota"), show="headings", height=4
+        )
+        for col, titulo, ancho in (
+            ("hora", "Hora", 70),
+            ("total", "Total", 110),
+            ("pago", "Pago", 180),
+            ("nota", "Nota", 360),
+        ):
+            self._tabla_ventas_turno.heading(col, text=titulo)
+            self._tabla_ventas_turno.column(col, width=ancho, anchor="w")
+        self._tabla_ventas_turno.pack(fill="both", expand=True, padx=12, pady=(4, 12))
+
     def _refrescar_corte(self, turno, ventas) -> None:
         """Llena el corte de la jornada: venta por medio, dinero en caja y conciliacion."""
-        for tabla in (self._tabla_jornada, self._tabla_conciliar, self._tabla_departamentos):
+        for tabla in (
+            self._tabla_jornada,
+            self._tabla_conciliar,
+            self._tabla_departamentos,
+            self._tabla_ventas_turno,
+        ):
             tabla.delete(*tabla.get_children())
         if turno is None:
             self._lbl_estado_jornada.config(text="Sin jornada abierta")
@@ -696,6 +714,17 @@ class VentanaVentas(ttk.Frame):
         for venta in ventas:
             if venta.estado is not EstadoVenta.PAGADA:
                 continue
+            medios = ", ".join(sorted({NOMBRES_MEDIO_PAGO[pago.medio] for pago in venta.pagos}))
+            self._tabla_ventas_turno.insert(
+                "",
+                "end",
+                values=(
+                    venta.creado_en.strftime("%H:%M"),
+                    _formatear_clp(venta.total.monto),
+                    medios,
+                    venta.nota or "",
+                ),
+            )
             for detalle in venta.detalles:
                 producto = self._repo_productos.obtener_por_codigo(detalle.producto_codigo)
                 nombre = (
@@ -1520,13 +1549,31 @@ class VentanaVentas(ttk.Frame):
                 lista.selection_set(0)  # Enter sin elegir toma el primero de la lista
             elegir()
 
+        boton = ttk.Button(dialogo, text="Seleccionar", command=elegir)
+
+        def rotular_boton(_evento: object = None) -> None:
+            # O-32: si lo resaltado es granel, el boton avisa que se pedira el peso.
+            seleccion = lista.curselection()
+            granel = False
+            if seleccion:
+                codigo = lista.get(seleccion[0]).split(" - ", 1)[0]
+                elegido = self._repo_productos.obtener_por_codigo(codigo)
+                granel = elegido is not None and elegido.unidad_venta is UnidadVenta.GRANEL
+            boton.configure(text="A granel · pedir peso" if granel else "Seleccionar")
+
         entrada.bind("<KeyRelease>", refrescar_lista)
         lista.bind("<Double-Button-1>", elegir)
+        lista.bind("<<ListboxSelect>>", rotular_boton)
         dialogo.bind("<Return>", elegir_con_enter)  # O-29
         dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
         refrescar_lista()
 
-        ttk.Button(dialogo, text="Seleccionar", command=elegir).pack(pady=(0, 8))
+        ttk.Label(
+            dialogo,
+            text="Si el producto es a granel, al aceptar se pide el peso.",
+            foreground="#666666",
+        ).pack(padx=8)
+        boton.pack(pady=(4, 8))
 
     def _rotular_pestanas(self) -> None:
         """HU-VTA-05: cada pestana muestra el total de su ticket (p. ej. «Ticket 1 · $18.240»)."""
@@ -1858,7 +1905,12 @@ class VentanaVentas(ttk.Frame):
                 despues=venta.nota,
             )
         self._imprimir_tras_cobrar(venta, imprimir)
-        messagebox.showinfo("Venta cerrada", f"Venta #{venta.id} registrada con éxito")
+        vuelto = venta.vuelto_entregado.monto
+        messagebox.showinfo(
+            "Venta cerrada",
+            f"Venta #{venta.id} registrada con éxito"
+            + (f"\nCambio a entregar: {_formatear_clp(vuelto)}" if vuelto else ""),
+        )
         self._refrescar_sync()
         self._refrescar_turno()
         self._quitar_ticket_actual()  # D-01a: queda lista para la siguiente

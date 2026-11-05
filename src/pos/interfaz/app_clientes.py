@@ -216,6 +216,7 @@ class VentanaClientes(ttk.Frame):
                 ("saldo", "Saldo", 110, "e"),
             ),
         )
+        self._tabla_cuenta.tag_configure("linea", foreground="#555")
         self._tabla_cuenta.pack(fill="both", expand=True, pady=8)
         ttk.Label(
             marco,
@@ -398,6 +399,21 @@ class VentanaClientes(ttk.Frame):
                     formatear_clp(corrido),
                 ),
             )
+            if es_consumo:
+                for linea in self._lineas_de(m):  # CL-02: tambien en la pestaña Cuenta
+                    self._tabla_cuenta.insert(
+                        "",
+                        "end",
+                        tags=("linea",),
+                        values=(
+                            "",
+                            "",
+                            f"      {formatear_cantidad(linea.cantidad)} × {linea.nombre}",
+                            formatear_clp(linea.monto),
+                            "",
+                            "",
+                        ),
+                    )
         self._lbl_estado.config(text=f"{cliente.nombre} · ciclo de {self._ciclo.get()}")
         for m in ciclo:
             if m.tipo is not TipoMovimientoCliente.CONSUMO:

@@ -135,6 +135,13 @@ _SQL_PROVEEDOR = (
     "ON CONFLICT (lower(nombre)) DO UPDATE SET contacto = EXCLUDED.contacto"
 )
 
+# Renombrar: no pisa a otro proveedor que ya se llame asi (salvo un cambio de mayuscula).
+_SQL_PROVEEDOR_RENOMBRAR = (
+    "UPDATE pos.proveedor SET nombre = %s, contacto = %s WHERE lower(nombre) = lower(%s) "
+    "AND NOT EXISTS (SELECT 1 FROM pos.proveedor o WHERE lower(o.nombre) = lower(%s) "
+    "AND lower(o.nombre) <> lower(%s))"
+)
+
 # Para una factura: el proveedor tiene que existir, pero no se le pisa el contacto.
 _SQL_PROVEEDOR_SI_FALTA = (
     "INSERT INTO pos.proveedor (nombre) VALUES (%s) ON CONFLICT (lower(nombre)) DO NOTHING"
@@ -277,6 +284,16 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
 
     if entidad == "proveedor":
         return [(_SQL_PROVEEDOR, (d["nombre"], d.get("contacto") or ""))]
+
+    if entidad == "proveedor_renombrar":
+        contacto = d.get("contacto") or ""
+        return [
+            (
+                _SQL_PROVEEDOR_RENOMBRAR,
+                (d["nuevo"], contacto, d["anterior"], d["nuevo"], d["anterior"]),
+            ),
+            (_SQL_PROVEEDOR, (d["nuevo"], contacto)),  # si el anterior nunca llego, entra igual
+        ]
 
     if entidad == "factura_compra":
         lineas = d["lineas"]

@@ -308,6 +308,23 @@ verificar(
     ),
     "los 4 modales de F3 se abren",
 )
+# --- I-04 e I-05: Insert abre «Agregar a inventario» y el cuadro siempre se abre vacío ---
+entrada = inv._panel_entrada
+entrada._codigo.set("CODIGO-ANTERIOR")
+inv._atajo_entrada()  # con un cuadro ya abierto, Insert no lo reinicia ni pierde lo escrito
+verificar(entrada._codigo.get() == "CODIGO-ANTERIOR", "I-04: Insert no pisa un ingreso en curso")
+for cuadro in (entrada.dlg_entrada, entrada.dlg_merma):
+    cuadro.withdraw()
+app.update()
+inv._atajo_entrada()  # sin cuadros abiertos, Insert abre el ingreso
+app.update()
+verificar(entrada.dlg_entrada.winfo_viewable(), "I-04: Insert abre «Agregar a inventario»")
+verificar(
+    entrada._codigo.get() == "" and entrada._cantidad.get() == "",
+    "I-05: el cuadro se abre vacio, sin el codigo de la vez anterior",
+)
+entrada.dlg_entrada.withdraw()
+
 # --- Regresion del E2E manual: ingresar stock refresca la pestaña Existencias ---
 inv._codigo.set("7801234500011")
 inv._cantidad.set("12")

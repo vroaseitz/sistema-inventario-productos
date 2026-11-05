@@ -106,12 +106,20 @@ class DialogoCobro(tk.Toplevel):
             anchor="w", pady=(10, 2)
         )
         self._tabla = ttk.Treeview(
-            principal, columns=("medio", "monto"), show="headings", height=3, selectmode="browse"
+            principal,
+            columns=("medio", "monto", "entrego", "cambio"),
+            show="headings",
+            height=3,
+            selectmode="browse",
         )
-        self._tabla.heading("medio", text="Medio de pago")
-        self._tabla.heading("monto", text="Monto")
-        self._tabla.column("medio", width=240, anchor="w")
-        self._tabla.column("monto", width=140, anchor="e")
+        for clave, titulo, ancho, ancla in (
+            ("medio", "Medio de pago", 170, "w"),
+            ("monto", "Monto", 100, "e"),
+            ("entrego", "Entregó", 100, "e"),  # O-36: lo que dio el cliente en efectivo
+            ("cambio", "Cambio", 100, "e"),
+        ):
+            self._tabla.heading(clave, text=titulo)
+            self._tabla.column(clave, width=ancho, anchor=ancla)
         self._tabla.pack(fill="x")
         ttk.Button(principal, text="Quitar pago", command=self.quitar_pago).pack(anchor="e", pady=4)
         self._resumen = tk.Label(principal, text="", bg=PAPEL, fg=TINTA, font=fuente(11, True))
@@ -319,11 +327,27 @@ class DialogoCobro(tk.Toplevel):
         self._articulos.config(text=f"Total de artículos: {len(self.venta.detalles)}")
         self._tabla.delete(*self._tabla.get_children())
         for pago in self.venta.pagos:
+            cobro = pago.cobro_efectivo
             self._tabla.insert(
-                "", "end", values=(NOMBRES_MEDIO[pago.medio], formatear_clp(pago.monto.monto))
+                "",
+                "end",
+                values=(
+                    NOMBRES_MEDIO[pago.medio],
+                    formatear_clp(pago.monto.monto),
+                    formatear_clp(cobro.monto_entregado.monto) if cobro else "",
+                    formatear_clp(cobro.vuelto.monto) if cobro else "",
+                ),
             )
         saldo = self.saldo()
-        if self.medio is MedioPago.EFECTIVO and self.ent_monto is not None:
+        vuelto = self.venta.vuelto_entregado.monto
+        if self.venta.pagos and saldo == 0:
+            # O-36: con todo pagado el cambio queda a la vista hasta cerrar la venta (antes
+            # volvia a «Pagó con $0 · su cambio $0» apenas se agregaba el pago).
+            self._resumen.config(
+                text=f"Pagado {formatear_clp(self._pagado())}"
+                + (f"  ·  su cambio {formatear_clp(vuelto)}" if vuelto else "")
+            )
+        elif self.medio is MedioPago.EFECTIVO and self.ent_monto is not None:
             entregado, conteo = self.entregado_efectivo()
             try:
                 pago = self.venta.construir_pago_efectivo(

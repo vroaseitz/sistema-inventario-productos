@@ -123,6 +123,14 @@ filas_ec = [cli._tabla_estado.item(i, "values") for i in cli._tabla_estado.get_c
 verificar(len(filas_ec) == 2, f"el consumo trae su línea de producto {filas_ec}")
 verificar("Miel de ulmo 500 g" in filas_ec[1][1] and "2 ×" in filas_ec[1][1], "producto y cantidad")
 verificar(filas_ec[1][2] == "$8.990", "monto de la línea (2 x 4.990 - 990)")
+filas_cuenta = [cli._tabla_cuenta.item(i, "values") for i in cli._tabla_cuenta.get_children()]
+verificar(
+    any(
+        "2 ×" in str(f[2]) and "Miel de ulmo 500 g" in str(f[2]) and f[3] == "$8.990"
+        for f in filas_cuenta
+    ),
+    f"CL-02: la pestaña Cuenta tambien lista el producto del consumo {filas_cuenta}",
+)
 r = cli._lbl_resumen
 verificar(r["consumos"].cget("text") == "$8.990", "consumos del ciclo")
 verificar(r["descuento"].cget("text") == "- $1.798", "descuento del 20 % (8.990 x 0,2)")
@@ -184,5 +192,94 @@ comp._agregar_linea()
 comp._confirmar()
 app.update()
 verificar(len(comp._facturas.listar()) == 1, "una factura repetida no se registra dos veces")
+
+# --- CO-04: con una factura a medio hacer se avisa al cambiar de pestaña y al salir del modulo ---
+preguntas: list[str] = []
+messagebox.askyesno = lambda titulo, texto, **k: preguntas.append(titulo) or False
+comp._pestanas.select(comp._tab_registrar)  # como la persona: entra a la factura en curso...
+app.update()
+comp._pestanas.select(comp._tab_proveedores)  # ...y se va a otra pestaña sin confirmarla
+app.update()
+verificar("Factura sin confirmar" in preguntas, f"CO-04: avisa al dejar la factura {preguntas}")
+verificar(comp.puede_salir() is False, "CO-04: pregunta antes de salir del modulo con la factura")
+messagebox.askyesno = lambda *a, **k: True
+comp._pestanas.select(comp._tab_registrar)
+app.update()
+
+# --- CO-03: «Nuevo proveedor» no cambia el proveedor de la factura en curso ni salta de pestaña ---
+comp.nuevo_proveedor()
+app.update()
+dlg = ultimo_dialogo(comp)
+[w for w in dlg.winfo_children() if isinstance(w, ttk.Entry)][0].insert(0, "Otro Proveedor")
+boton(dlg, "Crear proveedor").invoke()
+app.update()
+verificar(
+    comp._proveedor.get() == "Distribuidora Sur",
+    "CO-03: la factura en curso no cambia de proveedor",
+)
+verificar(
+    comp._pestanas.select() == str(comp._tab_registrar) and len(comp._lineas) == 1,
+    "CO-03: se queda en Registrar factura con sus lineas",
+)
+
+# --- CO-05 y CO-06: unidad junto a la cantidad, «1,5 kg» en granel y doble clic para corregir ---
+from decimal import Decimal  # noqa: E402
+
+from pos.dominio.productos import UnidadVenta  # noqa: E402
+
+cat._registrar.ejecutar("GRA1", "Granel prueba", 8000, UnidadVenta.GRANEL, 1, 4000)
+comp._l_codigo.set("GRA1")
+app.update()
+verificar(comp._lbl_cantidad.cget("text") == "Cantidad (kg)", "CO-05: un granel pide kg")
+comp._l_codigo.set("PROV1")
+verificar(comp._lbl_cantidad.cget("text") == "Cantidad (unid.)", "CO-05: un producto por unidad")
+comp._l_codigo.set("GRA1")
+comp._l_cantidad.set("1,5 kg")
+comp._l_costo.set("4.000")
+comp._agregar_linea()
+verificar(
+    any(x.codigo_producto == "GRA1" and x.cantidad == Decimal("1.5") for x in comp._lineas),
+    "CO-05: «1,5 kg» se acepta en un granel",
+)
+antes = len(comp._lineas)
+comp._tabla.selection_set(comp._tabla.get_children()[-1])
+comp._editar_linea()
+verificar(
+    comp._l_codigo.get() == "GRA1"
+    and comp._l_cantidad.get() == "1,5"
+    and len(comp._lineas) == antes - 1,
+    "CO-06: el doble clic carga la linea en el formulario para corregirla",
+)
+
+# --- CO-02: editar un proveedor (nombre y contacto), sin perder sus facturas ---
+comp._limpiar()
+app.update()
+comp._proveedores_tabla.selection_set("prov-Distribuidora Sur")
+comp.editar_proveedor()
+app.update()
+comp.dialogo.variables["nombre"].set("Distribuidora Sur SpA")
+comp.dialogo.variables["contacto"].set("nuevo@sur.cl")
+comp.dialogo.confirmar()
+app.update()
+nombres_ahora = comp._nombres_proveedores()
+verificar(
+    "Distribuidora Sur SpA" in nombres_ahora and "Distribuidora Sur" not in nombres_ahora,
+    f"CO-02: el proveedor cambia de nombre {nombres_ahora}",
+)
+verificar(
+    comp._facturas.listar()[0].proveedor == "Distribuidora Sur SpA",
+    "CO-02: sus facturas siguen con el proveedor",
+)
+mensajes.clear()
+comp._proveedores_tabla.selection_set("prov-Otro Proveedor")
+comp.editar_proveedor()
+app.update()
+comp.dialogo.variables["nombre"].set("distribuidora sur spa")  # ya existe (otra grafia)
+comp.dialogo.confirmar()
+verificar(
+    any("Ya existe el proveedor" in m for _, m in mensajes),
+    "CO-02: no se puede repetir el nombre de otro proveedor",
+)
+comp.dialogo.destroy()
 app.destroy()
 print("ESCENARIO OK")

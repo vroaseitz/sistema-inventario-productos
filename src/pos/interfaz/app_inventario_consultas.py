@@ -334,7 +334,7 @@ class PanelMovimientos(ttk.Frame):
                 ("fecha", "Fecha", 120, "w"),
                 ("producto", "Producto", 240, "w"),
                 ("movimiento", "Movimiento", 90, "w"),
-                ("cantidad", "Cantidad", 80, "e"),
+                ("cantidad", "Cantidad", 90, "center"),  # I-06: separada de «Motivo»
                 ("motivo", "Motivo", 180, "w"),
                 ("usuario", "Usuario", 100, "w"),
             ),
