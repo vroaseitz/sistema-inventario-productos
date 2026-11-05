@@ -16,6 +16,8 @@ from uuid import uuid4
 
 from pos.aplicacion.puertos import ColaSincronizacion
 from pos.dominio.caja import MovimientoCaja, TurnoCaja
+from pos.dominio.clientes import Cliente, MovimientoCliente
+from pos.dominio.compras import FacturaCompra
 from pos.dominio.inventario import Existencia
 from pos.dominio.lotes import Lote
 from pos.dominio.productos import Producto
@@ -45,6 +47,13 @@ def encolar_producto(
         },
         str(uuid4()),
     )
+
+
+def encolar_producto_codigo(cola: ColaSincronizacion | None, anterior: str, nuevo: str) -> None:
+    """El producto cambia de codigo de barras (CA-19): el destino lo renombra, no crea otro."""
+    if cola is None:
+        return
+    cola.encolar("producto_codigo", "update", {"anterior": anterior, "nuevo": nuevo}, str(uuid4()))
 
 
 def encolar_existencia(cola: ColaSincronizacion | None, existencia: Existencia) -> None:
@@ -189,3 +198,116 @@ def encolar_categoria_eliminada(cola: ColaSincronizacion | None, nombre: str) ->
     if cola is None:
         return
     cola.encolar("categoria_eliminar", "delete", {"nombre": nombre}, str(uuid4()))
+
+
+# --- Clientes, credito, proveedores, facturas de compra y auditoria (migracion 008) ---------
+
+
+def _datos_cliente(cliente: Cliente) -> dict:
+    """El id local es estable (una sola caja por base), asi que sirve de clave en el destino."""
+    return {
+        "id": f"cliente:{cliente.id}",
+        "nombre": cliente.nombre,
+        "telefono": cliente.telefono,
+        "correo": cliente.correo,
+        "observaciones": cliente.observaciones,
+        "activo": cliente.activo,
+    }
+
+
+def encolar_cliente(cola: ColaSincronizacion | None, cliente: Cliente) -> None:
+    """Un cliente se crea, se modifica o se desactiva (el destino hace upsert por su id)."""
+    if cola is None or cliente.id is None:
+        return
+    cola.encolar("cliente", "upsert", _datos_cliente(cliente), str(uuid4()))
+
+
+def encolar_movimiento_cliente(
+    cola: ColaSincronizacion | None, cliente: Cliente, movimiento: MovimientoCliente
+) -> None:
+    """Un consumo, un abono o el descuento del credito. Lleva al cliente: si aun no llego, entra."""
+    if cola is None or cliente.id is None:
+        return
+    cola.encolar(
+        "movimiento_cliente",
+        "insert",
+        {
+            "uuid": movimiento.uuid,
+            "cliente": _datos_cliente(cliente),
+            "tipo": movimiento.tipo.value,
+            "monto": movimiento.monto,
+            "fecha": movimiento.fecha.isoformat(),
+            "detalle": movimiento.detalle,
+            "medio": movimiento.medio,
+            "venta_uuid": movimiento.venta_uuid,
+        },
+        f"movimiento-cliente:{movimiento.uuid}",
+    )
+
+
+def encolar_proveedor(cola: ColaSincronizacion | None, nombre: str, contacto: str = "") -> None:
+    if cola is None:
+        return
+    cola.encolar("proveedor", "upsert", {"nombre": nombre, "contacto": contacto}, str(uuid4()))
+
+
+def encolar_factura_compra(cola: ColaSincronizacion | None, factura: FacturaCompra) -> None:
+    """Una factura confirmada no se edita: se envia una vez, con el proveedor y todas sus lineas."""
+    if cola is None:
+        return
+    cola.encolar(
+        "factura_compra",
+        "insert",
+        {
+            "proveedor": factura.proveedor,
+            "numero": factura.numero,
+            "fecha": factura.fecha.isoformat(),
+            "neto": factura.neto,
+            "impuestos": factura.impuestos,
+            "estado": factura.estado.value,
+            "lineas": [
+                {
+                    "codigo": linea.codigo_producto,
+                    "cantidad": str(linea.cantidad),
+                    "costo": linea.costo_unitario_neto,
+                    "costo_anterior": linea.costo_anterior,
+                    "vence": linea.fecha_vencimiento.isoformat()
+                    if linea.fecha_vencimiento
+                    else None,
+                    "lote": linea.codigo_lote,
+                }
+                for linea in factura.lineas
+            ],
+        },
+        f"factura:{factura.proveedor.strip().lower()}:{factura.numero.strip()}",
+    )
+
+
+def encolar_auditoria(
+    cola: ColaSincronizacion | None,
+    id_local: int | None,
+    fecha: str,
+    usuario: str,
+    accion: str,
+    registro: str,
+    antes: str,
+    despues: str,
+    detalle: str,
+) -> None:
+    if cola is None or id_local is None:
+        return
+    cola.encolar(
+        "auditoria",
+        "insert",
+        {
+            "id": f"auditoria:{id_local}",
+            "fecha": fecha,
+            "usuario": usuario,
+            "accion": accion,
+            "registro": registro,
+            "antes": antes,
+            "despues": despues,
+            "detalle": detalle,
+        },
+        f"auditoria:{id_local}",
+    )

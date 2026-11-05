@@ -12,8 +12,10 @@ from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
 from pos.dominio.clientes import (
     abonos_del_ciclo,
     consumos_del_ciclo,
+    descuento_credito,
     saldo_anterior,
     saldo_de,
+    total_a_pagar,
     ultimo_consumo,
 )
 from pos.dominio.errores import ReglaClienteInvalida, ReglaVentaInvalida
@@ -160,3 +162,93 @@ def test_ciclo_mensual_saldo_anterior_consumos_y_abonos(app):
     assert consumos_del_ciclo(movs, HOY.year, HOY.month) == 18640
     assert abonos_del_ciclo(movs, HOY.year, HOY.month) == 5000
     assert saldo_de(movs) == 26040
+
+
+def test_el_consumo_a_credito_lista_sus_productos_con_cantidad_y_monto(app):
+    """CL-02: el estado de cuenta debe decir que se llevo, no solo «Venta N 1 · 1 producto»."""
+    app.productos.guardar(Producto("MIE", "Miel de ulmo 500 g", Dinero(4990), categoria_id=1))
+    app.existencias.guardar(Existencia("MIE", Decimal("10")))
+    cliente = app.gestion.crear("Cliente A", telefono="1")
+    v = app.venta.iniciar(usuario_id=1, cliente_id=cliente.id)
+    app.venta.agregar_producto(v, "ARR", 3)
+    app.venta.agregar_producto(v, "MIE", 2)
+    v.aplicar_descuento("MIE", 990, "Cortesía")
+    app.venta.agregar_pago(v, Pago(MedioPago.CREDITO_CLIENTE, v.total))
+    venta = app.venta.cerrar(v)
+    movimiento = app.clientes.movimientos(cliente.id)[0]
+    lineas = app.clientes.lineas_de_consumo(movimiento.venta_uuid)
+    assert [(ln.nombre, ln.cantidad, ln.monto) for ln in lineas] == [
+        ("Arroz", Decimal("3"), 3000),
+        ("Miel de ulmo 500 g", Decimal("2"), 8990),  # 2 x 4.990 - 990 de descuento
+    ]
+    assert sum(ln.monto for ln in lineas) == movimiento.monto == venta.total.monto
+    assert app.clientes.lineas_de_consumo("no-existe") == []
+
+
+def test_descuento_del_credito_familiar_es_20_por_ciento_del_ejemplo_de_la_hu():
+    """HU-CLI-04 (PO, 22-09): $110.268 de consumos, $22.054 de descuento, $88.214 a pagar."""
+    assert descuento_credito(110_268) == 22_054  # 22.053,6 redondea hacia arriba
+    assert total_a_pagar(110_268) == 88_214
+    assert descuento_credito(0) == 0 and total_a_pagar(0) == 0
+    assert descuento_credito(5) == 1  # 1,0 exacto
+    assert descuento_credito(2) == 0  # 0,4 -> 0
+    assert descuento_credito(3) == 1  # 0,6 -> 1
+
+
+def _con_consumo(app, monto, fecha=None):
+    from pos.dominio.clientes import MovimientoCliente, TipoMovimientoCliente
+
+    cliente = app.gestion.crear("Cliente A", telefono="1")
+    app.clientes.agregar_movimiento(
+        MovimientoCliente(cliente.id, TipoMovimientoCliente.CONSUMO, monto, fecha or HOY, "Consumo")
+    )
+    return cliente
+
+
+def test_pagar_el_estado_de_cuenta_deja_la_deuda_en_cero_con_el_ejemplo_de_la_hu(app):
+    """HU-CLI-04: $110.268 de consumos -> abono de $88.214 + descuento de $22.054 = saldo 0."""
+    from pos.aplicacion.casos_uso.gestionar_clientes import PagarEstadoDeCuenta
+    from pos.dominio.clientes import MEDIO_DESCUENTO
+
+    cliente = _con_consumo(app, 110_268)
+    pagar = PagarEstadoDeCuenta(app.clientes)
+    assert pagar.calcular(cliente.id, HOY.year, HOY.month) == (88_214, 22_054)
+    pago, descuento = pagar.ejecutar(cliente.id, HOY.year, HOY.month)
+    assert (pago.monto, pago.medio) == (88_214, "transferencia")
+    assert (descuento.monto, descuento.medio) == (22_054, MEDIO_DESCUENTO)
+    movs = app.clientes.movimientos(cliente.id)
+    assert saldo_de(movs) == 0
+    # El descuento no es plata que entra: no cuenta como abono ni toca el efectivo de la caja.
+    assert abonos_del_ciclo(movs, HOY.year, HOY.month) == 88_214
+    assert app.clientes.abonos_en_efectivo_del_turno(1) == 0
+
+
+def test_el_descuento_del_ciclo_se_aplica_una_sola_vez(app):
+    from pos.aplicacion.casos_uso.gestionar_clientes import PagarEstadoDeCuenta
+
+    cliente = _con_consumo(app, 50_000)
+    pagar = PagarEstadoDeCuenta(app.clientes)
+    pagar.ejecutar(cliente.id, HOY.year, HOY.month)
+    with pytest.raises(ReglaClienteInvalida, match="ya se aplicó"):
+        pagar.ejecutar(cliente.id, HOY.year, HOY.month)
+    assert saldo_de(app.clientes.movimientos(cliente.id)) == 0  # sin movimientos de mas
+
+
+def test_si_ya_habia_abonado_algo_solo_paga_lo_que_falta(app):
+    from pos.aplicacion.casos_uso.gestionar_clientes import PagarEstadoDeCuenta
+
+    cliente = _con_consumo(app, 100_000)
+    app.abono.ejecutar(cliente.id, 30_000, "transferencia")
+    pagar = PagarEstadoDeCuenta(app.clientes)
+    # total a pagar = 100.000 - 20.000 = 80.000; ya abono 30.000 -> faltan 50.000
+    assert pagar.calcular(cliente.id, HOY.year, HOY.month) == (50_000, 20_000)
+    pagar.ejecutar(cliente.id, HOY.year, HOY.month)
+    assert saldo_de(app.clientes.movimientos(cliente.id)) == 0
+
+
+def test_sin_consumos_en_el_ciclo_no_hay_nada_que_pagar(app):
+    from pos.aplicacion.casos_uso.gestionar_clientes import PagarEstadoDeCuenta
+
+    cliente = app.gestion.crear("Cliente B", telefono="2")
+    with pytest.raises(ReglaClienteInvalida, match="no tiene consumos"):
+        PagarEstadoDeCuenta(app.clientes).ejecutar(cliente.id, HOY.year, HOY.month)

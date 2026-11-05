@@ -333,22 +333,31 @@ class VentanaPrincipal(tk.Tk):
     def vigilar_inactividad(
         self, minutos: Callable[[], int], al_vencer: Callable[[], None], cada_ms: int = 10_000
     ) -> None:
-        """Cierre de sesion por inactividad (HU-USR-01): sin teclas ni clics, pide la clave."""
+        """Cierre de sesion por inactividad (HU-USR-01): sin teclas ni clics, pide la clave.
+
+        A-06: el movimiento del mouse NO cuenta como actividad (cualquier roce reiniciaba el
+        conteo y el cierre tardaba mas que lo configurado), y la proxima revision se agenda para
+        cuando venza el plazo en vez de esperar hasta `cada_ms`.
+        """
 
         def actividad(_evento: object = None) -> None:
             self._ultima_actividad = time.monotonic()
 
-        for evento in ("<Key>", "<Button>", "<Motion>"):
+        for evento in ("<Key>", "<Button>", "<MouseWheel>"):
             self.bind_all(evento, actividad, add="+")
 
         def revisar() -> None:
             limite = minutos() * 60
-            if limite > 0 and time.monotonic() - self._ultima_actividad >= limite:
+            inactivo = time.monotonic() - self._ultima_actividad
+            if limite > 0 and inactivo >= limite:
                 al_vencer()
                 self._ultima_actividad = time.monotonic()
-            self.after(cada_ms, revisar)
+                inactivo = 0.0
+            # Mira de nuevo justo cuando venceria; si la configuracion cambia, a lo mas en cada_ms.
+            falta_ms = int((limite - inactivo) * 1000) + 50 if limite > 0 else cada_ms
+            self.after(max(200, min(cada_ms, falta_ms)), revisar)
 
-        self.after(cada_ms, revisar)
+        self.after(min(cada_ms, 200), revisar)
 
     @property
     def modulo_activo(self) -> str | None:
@@ -374,7 +383,11 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
     from pos.aplicacion.casos_uso.gestionar_categorias import GestionarCategorias
-    from pos.aplicacion.casos_uso.gestionar_clientes import GestionarClientes, RegistrarAbono
+    from pos.aplicacion.casos_uso.gestionar_clientes import (
+        GestionarClientes,
+        PagarEstadoDeCuenta,
+        RegistrarAbono,
+    )
     from pos.aplicacion.casos_uso.gestionar_proveedores import GestionarProveedores
     from pos.aplicacion.casos_uso.gestionar_usuarios import GestionarUsuarios
     from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
@@ -442,7 +455,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     repo_auditoria = RepositorioAuditoriaSQLite(conexion)
     repo_config = RepositorioConfiguracionSQLite(conexion)
     # HU-USR-03: el nombre sale de la sesion en el momento de cada cambio (la sesion puede cambiar).
-    auditor = Auditor(repo_auditoria, lambda: sesion.nombre)
+    auditor = Auditor(repo_auditoria, lambda: sesion.nombre, cola=cola)
     gestion_usuarios = GestionarUsuarios(repo_usuarios, hasheador, auditor)
     repo_movimientos = RepositorioMovimientosSQLite(conexion)
     movimientos = RegistroMovimientos(repo_movimientos, lambda: sesion.nombre)
@@ -535,9 +548,10 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
             ),
             "F4": lambda padre: VentanaClientes(
                 padre,
-                GestionarClientes(repo_clientes),
-                RegistrarAbono(repo_clientes, repo_turnos),
+                GestionarClientes(repo_clientes, cola=cola),
+                RegistrarAbono(repo_clientes, repo_turnos, cola=cola),
                 repo_clientes,
+                pagar_estado=PagarEstadoDeCuenta(repo_clientes, cola=cola),
             ),
             "F5": lambda padre: VentanaCompras(
                 padre,
@@ -553,7 +567,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 ),
                 repo_facturas,
                 repo_productos,
-                GestionarProveedores(repo_proveedores, repo_facturas, auditor),
+                GestionarProveedores(repo_proveedores, repo_facturas, auditor, cola=cola),
             ),
             "F6": lambda padre: VentanaReportes(
                 padre,

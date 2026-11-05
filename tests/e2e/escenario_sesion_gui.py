@@ -164,12 +164,19 @@ verificar(mensajes[-1] == ("showinfo", "Tu contraseña se cambió"), "cambia la 
 
 # --- cierre por inactividad: sin tocar nada pide la clave de nuevo -------------------------
 vencio: list[int] = []
-app.vigilar_inactividad(lambda: 0.01, lambda: vencio.append(1), cada_ms=100)
-fin = time.time() + 2.0
+# A-06: con cada_ms=10 s el cierre debe llegar cuando vence el plazo (0,6 s), no a los 10 s, y
+# mover el mouse no debe reiniciar el conteo.
+inicio = time.time()
+app.vigilar_inactividad(lambda: 0.01, lambda: vencio.append(time.time() - inicio), cada_ms=10_000)
+fin = time.time() + 3.0
 while time.time() < fin and not vencio:
+    app.event_generate("<Motion>", x=5, y=5)  # un roce del mouse cada 20 ms: no cuenta
     app.update()
     time.sleep(0.02)
 verificar(bool(vencio), "la inactividad dispara el cierre de sesion")
+verificar(
+    vencio[0] < 1.5, f"A-06: cierra al vencer el plazo (0,6 s), no a los 10 s: {vencio[0]:.2f}"
+)
 
 # vuelve como administradora con la clave nueva de la vendedora no sirve y la vieja tampoco
 credenciales.append(("roxana", "clave-roxana-1"))

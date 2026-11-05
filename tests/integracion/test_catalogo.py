@@ -197,3 +197,74 @@ def test_no_se_fusiona_hacia_una_categoria_desactivada(app):
     with pytest.raises(DatosProductoInvalidos, match="desactivada"):
         app.gestion.fusionar(origen.id, app.harinas)
     assert app.categorias.obtener(origen.id) is not None  # el origen no se toco
+
+
+def test_cambiar_el_codigo_de_barras_lo_sigue_todo_el_historial_y_queda_auditado(app):
+    """CA-19: existencias, ventas, lotes, precios y tickets en espera siguen al producto."""
+    from decimal import Decimal
+
+    from pos.aplicacion.casos_uso.editar_producto import EditarProducto
+    from pos.infraestructura.sqlite.repositorio_tickets_espera import (
+        RepositorioTicketsEsperaSQLite,
+    )
+
+    con = app.productos._con
+    editar = EditarProducto(app.productos, app.historial, app.cola, app.categorias, app.auditor)
+    app.existencias.guardar(Existencia("TE", Decimal("7")))
+    editar.ejecutar("TE", "Té verde hojas 100 g", 3900, app.frutos, "roxana", costo=2000)  # precio
+    con.execute("INSERT INTO turnos_caja (id, usuario_id, fondo_inicial) VALUES (1, 1, 0)")
+    con.execute("INSERT INTO ventas (id, turno_caja_id, usuario_id) VALUES (1, 1, 1)")
+    con.execute(
+        "INSERT INTO venta_detalles (venta_id, producto_codigo, cantidad, precio_unitario) "
+        "VALUES (1, 'TE', '2', 3900)"
+    )
+    con.execute(
+        "INSERT INTO lotes (uuid, codigo_producto, fecha_vencimiento, saldo) "
+        "VALUES ('l1', 'TE', '2027-01-01', '7')"
+    )
+    RepositorioTicketsEsperaSQLite(con).guardar([{"productos": [["TE", "3"]], "lotes": {"TE": 1}}])
+
+    nuevo = editar.cambiar_codigo("TE", "  7800000000017 ")
+
+    assert nuevo == "7800000000017"
+    assert app.productos.obtener_por_codigo("TE") is None
+    assert app.productos.obtener_por_codigo(nuevo).nombre == "Té verde hojas 100 g"
+    assert app.existencias.obtener(nuevo).cantidad == Decimal("7")
+    for tabla, columna in (
+        ("venta_detalles", "producto_codigo"),
+        ("lotes", "codigo_producto"),
+        ("historial_precios", "codigo_producto"),
+    ):
+        assert (
+            con.execute(f"SELECT COUNT(*) FROM {tabla} WHERE {columna} = 'TE'").fetchone()[0] == 0
+        )
+        assert (
+            con.execute(f"SELECT COUNT(*) FROM {tabla} WHERE {columna} = ?", (nuevo,)).fetchone()[0]
+            >= 1
+        )
+    assert RepositorioTicketsEsperaSQLite(con).cargar() == [
+        {"productos": [[nuevo, "3"]], "lotes": {nuevo: 1}}
+    ]
+    assert any(
+        a["accion"] == "Cambio de código de barras" and (a["antes"], a["despues"]) == ("TE", nuevo)
+        for a in app.auditoria.listar()
+    )
+    assert any(
+        p["entidad"] == "producto_codigo" and p["datos"] == {"anterior": "TE", "nuevo": nuevo}
+        for p in app.cola.pendientes()
+    )
+
+
+def test_no_se_puede_cambiar_el_codigo_a_uno_que_ya_existe_ni_dejarlo_vacio(app):
+    from pos.aplicacion.casos_uso.editar_producto import EditarProducto
+
+    editar = EditarProducto(app.productos, app.historial, app.cola, app.categorias, app.auditor)
+    otro = next(p.codigo for p in app.productos.listar() if p.codigo != "TE")
+    with pytest.raises(DatosProductoInvalidos, match="Ya existe un producto con código"):
+        editar.cambiar_codigo("TE", otro)
+    with pytest.raises(DatosProductoInvalidos, match="vacío"):
+        editar.cambiar_codigo("TE", "   ")
+    with pytest.raises(DatosProductoInvalidos, match="no existe"):
+        editar.cambiar_codigo("NO-ESTA", "999")
+    assert editar.cambiar_codigo("TE", "TE") == "TE"  # sin cambio: no hace nada
+    assert app.productos.obtener_por_codigo("TE") is not None  # y no se perdio nada

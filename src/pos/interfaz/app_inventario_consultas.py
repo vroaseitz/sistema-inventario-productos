@@ -23,6 +23,7 @@ from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_cantidad, formatear_clp
 from pos.dominio.inventario import ESTADO_AGOTADO, ESTADO_BAJO_MINIMO, TipoMovimiento
 from pos.interfaz.campo_fecha import CampoFecha
+from pos.interfaz.combo_filtrable import ComboFiltrable
 from pos.interfaz.dialogo_formulario import pedir_formulario
 from pos.interfaz.exportar import exportar_con_dialogo
 
@@ -84,7 +85,10 @@ class PanelExistencias(ttk.Frame):
         for columna, (texto, widget) in enumerate(
             (
                 ("Buscar", entrada),
-                ("Categoría", self._combo(filtros, self._categoria, list(self._categorias), 22)),
+                (
+                    "Categoría",
+                    self._combo(filtros, self._categoria, list(self._categorias), 22, True),
+                ),
                 ("Mostrar", self._combo(filtros, self._mostrar, list(MOSTRAR), 14)),
                 ("Ordenar", self._combo(filtros, self._orden, ["Por urgencia", "Nombre"], 14)),
             )
@@ -116,10 +120,20 @@ class PanelExistencias(ttk.Frame):
         ).pack(anchor="w")
         self.refrescar()
 
-    def _combo(self, padre: tk.Misc, variable: tk.StringVar, valores: list[str], ancho: int):
-        combo = ttk.Combobox(
-            padre, textvariable=variable, values=valores, state="readonly", width=ancho
-        )
+    def _combo(
+        self,
+        padre: tk.Misc,
+        variable: tk.StringVar,
+        valores: list[str],
+        ancho: int,
+        filtrable: bool = False,
+    ):
+        if filtrable:  # CA-18: categorias, se puede escribir para filtrar
+            combo = ComboFiltrable(padre, variable, valores, ancho)
+        else:
+            combo = ttk.Combobox(
+                padre, textvariable=variable, values=valores, state="readonly", width=ancho
+            )
         combo.bind("<<ComboboxSelected>>", lambda _e: self.refrescar())
         return combo
 
@@ -222,9 +236,12 @@ class PanelReporteInventario(ttk.Frame):
             )
         ):
             ttk.Label(filtros, text=texto).grid(row=0, column=columna, sticky="w", padx=4)
-            combo = ttk.Combobox(
-                filtros, textvariable=variable, values=valores, state="readonly", width=ancho
-            )
+            if texto == "Categoría":  # CA-18
+                combo = ComboFiltrable(filtros, variable, valores, ancho)
+            else:
+                combo = ttk.Combobox(
+                    filtros, textvariable=variable, values=valores, state="readonly", width=ancho
+                )
             combo.grid(row=1, column=columna, padx=4, sticky="w")
             combo.bind("<<ComboboxSelected>>", lambda _e: self.refrescar())
         ttk.Button(filtros, text="Exportar", command=self.exportar).grid(row=1, column=3, padx=8)

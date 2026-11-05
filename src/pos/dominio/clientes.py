@@ -9,12 +9,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 from enum import StrEnum
 from uuid import uuid4
 
 from .errores import ReglaClienteInvalida
+from .value_objects import _a_pesos
 
 MEDIOS_ABONO = ("efectivo", "transferencia", "tarjeta")
+# El descuento del credito familiar se asienta como un abono sin plata: baja la deuda pero no
+# entra a la caja ni al banco, y no cuenta como «abono» en los reportes.
+MEDIO_DESCUENTO = "descuento"
+
+
+def detalle_descuento(anio: int, mes: int) -> str:
+    """Texto con que se asienta (y se reconoce) el descuento de un ciclo: una vez por ciclo."""
+    return f"Descuento crédito familiar {mes:02d}-{anio}"
 
 
 class TipoMovimientoCliente(StrEnum):
@@ -68,6 +78,30 @@ class MovimientoCliente:
         return self.monto if self.tipo is TipoMovimientoCliente.CONSUMO else -self.monto
 
 
+# HU-CLI-04 (definida por la PO el 22-09-2026): al cierre del ciclo se descuenta el 20 % del
+# total de consumos del mes. Ejemplo de la HU: $110.268 -> descuento $22.054 -> $88.214 a pagar.
+PORCENTAJE_DESCUENTO_CREDITO = 20
+
+
+def descuento_credito(consumos: int) -> int:
+    """Descuento del credito familiar sobre los consumos del ciclo, al peso (medio hacia arriba)."""
+    return _a_pesos(Decimal(consumos) * PORCENTAJE_DESCUENTO_CREDITO / 100)
+
+
+def total_a_pagar(consumos: int) -> int:
+    """Lo que paga el cliente por el ciclo: consumos menos el descuento del credito familiar."""
+    return consumos - descuento_credito(consumos)
+
+
+@dataclass(frozen=True)
+class LineaConsumo:
+    """Un producto dentro de un consumo a credito (para el estado de cuenta, HU-CLI-02/04)."""
+
+    nombre: str
+    cantidad: Decimal
+    monto: int  # lo cobrado por la linea, ya con su descuento
+
+
 def saldo_de(movimientos: list[MovimientoCliente]) -> int:
     return sum(m.efecto for m in movimientos)
 
@@ -96,8 +130,11 @@ def consumos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int
 
 
 def abonos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
+    """Lo que el cliente pago en el ciclo (el descuento asentado no es un pago)."""
     return sum(
         m.monto
         for m in movimientos
-        if m.tipo is TipoMovimientoCliente.ABONO and en_ciclo(m, anio, mes)
+        if m.tipo is TipoMovimientoCliente.ABONO
+        and m.medio != MEDIO_DESCUENTO
+        and en_ciclo(m, anio, mes)
     )

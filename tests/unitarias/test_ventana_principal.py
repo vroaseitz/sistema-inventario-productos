@@ -76,3 +76,16 @@ def test_la_ventana_cabe_en_el_area_util_de_pantallas_pequenas():
 
 def test_en_pantallas_grandes_conserva_el_tamano_de_diseno():
     assert tamano_de_ventana(1920, 1040) == (1320, 860, 1180, 780)
+
+
+def test_las_propinas_son_un_retiro_y_no_un_ingreso():
+    """El acta de la PO (22-09): «se entregan propinas en fechas especiales»: sale plata."""
+    from pos.dominio.caja import TipoMovimientoCaja
+    from pos.interfaz.app_ventas import MOTIVOS_POR_TIPO
+
+    ingreso = MOTIVOS_POR_TIPO[TipoMovimientoCaja.INGRESO]
+    retiro = MOTIVOS_POR_TIPO[TipoMovimientoCaja.RETIRO]
+    assert ingreso == ("Ingreso de sencillo",)
+    assert "Propinas en fechas especiales" in retiro
+    assert "Ingreso de sencillo" not in retiro  # O-35: un retiro no acepta «Ingreso de sencillo»
+    assert not set(ingreso) & set(retiro)  # cada motivo pertenece a un solo tipo

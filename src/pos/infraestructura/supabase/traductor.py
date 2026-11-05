@@ -41,6 +41,13 @@ _SQL_PRODUCTO = (
     f"precio_venta = EXCLUDED.precio_venta, activo = EXCLUDED.activo, {_ACTUALIZAR_EXTRA}"
 )
 
+# Cambio de codigo de barras (CA-19): renombra el producto existente; si el codigo nuevo ya existe
+# no hace nada (el reintento tras un corte es inofensivo).
+_SQL_PRODUCTO_CODIGO = (
+    "UPDATE pos.producto SET codigo = %s WHERE codigo = %s "
+    "AND NOT EXISTS (SELECT 1 FROM pos.producto WHERE codigo = %s)"
+)
+
 _SQL_CATEGORIA = "INSERT INTO pos.categoria (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING"
 
 _SQL_CATEGORIA_ESTADO = (
@@ -102,6 +109,75 @@ _SQL_LOTE = (
     "saldo = EXCLUDED.saldo, fecha_vencimiento = EXCLUDED.fecha_vencimiento, "
     "codigo_lote = EXCLUDED.codigo_lote"
 )
+
+
+# --- Clientes, credito, proveedores, facturas de compra y auditoria (migracion 008) ---------
+
+_SQL_CLIENTE = (
+    "INSERT INTO pos.cliente (id_cliente, nombre, tiene_credito, telefono, correo, "
+    "observaciones, activo) VALUES (%s, %s, TRUE, %s, %s, %s, %s) "
+    "ON CONFLICT (id_cliente) DO UPDATE SET nombre = EXCLUDED.nombre, "
+    "telefono = EXCLUDED.telefono, correo = EXCLUDED.correo, "
+    "observaciones = EXCLUDED.observaciones, activo = EXCLUDED.activo"
+)
+
+# El consumo local es un «cargo» en el destino. Si la venta aun no llego, venta_id queda vacio.
+_SQL_MOVIMIENTO_CLIENTE = (
+    "INSERT INTO pos.movimiento_credito "
+    "(id_cliente, cliente_id, venta_id, tipo, monto, creado_en, medio, detalle) "
+    "SELECT %s, c.id, (SELECT v.id FROM pos.venta v WHERE v.id_cliente = %s), "
+    "%s, %s, %s::timestamptz, %s, %s FROM pos.cliente c WHERE c.id_cliente = %s "
+    "ON CONFLICT (id_cliente) DO NOTHING"
+)
+
+_SQL_PROVEEDOR = (
+    "INSERT INTO pos.proveedor (nombre, contacto) VALUES (%s, %s) "
+    "ON CONFLICT (lower(nombre)) DO UPDATE SET contacto = EXCLUDED.contacto"
+)
+
+# Para una factura: el proveedor tiene que existir, pero no se le pisa el contacto.
+_SQL_PROVEEDOR_SI_FALTA = (
+    "INSERT INTO pos.proveedor (nombre) VALUES (%s) ON CONFLICT (lower(nombre)) DO NOTHING"
+)
+
+_SQL_AUDITORIA = (
+    "INSERT INTO pos.auditoria (id_cliente, tabla, registro_id, usuario_nombre, accion, "
+    "datos_antes, datos_despues, detalle, creado_en) "
+    "VALUES (%s, 'app', %s, %s, %s, to_jsonb(%s::text), to_jsonb(%s::text), %s, %s::timestamptz) "
+    "ON CONFLICT (id_cliente) DO NOTHING"
+)
+
+
+def _sql_factura(n_lineas: int) -> str:
+    """La factura y todas sus lineas en UNA sentencia: entra completa o no entra, y reintentar no
+    duplica (la clave es proveedor + numero)."""
+    linea = "(%s::text, %s::numeric, %s::numeric, %s::numeric, %s::date, %s::text)"
+    lineas = ", ".join([linea] * n_lineas)
+    return (
+        "WITH f AS ("
+        "INSERT INTO pos.factura_compra "
+        "(proveedor_id, numero_factura, fecha, monto_neto, monto_impuestos, estado) "
+        "SELECT p.id, %s, %s::date, %s, %s, %s FROM pos.proveedor p "
+        "WHERE lower(p.nombre) = lower(%s) "
+        "ON CONFLICT (proveedor_id, numero_factura) DO NOTHING RETURNING id) "
+        "INSERT INTO pos.factura_compra_detalle "
+        "(factura_id, producto_id, cantidad, costo_unitario_neto, costo_anterior, "
+        "fecha_vencimiento, codigo_lote) "
+        "SELECT f.id, p.id, x.cantidad, x.costo, x.anterior, x.vence, x.lote FROM f CROSS JOIN "
+        f"(VALUES {lineas}) AS x(codigo, cantidad, costo, anterior, vence, lote) "
+        "JOIN pos.producto p ON p.codigo = x.codigo"
+    )
+
+
+def _params_cliente(c: dict) -> tuple:
+    return (
+        c["id"],
+        c["nombre"],
+        c.get("telefono") or "",
+        c.get("correo") or "",
+        c.get("observaciones") or "",
+        c.get("activo", True),
+    )
 
 
 def _sql_venta(n_lineas: int, n_pagos: int) -> str:
@@ -166,6 +242,9 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
             ),
         ]
 
+    if entidad == "producto_codigo":
+        return [(_SQL_PRODUCTO_CODIGO, (d["nuevo"], d["anterior"], d["nuevo"]))]
+
     if entidad == "categoria":
         return [(_SQL_CATEGORIA_ESTADO, (d["nombre"], d.get("activa", True)))]
 
@@ -174,6 +253,73 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
 
     if entidad == "categoria_eliminar":
         return [(_SQL_CATEGORIA_ELIMINAR, (d["nombre"],))]
+
+    if entidad == "cliente":
+        return [(_SQL_CLIENTE, _params_cliente(d))]
+
+    if entidad == "movimiento_cliente":
+        return [
+            (_SQL_CLIENTE, _params_cliente(d["cliente"])),
+            (
+                _SQL_MOVIMIENTO_CLIENTE,
+                (
+                    d["uuid"],
+                    d.get("venta_uuid"),
+                    "cargo" if d["tipo"] == "consumo" else d["tipo"],
+                    d["monto"],
+                    d["fecha"],
+                    d.get("medio"),
+                    d.get("detalle") or "",
+                    d["cliente"]["id"],
+                ),
+            ),
+        ]
+
+    if entidad == "proveedor":
+        return [(_SQL_PROVEEDOR, (d["nombre"], d.get("contacto") or ""))]
+
+    if entidad == "factura_compra":
+        lineas = d["lineas"]
+        if not lineas:
+            raise ValueError("Una factura sincronizable requiere al menos una linea")
+        params: list = [
+            d["numero"],
+            d["fecha"],
+            d["neto"],
+            d["impuestos"],
+            d.get("estado", "confirmada"),
+            d["proveedor"],
+        ]
+        for linea in lineas:
+            params += [
+                linea["codigo"],
+                linea["cantidad"],
+                linea["costo"],
+                linea.get("costo_anterior"),
+                linea.get("vence"),
+                linea.get("lote") or "",
+            ]
+        return [
+            (_SQL_PROVEEDOR_SI_FALTA, (d["proveedor"],)),
+            (_sql_factura(len(lineas)), tuple(params)),
+        ]
+
+    if entidad == "auditoria":
+        return [
+            (
+                _SQL_AUDITORIA,
+                (
+                    d["id"],
+                    d.get("registro") or "",
+                    d["usuario"],
+                    d["accion"],
+                    d.get("antes") or "",
+                    d.get("despues") or "",
+                    d.get("detalle") or "",
+                    d["fecha"],
+                ),
+            )
+        ]
 
     if entidad == "producto":
         return [

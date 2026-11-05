@@ -23,6 +23,7 @@ from pos.dominio.formato import formatear_clp, parsear_monto
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.value_objects import neto_de_precio
 from pos.interfaz import tema
+from pos.interfaz.combo_filtrable import ComboFiltrable
 from pos.interfaz.dialogo_formulario import pedir_formulario
 from pos.interfaz.exportar import exportar_con_dialogo
 
@@ -142,9 +143,12 @@ class VentanaCatalogo(ttk.Frame):
             start=1,
         ):
             ttk.Label(filtros, text=titulo).grid(row=0, column=columna, sticky="w")
-            combo = ttk.Combobox(
-                filtros, textvariable=variable, values=valores, state="readonly", width=ancho
-            )
+            if titulo == "Categoría":  # CA-18: se puede escribir para filtrar la lista
+                combo = ComboFiltrable(filtros, variable, valores, ancho)
+            else:
+                combo = ttk.Combobox(
+                    filtros, textvariable=variable, values=valores, state="readonly", width=ancho
+                )
             combo.grid(row=1, column=columna, padx=(0, 10), sticky="w")
             combo.bind("<<ComboboxSelected>>", lambda _e: self.refrescar())
             if titulo == "Categoría":
@@ -186,7 +190,7 @@ class VentanaCatalogo(ttk.Frame):
     def refrescar(self) -> None:
         nombres = self._categorias_activas()
         todas = {c.nombre: c.id for c in self._repo_categorias.listar()}
-        self._combo_categoria.config(values=[TODAS, *todas])
+        self._combo_categoria.poner_opciones([TODAS, *todas])
         categoria_id = todas.get(self._categoria.get())
         filas = self._consultar.ejecutar(
             self._buscar.get(), categoria_id, self._estado.get(), self._costo.get()
@@ -366,6 +370,7 @@ class VentanaCatalogo(ttk.Frame):
                 categorias[actual] = base.categoria_id  # categoria desactivada pero en uso
         ventana.v = v  # type: ignore[attr-defined]
         ventana.categorias = categorias  # type: ignore[attr-defined]
+        ventana.codigo_original = base.codigo if editando and base else ""  # type: ignore[attr-defined]
 
         def seccion(titulo: str) -> ttk.LabelFrame:
             marco = ttk.LabelFrame(ventana, text=titulo, padding=8)
@@ -378,19 +383,14 @@ class VentanaCatalogo(ttk.Frame):
             return widget
 
         a = seccion("Producto")
-        entrada_codigo = fila(
-            a, 0, "Código de barras", ttk.Entry(a, textvariable=v["codigo"], width=28)
-        )
-        if editando:
-            entrada_codigo.config(state="disabled")  # el código no se cambia
+        fila(a, 0, "Código de barras", ttk.Entry(a, textvariable=v["codigo"], width=28))
+        # CA-19: el código se puede cambiar (no puede repetirse y queda en la auditoría).
         fila(a, 1, "Nombre", ttk.Entry(a, textvariable=v["nombre"], width=44))
         fila(
             a,
             2,
             "Categoría",
-            ttk.Combobox(
-                a, textvariable=v["categoria"], values=list(categorias), state="readonly", width=30
-            ),
+            ComboFiltrable(a, v["categoria"], list(categorias), 30),
         )
         fila(
             a, 3, "", ttk.Checkbutton(a, text="Se vende a granel (por kilo)", variable=v["granel"])
@@ -523,6 +523,10 @@ class VentanaCatalogo(ttk.Frame):
         granel = UnidadVenta.GRANEL if v["granel"].get() else UnidadVenta.UNIDAD
         try:
             if editando:
+                original = ventana.codigo_original  # type: ignore[attr-defined]
+                if codigo != original:
+                    codigo = self._editar.cambiar_codigo(original, codigo)  # CA-19
+                    ventana.codigo_original = codigo  # type: ignore[attr-defined]
                 self._editar.ejecutar(
                     codigo,
                     v["nombre"].get().strip(),
@@ -568,6 +572,7 @@ class VentanaCatalogo(ttk.Frame):
                 ("Renombrar", self.renombrar_categoria, "", "normal"),
                 ("Fusionar", self.fusionar_categoria, "", "normal"),
                 ("Desactivar / activar", self.alternar_categoria, "", "peligro"),
+                ("Eliminar", self.eliminar_categoria, "", "peligro"),
             ],
         ).pack(fill="x", pady=(0, 8))
         self.tabla_categorias = self._tabla(
@@ -700,6 +705,27 @@ class VentanaCatalogo(ttk.Frame):
             nota=f"Todos los productos de «{nombre_origen}» pasan a la categoría elegida y "
             "«" + nombre_origen + "» se elimina.",
         )
+
+    def eliminar_categoria(self) -> None:
+        """CA-17: solo se elimina una categoria sin productos; si no, se pide fusionar."""
+        categoria_id = self._exigir_categoria()
+        if categoria_id is None:
+            return
+        categoria = self._repo_categorias.obtener(categoria_id)
+        if categoria is None:
+            return
+        if not messagebox.askyesno(
+            "Eliminar categoría",
+            f"¿Eliminar la categoría «{categoria.nombre}»? No se puede deshacer.",
+        ):
+            return
+        try:
+            self._gestion.eliminar(categoria_id)
+        except ErrorDominio as error:
+            messagebox.showerror("Categorías", str(error))
+            return
+        self._mensaje.set(f"Categoría «{categoria.nombre}» eliminada.")
+        self.refrescar()
 
     def alternar_categoria(self) -> None:
         categoria_id = self._exigir_categoria()

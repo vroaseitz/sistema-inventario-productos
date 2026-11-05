@@ -13,7 +13,7 @@ import time
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from tkinter import Tk, Toplevel, messagebox, ttk
+from tkinter import Listbox, Tk, Toplevel, messagebox, ttk
 
 sys.stdout.reconfigure(encoding="utf-8")  # consola de Windows: cp1252 no codifica todo
 sys.stderr.reconfigure(encoding="utf-8")
@@ -231,6 +231,89 @@ def pulsar_escape() -> None:
 ventana.after(100, pulsar_escape)
 ventana._agregar_producto()
 verificar(len(ventana._venta.detalles) == antes, "O-02b/O-29: Esc cancela el peso y no agrega")
+
+# --- O-32: un granel elegido en F10 pide el peso de inmediato y entra al ticket -------------
+antes = len(ventana._venta.detalles)
+ventana._buscar_producto_ui()
+ventana.update()
+buscador = next(w for w in ventana.winfo_children() if isinstance(w, Toplevel))
+campo = buscar(buscador, ttk.Entry)
+campo.insert(0, "nueces")
+campo.event_generate("<KeyRelease>", keysym="s")
+buscador.update()
+lista_f10 = buscar(buscador, Listbox)
+lista_f10.selection_set(0)
+estado.clear()
+ventana.after(150, teclear_peso)
+boton_f10 = next(b for b in todos(buscador, ttk.Button, []) if b.cget("text") == "Seleccionar")
+boton_f10.invoke()
+verificar(
+    estado.get("importe") == "Importe: $6.300",
+    f"O-32: F10 pide el peso al elegir un granel {estado}",
+)
+nueces = next(d for d in ventana._venta.detalles if d.producto_codigo == "NUE")
+verificar(
+    nueces.cantidad == Decimal("0.700"),  # 0,350 del paso anterior + 0,350 pedidos desde F10
+    f"O-32: el granel entra al ticket con el peso, sin apretar Agregar ({nueces.cantidad})",
+)
+
+# --- O-31: un producto desactivado avisa antes de pedir el peso o la cantidad ---------------
+productos.guardar(
+    Producto("DES", "Almendras viejas", Dinero(9000), UnidadVenta.GRANEL, 1, activo=False)
+)
+existencias.guardar(Existencia("DES", Decimal("5")))
+antes = len(ventana._venta.detalles)
+mensajes.clear()
+visto = {}
+
+
+def vigilar() -> None:
+    cuadros = [w for w in ventana.winfo_children() if isinstance(w, Toplevel)]
+    visto["peso"] = bool(cuadros)
+    for cuadro in cuadros:
+        cuadro.destroy()
+
+
+vigia = ventana.after(400, vigilar)
+ventana._entrada_codigo.delete(0, "end")
+ventana._entrada_codigo.insert(0, "DES")
+ventana._agregar_producto()
+ventana.after_cancel(vigia)
+verificar(not visto.get("peso"), "O-31: no se pide el peso de un producto desactivado")
+verificar(
+    any("desactivado" in m for t, m in mensajes if t == "showerror"),
+    "O-31: avisa que el producto esta desactivado",
+)
+verificar(len(ventana._venta.detalles) == antes, "O-31: el desactivado no entra al ticket")
+
+# --- O-35: el movimiento de caja muestra solo los motivos de su tipo ------------------------
+ventana._movimiento_ui()
+ventana.update()
+dialogo_mov = next(w for w in ventana.winfo_children() if isinstance(w, Toplevel))
+combo_tipo, combo_motivo = todos(dialogo_mov, ttk.Combobox, [])[:2]
+for tipo, esperado in (
+    (
+        "retiro",
+        (
+            "Retiro planificado para deposito bancario",
+            "Retiro por resguardo durante la jornada",
+            "Propinas en fechas especiales",
+        ),
+    ),
+    ("ingreso", ("Ingreso de sencillo",)),
+):
+    combo_tipo.set(tipo)
+    combo_tipo.event_generate("<<ComboboxSelected>>")
+    ventana.update()
+    verificar(
+        tuple(combo_motivo.cget("values")) == esperado and combo_motivo.get() == esperado[0],
+        f"O-35: un {tipo} ofrece solo sus motivos {combo_motivo.cget('values')}",
+    )
+verificar(
+    str(combo_motivo.cget("state")) == "readonly",
+    "O-35: el motivo no admite texto libre (un retiro no puede decir «Ingreso de sencillo»)",
+)
+dialogo_mov.destroy()
 
 # --- O-25: dos tickets con productos sobreviven a cerrar con la X ----------------------------
 ventana._nuevo_ticket()
@@ -731,6 +814,12 @@ verificar(
 )
 verificar(ultima.vuelto_entregado.monto == 1600, "el cambio entregado es $1.600")
 verificar(ultima.detalles[-1].motivo_descuento == "Cortesía", "el motivo del descuento se guarda")
+ventana._reimprimir_ultimo()  # O-33: la nota sale en el comprobante (se lee de la base)
+texto_comprobante = " ".join(comprobantes()[-1].read_text(encoding="utf-8").split())
+verificar(
+    "Nota: Cliente pidió el detalle aparte" in texto_comprobante,
+    "O-33: el comprobante impreso lleva la nota de la venta",
+)
 
 # --- F4 Clientes: cuenta de credito, venta a credito desde F1, abonos y cierre ---------------
 from pos.aplicacion.casos_uso.gestionar_clientes import (  # noqa: E402
@@ -809,7 +898,11 @@ verificar(
 verificar("Crédito cliente: $1.200" in arqueo, "HU-CAJ-03: el credito va como partida aparte")
 
 # Estado de cuenta y reporte de saldos
-verificar(len(f4._tabla_estado.get_children()) == 1, "HU-CLI-04: el estado lista el consumo")
+filas_estado = [f4._tabla_estado.item(i, "values") for i in f4._tabla_estado.get_children()]
+verificar(
+    len(filas_estado) == 2 and filas_estado[0][2] == "$1.200" and "×" in filas_estado[1][1],
+    f"HU-CLI-04 / CL-02: el estado lista el consumo y su producto {filas_estado}",
+)
 f4.refrescar()
 saldos = [f4._tabla_saldos.item(i, "values") for i in f4._tabla_saldos.get_children()]
 verificar(

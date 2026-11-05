@@ -19,6 +19,7 @@ from pos.aplicacion.puertos import (
     RepositorioProductos,
     RepositorioVentas,
 )
+from pos.dominio.formato import rango_de_busqueda
 from pos.dominio.productos import Producto, UnidadVenta
 
 COSTO_MINIMO_CREIBLE = 10  # CLP: por debajo (y sobre cero) se advierte
@@ -90,15 +91,13 @@ class ConsultarCatalogo:
             nombre_plano = _plano(producto.nombre)
             if termino and termino not in nombre_plano and termino not in _plano(producto.codigo):
                 continue
-            empieza = nombre_plano.startswith(termino) or any(
-                palabra.startswith(termino) for palabra in nombre_plano.split()
-            )
+            rango = rango_de_busqueda(producto.nombre, buscar)  # CA-15
             motivo = motivo_de_revision(producto)
             existencia = self.repositorio_existencias.obtener(producto.codigo)
             granel = producto.unidad_venta is UnidadVenta.GRANEL
             encontrados.append(
                 (
-                    not empieza,
+                    rango,
                     nombre_plano,
                     FilaCatalogo(
                         producto.codigo,

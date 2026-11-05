@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import date
+from decimal import Decimal
 
-from pos.dominio.clientes import Cliente, MovimientoCliente, TipoMovimientoCliente
+from pos.dominio.clientes import (
+    Cliente,
+    LineaConsumo,
+    MovimientoCliente,
+    TipoMovimientoCliente,
+)
+from pos.dominio.value_objects import Dinero
 
 
 class RepositorioClientesSQLite:
@@ -83,6 +90,23 @@ class RepositorioClientesSQLite:
             (turno_caja_id,),
         ).fetchone()
         return int(fila["total"])
+
+    def lineas_de_consumo(self, venta_uuid: str) -> list[LineaConsumo]:
+        """Productos de una venta a credito: nombre, cantidad y lo cobrado por cada linea."""
+        filas = self._con.execute(
+            "SELECT COALESCE(p.nombre, d.producto_codigo) AS nombre, d.cantidad, "
+            "d.precio_unitario, d.descuento_linea "
+            "FROM ventas v JOIN venta_detalles d ON d.venta_id = v.id "
+            "LEFT JOIN productos p ON p.codigo = d.producto_codigo "
+            "WHERE v.uuid = ? ORDER BY d.id",
+            (venta_uuid,),
+        ).fetchall()
+        lineas = []
+        for f in filas:
+            cantidad = Decimal(f["cantidad"])
+            bruto = Dinero(f["precio_unitario"]).multiplicado_por(cantidad).monto
+            lineas.append(LineaConsumo(f["nombre"], cantidad, bruto - f["descuento_linea"]))
+        return lineas
 
     @staticmethod
     def _a_cliente(fila: sqlite3.Row) -> Cliente:

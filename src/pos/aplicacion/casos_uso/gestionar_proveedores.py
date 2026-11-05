@@ -11,7 +11,12 @@ import unicodedata
 from dataclasses import dataclass
 
 from pos.aplicacion.auditor import Auditor
-from pos.aplicacion.puertos import RepositorioFacturasCompra, RepositorioProveedores
+from pos.aplicacion.puertos import (
+    ColaSincronizacion,
+    RepositorioFacturasCompra,
+    RepositorioProveedores,
+)
+from pos.aplicacion.sincronizacion import encolar_proveedor
 from pos.dominio.compras import Proveedor
 from pos.dominio.errores import ReglaCompraInvalida
 
@@ -30,6 +35,7 @@ class GestionarProveedores:
     repositorio: RepositorioProveedores
     repositorio_facturas: RepositorioFacturasCompra | None = None
     auditor: Auditor | None = None
+    cola: ColaSincronizacion | None = None
 
     def nombres(self) -> list[str]:
         """Todos los proveedores conocidos, sin repetir y ordenados."""
@@ -52,6 +58,7 @@ class GestionarProveedores:
             if _plano(existente) == _plano(nombre):
                 raise ReglaCompraInvalida(f"Ya existe el proveedor «{existente}»")
         self.repositorio.agregar(nombre, contacto)
+        encolar_proveedor(self.cola, nombre, contacto)
         if self.auditor is not None:
             self.auditor.registrar("Nuevo proveedor", nombre, "—", "creado")
         return Proveedor(nombre, contacto)

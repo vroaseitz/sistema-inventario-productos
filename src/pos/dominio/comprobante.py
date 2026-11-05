@@ -6,6 +6,7 @@ arma el texto (32 caracteres de ancho); como se manda a la impresora lo resuelve
 
 from __future__ import annotations
 
+import textwrap
 from datetime import datetime
 from decimal import Decimal
 
@@ -80,6 +81,9 @@ def comprobante_de_venta(
             lineas.append(f"  Cuenta de {cliente}"[:ANCHO])
     if venta.vuelto_entregado.monto:
         lineas.append(_dos_columnas("Cambio", formatear_clp(venta.vuelto_entregado.monto)))
+    if venta.nota.strip():  # O-33: la nota de la venta sale en el detalle impreso
+        lineas.append(LINEA)
+        lineas += textwrap.wrap(f"Nota: {venta.nota.strip()}", ANCHO)
     lineas += [LINEA, _centrar("Gracias por su compra")]
     return lineas
 

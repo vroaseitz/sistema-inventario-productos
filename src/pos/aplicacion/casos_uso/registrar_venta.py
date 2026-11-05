@@ -21,7 +21,12 @@ from pos.aplicacion.puertos import (
     RepositorioVentas,
 )
 from pos.aplicacion.registro_movimientos import RegistroMovimientos
-from pos.aplicacion.sincronizacion import encolar_existencia, encolar_lote, encolar_venta
+from pos.aplicacion.sincronizacion import (
+    encolar_existencia,
+    encolar_lote,
+    encolar_movimiento_cliente,
+    encolar_venta,
+)
 from pos.dominio.clientes import MovimientoCliente, TipoMovimientoCliente
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
 from pos.dominio.inventario import TipoMovimiento
@@ -150,16 +155,18 @@ class RegistrarVenta:
     def _cargar_a_la_cuenta(self, venta: Venta, credito: int) -> None:
         productos = len(venta.detalles)
         plural = "s" if productos != 1 else ""
-        self.repositorio_clientes.agregar_movimiento(
-            MovimientoCliente(
-                cliente_id=venta.cliente_id,
-                tipo=TipoMovimientoCliente.CONSUMO,
-                monto=credito,
-                fecha=venta.creado_en.date(),
-                detalle=f"Venta N° {venta.id} · {productos} producto{plural}",
-                venta_uuid=venta.uuid,
-            )
+        movimiento = MovimientoCliente(
+            cliente_id=venta.cliente_id,
+            tipo=TipoMovimientoCliente.CONSUMO,
+            monto=credito,
+            fecha=venta.creado_en.date(),
+            detalle=f"Venta N° {venta.id} · {productos} producto{plural}",
+            venta_uuid=venta.uuid,
         )
+        self.repositorio_clientes.agregar_movimiento(movimiento)
+        cliente = self.repositorio_clientes.obtener(venta.cliente_id)
+        if cliente is not None:
+            encolar_movimiento_cliente(self.cola, cliente, movimiento)
 
     def lotes_de(self, codigo: str) -> list[Lote]:
         """Lotes con saldo del producto, el que vence antes primero."""

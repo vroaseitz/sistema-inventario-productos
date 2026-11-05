@@ -7,6 +7,8 @@ colores en macOS, Windows y Linux por igual: con el tema nativo cada sistema pin
 
 from __future__ import annotations
 
+import contextlib
+import re
 import tkinter as tk
 from tkinter import ttk
 
@@ -53,10 +55,24 @@ def centrar(ventana: tk.Misc, referencia: tk.Misc | None = None) -> None:
     ventana.geometry(f"+{x}+{y}")
 
 
+_NUMERICO = re.compile(r"^[\s$]*[\d.,]+\s*%?$")
+
+
+def _seleccionar_si_es_numero(evento: tk.Event) -> None:
+    """R-03: al entrar a un campo con un numero (p. ej. el 0 de la meta), queda seleccionado: lo
+    que se escribe lo reemplaza en vez de quedar pegado detras del 0."""
+    campo = evento.widget
+    with contextlib.suppress(tk.TclError, AttributeError):
+        if _NUMERICO.match(campo.get()):
+            campo.after_idle(lambda: campo.select_range(0, "end"))
+
+
 def aplicar_tema(raiz: tk.Misc) -> ttk.Style:
     """Deja los widgets ttk con el aspecto del prototipo. Se llama una vez al abrir la ventana."""
     estilo = ttk.Style(raiz)
     estilo.theme_use("clam")
+    raiz.bind_class("TEntry", "<FocusIn>", _seleccionar_si_es_numero, add="+")
+    raiz.bind_class("Entry", "<FocusIn>", _seleccionar_si_es_numero, add="+")
     raiz.configure(bg=PAPEL)
     raiz.option_add("*Toplevel.background", PAPEL)  # cuadros de dialogo: fondo claro siempre
     # Widgets tk "crudos": sin esto toman los colores del modo oscuro del sistema (texto blanco).

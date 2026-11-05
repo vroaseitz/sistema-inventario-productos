@@ -19,6 +19,7 @@ from pos.dominio.formato import formatear_cantidad
 from pos.dominio.pagos import MedioPago
 from pos.interfaz import tema
 from pos.interfaz.campo_fecha import CampoFecha
+from pos.interfaz.combo_filtrable import ComboFiltrable
 from pos.interfaz.exportar import exportar_con_dialogo
 
 
@@ -201,12 +202,8 @@ class VentanaReportes(ttk.Frame):
                 ("Hasta", self._r_hasta),
                 (
                     "Categoría",
-                    ttk.Combobox(
-                        filtros,
-                        textvariable=self._r_categoria,
-                        values=list(self._categorias_para_filtro()),
-                        state="readonly",
-                        width=22,
+                    ComboFiltrable(
+                        filtros, self._r_categoria, list(self._categorias_para_filtro()), 22
                     ),
                 ),
                 (
@@ -337,8 +334,12 @@ class VentanaReportes(ttk.Frame):
             )
         ):
             ttk.Label(filtros, text=texto).grid(row=0, column=columna, sticky="w", padx=4)
-            ttk.Combobox(
-                filtros, textvariable=variable, values=valores, state="readonly", width=ancho
+            (
+                ComboFiltrable(filtros, variable, valores, ancho)
+                if texto == "Categoría"
+                else ttk.Combobox(
+                    filtros, textvariable=variable, values=valores, state="readonly", width=ancho
+                )
             ).grid(row=1, column=columna, padx=4, sticky="w")
         tema.BotonAccion(
             filtros,

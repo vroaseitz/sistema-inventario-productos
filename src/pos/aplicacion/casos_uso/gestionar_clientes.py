@@ -6,13 +6,20 @@ import unicodedata
 from dataclasses import dataclass
 from datetime import date
 
-from pos.aplicacion.puertos import RepositorioClientes, RepositorioTurnosCaja
+from pos.aplicacion.puertos import ColaSincronizacion, RepositorioClientes, RepositorioTurnosCaja
+from pos.aplicacion.sincronizacion import encolar_cliente, encolar_movimiento_cliente
 from pos.dominio.clientes import (
+    MEDIO_DESCUENTO,
     MEDIOS_ABONO,
     Cliente,
     MovimientoCliente,
     TipoMovimientoCliente,
+    abonos_del_ciclo,
+    consumos_del_ciclo,
+    descuento_credito,
+    detalle_descuento,
     saldo_de,
+    total_a_pagar,
 )
 from pos.dominio.errores import ReglaClienteInvalida
 from pos.dominio.formato import formatear_clp
@@ -28,6 +35,7 @@ def _clave(nombre: str) -> str:
 @dataclass
 class GestionarClientes:
     repositorio: RepositorioClientes
+    cola: ColaSincronizacion | None = None
 
     def crear(
         self, nombre: str, telefono: str = "", correo: str = "", observaciones: str = ""
@@ -35,6 +43,7 @@ class GestionarClientes:
         cliente = Cliente(nombre, telefono, correo, observaciones)  # valida nombre y contacto
         self._validar_nombre_unico(cliente)
         self.repositorio.guardar(cliente)
+        encolar_cliente(self.cola, cliente)
         return cliente
 
     def modificar(
@@ -49,6 +58,7 @@ class GestionarClientes:
         cliente = Cliente(nombre, telefono, correo, observaciones, actual.activo, actual.id)
         self._validar_nombre_unico(cliente)
         self.repositorio.guardar(cliente)
+        encolar_cliente(self.cola, cliente)
         return cliente
 
     def cambiar_estado(self, cliente_id: int, activo: bool) -> Cliente:
@@ -56,6 +66,7 @@ class GestionarClientes:
         cliente = self._obtener(cliente_id)
         cliente.activo = activo
         self.repositorio.guardar(cliente)
+        encolar_cliente(self.cola, cliente)
         return cliente
 
     def _obtener(self, cliente_id: int) -> Cliente:
@@ -76,6 +87,7 @@ class RegistrarAbono:
 
     repositorio_clientes: RepositorioClientes
     repositorio_turnos: RepositorioTurnosCaja
+    cola: ColaSincronizacion | None = None
 
     def ejecutar(
         self,
@@ -116,4 +128,68 @@ class RegistrarAbono:
             turno_caja_id=turno_id,
         )
         self.repositorio_clientes.agregar_movimiento(movimiento)
+        encolar_movimiento_cliente(self.cola, cliente, movimiento)
         return movimiento
+
+
+@dataclass
+class PagarEstadoDeCuenta:
+    """Registra el pago del estado de cuenta de un ciclo (HU-CLI-04).
+
+    El cliente paga lo que dice el estado (consumos menos el 20 %) por transferencia, y el
+    descuento se asienta aparte para que la deuda quede en cero. Solo se hace una vez por ciclo y
+    solo cuando alguien lo confirma: emitir o reemitir el estado de cuenta no toca la cuenta.
+    """
+
+    repositorio_clientes: RepositorioClientes
+    cola: ColaSincronizacion | None = None
+
+    def calcular(self, cliente_id: int, anio: int, mes: int) -> tuple[int, int]:
+        """(a pagar por transferencia, descuento) de lo que falta del ciclo."""
+        movimientos = self.repositorio_clientes.movimientos(cliente_id)
+        consumos = consumos_del_ciclo(movimientos, anio, mes)
+        if consumos <= 0:
+            raise ReglaClienteInvalida("El cliente no tiene consumos en ese ciclo")
+        marca = detalle_descuento(anio, mes)
+        if any(m.detalle == marca for m in movimientos):
+            raise ReglaClienteInvalida("El descuento de este ciclo ya se aplicó")
+        descuento = descuento_credito(consumos)
+        a_pagar = max(0, total_a_pagar(consumos) - abonos_del_ciclo(movimientos, anio, mes))
+        if a_pagar + descuento > saldo_de(movimientos):
+            raise ReglaClienteInvalida(
+                "El saldo del cliente es menor que lo que quedaría por pagar: revisa su cuenta"
+            )
+        return a_pagar, descuento
+
+    def ejecutar(
+        self, cliente_id: int, anio: int, mes: int, fecha: date | None = None
+    ) -> tuple[MovimientoCliente | None, MovimientoCliente]:
+        """Devuelve (abono por transferencia o None si ya estaba pagado, descuento asentado)."""
+        cliente = self.repositorio_clientes.obtener(cliente_id)
+        if cliente is None:
+            raise ReglaClienteInvalida("El cliente no existe")
+        a_pagar, descuento = self.calcular(cliente_id, anio, mes)
+        hoy = fecha or date.today()
+        asentado = MovimientoCliente(
+            cliente_id=cliente_id,
+            tipo=TipoMovimientoCliente.ABONO,
+            monto=descuento,
+            fecha=hoy,
+            detalle=detalle_descuento(anio, mes),
+            medio=MEDIO_DESCUENTO,
+        )
+        pago = None
+        if a_pagar > 0:
+            pago = MovimientoCliente(
+                cliente_id=cliente_id,
+                tipo=TipoMovimientoCliente.ABONO,
+                monto=a_pagar,
+                fecha=hoy,
+                detalle=f"Pago del estado de cuenta {mes:02d}-{anio}",
+                medio="transferencia",
+            )
+        for movimiento in (asentado, pago):
+            if movimiento is not None:
+                self.repositorio_clientes.agregar_movimiento(movimiento)
+                encolar_movimiento_cliente(self.cola, cliente, movimiento)
+        return pago, asentado

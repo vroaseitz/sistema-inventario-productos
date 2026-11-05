@@ -113,3 +113,38 @@ def test_el_traductor_crea_la_categoria_remota_y_enlaza_el_producto():
     assert "categoria_id = EXCLUDED.categoria_id" in sentencias[1][0]
     sin = traducir_operacion({**op, "datos": {**op["datos"], "categoria": None}})
     assert len(sin) == 1 and "Sin categoria" in sin[0][0]  # compatibilidad con lo ya encolado
+
+
+def test_eliminar_categoria_solo_si_no_tiene_productos_y_queda_en_la_auditoria(base):
+    """CA-17: con productos no se elimina (se pide fusionar); sin productos se borra y se audita."""
+    from pos.aplicacion.auditor import Auditor
+    from pos.aplicacion.casos_uso.gestionar_categorias import GestionarCategorias
+    from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite
+
+    repo = RepositorioCategoriasSQLite(base)
+    productos = RepositorioProductosSQLite(base)
+    cola = ColaSincronizacionSQLite(base)
+    auditoria = RepositorioAuditoriaSQLite(base)
+    gestion = GestionarCategorias(
+        repo, productos, cola=cola, auditor=Auditor(auditoria, lambda: "admin")
+    )
+    ocupada = gestion.crear("Con productos")
+    vacia = gestion.crear("Sin productos")
+    productos.guardar(Producto("P1", "Uno", Dinero(1000), UnidadVenta.UNIDAD, ocupada.id))
+
+    with pytest.raises(DatosProductoInvalidos, match="1 producto: usa «Fusionar»"):
+        gestion.eliminar(ocupada.id)
+    assert repo.obtener(ocupada.id) is not None  # sigue ahi
+
+    gestion.eliminar(vacia.id)
+    assert repo.obtener(vacia.id) is None
+    assert any(
+        f["accion"] == "Eliminación de categoría" and f["registro"] == "Sin productos"
+        for f in auditoria.listar()
+    )
+    assert any(
+        p["entidad"] == "categoria_eliminar" and p["datos"]["nombre"] == "Sin productos"
+        for p in cola.pendientes()
+    )
+    with pytest.raises(DatosProductoInvalidos, match="no existe"):
+        gestion.eliminar(vacia.id)  # ya no esta

@@ -6,16 +6,20 @@ persona) sin reconstruir los casos de uso.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
-from pos.aplicacion.puertos import RepositorioAuditoria
+from pos.aplicacion.puertos import ColaSincronizacion, RepositorioAuditoria
+from pos.aplicacion.sincronizacion import encolar_auditoria
 
 
 @dataclass
 class Auditor:
     repositorio: RepositorioAuditoria
     usuario: Callable[[], str]
+    cola: ColaSincronizacion | None = None
 
     def registrar(
         self,
@@ -25,6 +29,18 @@ class Auditor:
         despues: str = "",
         detalle: dict | None = None,
     ) -> None:
-        self.repositorio.registrar(
-            self.usuario() or "sistema", accion, detalle or {}, registro, antes, despues
+        quien = self.usuario() or "sistema"
+        id_local = self.repositorio.registrar(
+            quien, accion, detalle or {}, registro, antes, despues
+        )
+        encolar_auditoria(
+            self.cola,
+            id_local,
+            datetime.now().isoformat(timespec="seconds"),
+            quien,
+            accion,
+            registro,
+            antes,
+            despues,
+            json.dumps(detalle or {}, ensure_ascii=False),
         )

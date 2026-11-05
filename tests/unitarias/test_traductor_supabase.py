@@ -111,7 +111,7 @@ def test_venta_sin_pagos_o_sin_lineas_no_se_traduce():
 
 def test_entidad_no_soportada_falla():
     with pytest.raises(ValueError):
-        traducir_operacion(_op("cliente", {"nombre": "x"}))
+        traducir_operacion(_op("usuario", {"nombre": "x"}))  # los usuarios no viajan a la nube
 
 
 def test_producto_lleva_costo_perecible_dias_y_minimo():
@@ -197,3 +197,124 @@ def test_lote_lleva_el_codigo_impreso():
         )
     )
     assert params == ("l1", "2026-12-01", "10", "LT-77", "YOG")
+
+
+def test_cambio_de_codigo_renombra_el_producto_y_no_pisa_a_otro():
+    """CA-19: el destino renombra el producto; si el codigo nuevo ya existe, no hace nada."""
+    ((sql, params),) = traducir_operacion(
+        _op("producto_codigo", {"anterior": "111", "nuevo": "222"})
+    )
+    assert sql.startswith("UPDATE pos.producto SET codigo = %s WHERE codigo = %s")
+    assert "NOT EXISTS" in sql  # reintentar o chocar con otro codigo es inofensivo
+    assert params == ("222", "111", "222")
+
+
+CLIENTE = {
+    "id": "cliente:7",
+    "nombre": "Carolina Muñoz",
+    "telefono": "+56 9 1111 1111",
+    "correo": "",
+    "observaciones": "Familia",
+    "activo": True,
+}
+
+
+def test_cliente_es_upsert_por_su_id_y_tiene_credito():
+    ((sql, params),) = traducir_operacion(_op("cliente", CLIENTE))
+    assert "INSERT INTO pos.cliente" in sql and "ON CONFLICT (id_cliente) DO UPDATE" in sql
+    assert params == ("cliente:7", "Carolina Muñoz", "+56 9 1111 1111", "", "Familia", True)
+
+
+def test_el_consumo_es_un_cargo_y_lleva_al_cliente_por_si_aun_no_llego():
+    datos = {
+        "uuid": "mov-1",
+        "cliente": CLIENTE,
+        "tipo": "consumo",
+        "monto": 5950,
+        "fecha": "2026-11-05",
+        "detalle": "Venta N° 3 · 1 producto",
+        "medio": None,
+        "venta_uuid": "venta-uuid-3",
+    }
+    sentencias = traducir_operacion(_op("movimiento_cliente", datos))
+    assert "INSERT INTO pos.cliente" in sentencias[0][0]  # el cliente entra primero
+    sql, params = sentencias[1]
+    assert (
+        "INSERT INTO pos.movimiento_credito" in sql and "ON CONFLICT (id_cliente) DO NOTHING" in sql
+    )
+    assert params[:4] == ("mov-1", "venta-uuid-3", "cargo", 5950)  # consumo -> cargo
+    assert params[-1] == "cliente:7"
+
+
+def test_el_abono_y_el_descuento_conservan_su_tipo_y_medio():
+    datos = {
+        "uuid": "mov-2",
+        "cliente": CLIENTE,
+        "tipo": "abono",
+        "monto": 22054,
+        "fecha": "2026-11-05",
+        "detalle": "Descuento crédito familiar 11-2026",
+        "medio": "descuento",
+        "venta_uuid": None,
+    }
+    _, (_, params) = traducir_operacion(_op("movimiento_cliente", datos))
+    assert params[2] == "abono" and params[5] == "descuento" and params[1] is None
+
+
+def test_proveedor_no_se_duplica_aunque_cambie_la_mayuscula():
+    ((sql, params),) = traducir_operacion(
+        _op("proveedor", {"nombre": "Sur Natural", "contacto": ""})
+    )
+    assert "ON CONFLICT (lower(nombre))" in sql and params == ("Sur Natural", "")
+
+
+def test_factura_va_en_una_sola_sentencia_con_el_proveedor_asegurado_antes():
+    datos = {
+        "proveedor": "Sur Natural",
+        "numero": "F-1001",
+        "fecha": "2026-11-05",
+        "neto": 156000,
+        "impuestos": 29640,
+        "estado": "confirmada",
+        "lineas": [
+            {
+                "codigo": "A",
+                "cantidad": "20",
+                "costo": 2500,
+                "costo_anterior": None,
+                "vence": None,
+                "lote": "",
+            },
+            {
+                "codigo": "B",
+                "cantidad": "24",
+                "costo": 1500,
+                "costo_anterior": 1400,
+                "vence": "2026-11-08",
+                "lote": "L-1",
+            },
+        ],
+    }
+    asegurar, (sql, params) = traducir_operacion(_op("factura_compra", datos))
+    assert "INSERT INTO pos.proveedor" in asegurar[0] and "DO NOTHING" in asegurar[0]
+    assert "ON CONFLICT (proveedor_id, numero_factura) DO NOTHING" in sql  # reintentar no duplica
+    assert sql.count("%s") == len(params) == 6 + 2 * 6  # 6 de la cabecera + 6 por linea
+    assert params[:6] == ("F-1001", "2026-11-05", 156000, 29640, "confirmada", "Sur Natural")
+    with pytest.raises(ValueError):
+        traducir_operacion(_op("factura_compra", {**datos, "lineas": []}))
+
+
+def test_auditoria_se_guarda_una_vez_por_su_id():
+    datos = {
+        "id": "auditoria:12",
+        "fecha": "2026-11-05T10:00:00",
+        "usuario": "admin",
+        "accion": "Cambio de precio",
+        "registro": "Miel (7801)",
+        "antes": "$4.990",
+        "despues": "$5.490",
+        "detalle": "{}",
+    }
+    ((sql, params),) = traducir_operacion(_op("auditoria", datos))
+    assert "ON CONFLICT (id_cliente) DO NOTHING" in sql and "to_jsonb" in sql
+    assert params[0] == "auditoria:12" and params[2] == "admin" and params[-1] == datos["fecha"]

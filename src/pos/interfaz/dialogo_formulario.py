@@ -12,6 +12,8 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
+from pos.interfaz.combo_filtrable import ComboFiltrable
+
 Campo = tuple[str, str, str, "str | list[str] | None"]
 
 
@@ -38,9 +40,7 @@ def pedir_formulario(
         ttk.Label(ventana, text=etiqueta).grid(row=fila, column=0, sticky="w", padx=12, pady=4)
         variables[clave] = tk.StringVar(value=inicial)
         if isinstance(opciones, list):
-            widget = ttk.Combobox(
-                ventana, textvariable=variables[clave], values=opciones, state="readonly", width=24
-            )
+            widget = ComboFiltrable(ventana, variables[clave], opciones, 24)  # CA-18
         else:
             widget = ttk.Entry(
                 ventana,
@@ -55,6 +55,9 @@ def pedir_formulario(
         fila += 1
 
     def confirmar(_evento: object = None) -> None:
+        for widget in ventana.winfo_children():
+            if isinstance(widget, ComboFiltrable):
+                widget.confirmar()  # lo escrito a medias se resuelve antes de aceptar
         if aceptar({clave: variable.get() for clave, variable in variables.items()}):
             ventana.destroy()
 

@@ -12,22 +12,31 @@ import tkinter as tk
 from datetime import date, datetime
 from tkinter import messagebox, ttk
 
-from pos.aplicacion.casos_uso.gestionar_clientes import GestionarClientes, RegistrarAbono
+from pos.aplicacion.casos_uso.gestionar_clientes import (
+    GestionarClientes,
+    PagarEstadoDeCuenta,
+    RegistrarAbono,
+)
 from pos.aplicacion.puertos import RepositorioClientes
 from pos.dominio.clientes import (
+    MEDIO_DESCUENTO,
+    PORCENTAJE_DESCUENTO_CREDITO,
     Cliente,
     TipoMovimientoCliente,
     abonos_del_ciclo,
     consumos_del_ciclo,
+    descuento_credito,
     en_ciclo,
     saldo_anterior,
     saldo_de,
+    total_a_pagar,
     ultimo_consumo,
 )
 from pos.dominio.errores import ErrorDominio
-from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.dominio.formato import formatear_cantidad, formatear_clp, parsear_monto
 from pos.interfaz import tema
 from pos.interfaz.campo_fecha import CampoFecha
+from pos.interfaz.exportar import exportar_con_dialogo
 
 MESES = (
     "Enero",
@@ -78,11 +87,13 @@ class VentanaClientes(ttk.Frame):
         gestion: GestionarClientes,
         abonar: RegistrarAbono,
         repo_clientes: RepositorioClientes,
+        pagar_estado: PagarEstadoDeCuenta | None = None,
     ) -> None:
         super().__init__(parent, padding=8)
         self._gestion = gestion
         self._abonar = abonar
         self._repo = repo_clientes
+        self._pagador = pagar_estado or PagarEstadoDeCuenta(repo_clientes)
         self._cliente_id: int | None = None  # cliente de la pestana Cuenta / Estado de cuenta
         self._ciclo = tk.StringVar(value=_ultimos_ciclos(1)[0])
         self._ciclo_saldos = tk.StringVar(value=_ultimos_ciclos(1)[0])
@@ -228,17 +239,46 @@ class VentanaClientes(ttk.Frame):
                 ("monto", "Monto", 110, "e"),
             ),
         )
-        self._tabla_estado.pack(fill="both", expand=True, pady=8)
-        self._lbl_consumos = ttk.Label(marco, text="Consumos del ciclo: $0")
-        self._lbl_consumos.pack(anchor="e")
-        ttk.Label(marco, text="Descuento del crédito familiar: por confirmar").pack(anchor="e")
-        ttk.Label(marco, text="Total a pagar: por confirmar").pack(anchor="e")
+        self._tabla_estado.tag_configure("linea", foreground="#555")
+        # Lo de abajo se empaqueta primero: si la ventana es baja, la tabla cede el espacio.
         ttk.Label(
             marco,
-            text="La regla del descuento sigue pendiente con la Product Owner (falta un ejemplo "
-            "numérico real); el sistema no inventa el cálculo.",
-            foreground="#a11",
-        ).pack(anchor="w", pady=(8, 0))
+            text=f"Al cierre del ciclo se descuenta el {PORCENTAJE_DESCUENTO_CREDITO} % del total "
+            "de consumos del mes (HU-CLI-04). Reemitir el estado de cuenta no genera movimientos.",
+            foreground="#666",
+        ).pack(side="bottom", anchor="w", pady=(8, 0))
+        resumen = ttk.Frame(marco)
+        resumen.pack(side="bottom", anchor="e")
+        self._lbl_resumen = {}
+        self._rotulos_resumen = {}
+        for fila, (clave, rotulo, negrita) in enumerate(
+            (
+                ("anterior", "Saldo anterior", False),
+                ("consumos", "Consumos del ciclo", False),
+                (
+                    "descuento",
+                    f"Descuento del crédito familiar ({PORCENTAJE_DESCUENTO_CREDITO} %)",
+                    False,
+                ),
+                ("total", "Total a pagar del ciclo", True),
+                ("abonos", "Abonos del ciclo", False),
+                ("final", "Saldo final", True),
+            )
+        ):
+            fuente = ("", 11, "bold") if negrita else ("", 10)
+            etiqueta = ttk.Label(resumen, text=rotulo, font=fuente)
+            etiqueta.grid(row=fila, column=0, sticky="e", padx=8)
+            self._rotulos_resumen[clave] = etiqueta
+            valor = ttk.Label(resumen, text="—", font=fuente, anchor="e", width=14)
+            valor.grid(row=fila, column=1, sticky="e")
+            self._lbl_resumen[clave] = valor
+        botones = ttk.Frame(marco)
+        botones.pack(side="bottom", anchor="e", pady=(6, 0))
+        ttk.Button(
+            botones, text="Registrar pago del estado de cuenta", command=self._pagar_estado
+        ).pack(side="left", padx=6)
+        ttk.Button(botones, text="Exportar", command=self._exportar_estado).pack(side="left")
+        self._tabla_estado.pack(fill="both", expand=True, pady=8)
 
     def _construir_saldos(self) -> None:
         marco = ttk.Frame(self._pestanas, padding=8)
@@ -349,7 +389,9 @@ class VentanaClientes(ttk.Frame):
                 "end",
                 values=(
                     _fecha(m.fecha),
-                    "Consumo" if es_consumo else "Abono",
+                    "Consumo"
+                    if es_consumo
+                    else ("Descuento" if m.medio == MEDIO_DESCUENTO else "Abono"),
                     m.detalle,
                     formatear_clp(m.monto) if es_consumo else "",
                     "" if es_consumo else formatear_clp(m.monto),
@@ -358,12 +400,78 @@ class VentanaClientes(ttk.Frame):
             )
         self._lbl_estado.config(text=f"{cliente.nombre} · ciclo de {self._ciclo.get()}")
         for m in ciclo:
-            if m.tipo is TipoMovimientoCliente.CONSUMO:
+            if m.tipo is not TipoMovimientoCliente.CONSUMO:
+                continue
+            self._tabla_estado.insert(
+                "", "end", values=(_fecha(m.fecha), m.detalle, formatear_clp(m.monto))
+            )
+            for linea in self._lineas_de(m):  # CL-02: cada consumo lista sus productos
                 self._tabla_estado.insert(
-                    "", "end", values=(_fecha(m.fecha), m.detalle, formatear_clp(m.monto))
+                    "",
+                    "end",
+                    tags=("linea",),
+                    values=(
+                        "",
+                        f"      {formatear_cantidad(linea.cantidad)} × {linea.nombre}",
+                        formatear_clp(linea.monto),
+                    ),
                 )
-        self._lbl_consumos.config(
-            text=f"Consumos del ciclo: {formatear_clp(consumos_del_ciclo(movs, anio, mes))}"
+        consumos = consumos_del_ciclo(movs, anio, mes)
+        abonos = abonos_del_ciclo(movs, anio, mes)
+        descuento = descuento_credito(consumos)
+        self._lbl_resumen["anterior"].config(text=formatear_clp(saldo_anterior(movs, anio, mes)))
+        self._lbl_resumen["consumos"].config(text=formatear_clp(consumos))
+        self._lbl_resumen["descuento"].config(text=f"- {formatear_clp(descuento)}")
+        self._lbl_resumen["total"].config(text=formatear_clp(total_a_pagar(consumos)))
+        self._lbl_resumen["abonos"].config(text=formatear_clp(abonos))
+        self._lbl_resumen["final"].config(text=formatear_clp(corrido))
+
+    def _pagar_estado(self) -> None:
+        """Asienta el pago del ciclo: abono por transferencia + descuento, y la deuda queda en 0."""
+        if self._cliente_id is None:
+            messagebox.showinfo("Estado de cuenta", "Elige un cliente en la lista.")
+            return
+        anio, mes = _ciclo_de(self._ciclo.get())
+        try:
+            a_pagar, descuento = self._pagador.calcular(self._cliente_id, anio, mes)
+        except ErrorDominio as error:
+            messagebox.showerror("Estado de cuenta", str(error))
+            return
+        if not messagebox.askyesno(
+            "Registrar pago del estado de cuenta",
+            f"Ciclo de {self._ciclo.get()}.\n\n"
+            f"Se registra un abono por transferencia de {formatear_clp(a_pagar)} y el descuento "
+            f"del crédito familiar de {formatear_clp(descuento)}.\n\n"
+            "No se puede deshacer: un error se corrige con otro movimiento. ¿Continuar?",
+        ):
+            return
+        try:
+            self._pagador.ejecutar(self._cliente_id, anio, mes)
+        except ErrorDominio as error:
+            messagebox.showerror("Estado de cuenta", str(error))
+            return
+        self._refrescar_cuenta()
+        self.refrescar()
+        messagebox.showinfo("Estado de cuenta", "Pago del estado de cuenta registrado.")
+
+    def _lineas_de(self, movimiento) -> list:
+        """Productos de un consumo a credito (vacio si el consumo no viene de una venta)."""
+        if not movimiento.venta_uuid:
+            return []
+        consultar = getattr(self._repo, "lineas_de_consumo", None)
+        return consultar(movimiento.venta_uuid) if consultar else []
+
+    def _exportar_estado(self) -> None:
+        filas = [self._tabla_estado.item(i, "values") for i in self._tabla_estado.get_children()]
+        if not filas:
+            messagebox.showinfo("Estado de cuenta", "Elige un cliente con consumos en el ciclo.")
+            return
+        resumen = [
+            (self._rotulos_resumen[clave].cget("text"), "", valor.cget("text"))
+            for clave, valor in self._lbl_resumen.items()
+        ]
+        exportar_con_dialogo(
+            "estado-de-cuenta.csv", ("Fecha", "Detalle", "Monto"), [*filas, ("", "", ""), *resumen]
         )
 
     def _refrescar_saldos(self) -> None:

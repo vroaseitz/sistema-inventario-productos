@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import tkinter as tk
+from datetime import date
 from pathlib import Path
 from tkinter import messagebox, ttk
 
@@ -89,6 +90,44 @@ boton(dlg, "Guardar cliente").invoke()
 app.update()
 cliente = cli._repo.listar()[0]
 verificar(cliente.telefono == "+56 9 2222 2222", "modificar guarda el teléfono nuevo")
+
+# estado de cuenta (CL-03 y CL-02): descuento del 20 % y productos de cada consumo
+from pos.dominio.clientes import MovimientoCliente, TipoMovimientoCliente  # noqa: E402
+
+app._marcos["F2"]._registrar.ejecutar("EC1", "Miel de ulmo 500 g", 4990, categoria_id=1, costo=2500)
+con = cli._repo._con
+con.execute("INSERT INTO turnos_caja (id, usuario_id, fondo_inicial) VALUES (900, 1, 0)")
+con.execute(
+    "INSERT INTO ventas (id, turno_caja_id, usuario_id, estado, creado_en, uuid) "
+    "VALUES (900, 900, 1, 'pagada', datetime('now'), 'u-900')"
+)
+con.execute(
+    "INSERT INTO venta_detalles (venta_id, producto_codigo, cantidad, precio_unitario, "
+    "descuento_linea) VALUES (900, 'EC1', '2', 4990, 990)"
+)
+cliente_id = cli._repo.listar()[0].id
+cli._repo.agregar_movimiento(
+    MovimientoCliente(
+        cliente_id,
+        TipoMovimientoCliente.CONSUMO,
+        8990,
+        date.today(),
+        "Venta N° 900 · 1 producto",
+        venta_uuid="u-900",
+    )
+)
+cli._cliente_id = cliente_id
+cli._refrescar_cuenta()
+app.update()
+filas_ec = [cli._tabla_estado.item(i, "values") for i in cli._tabla_estado.get_children()]
+verificar(len(filas_ec) == 2, f"el consumo trae su línea de producto {filas_ec}")
+verificar("Miel de ulmo 500 g" in filas_ec[1][1] and "2 ×" in filas_ec[1][1], "producto y cantidad")
+verificar(filas_ec[1][2] == "$8.990", "monto de la línea (2 x 4.990 - 990)")
+r = cli._lbl_resumen
+verificar(r["consumos"].cget("text") == "$8.990", "consumos del ciclo")
+verificar(r["descuento"].cget("text") == "- $1.798", "descuento del 20 % (8.990 x 0,2)")
+verificar(r["total"].cget("text") == "$7.192", "total a pagar = consumos - descuento")
+verificar(r["final"].cget("text") == "$8.990", "saldo final = lo que se debe (sin abonos)")
 
 # desactivar
 cli._tabla_lista.selection_set(cli._tabla_lista.get_children()[0])

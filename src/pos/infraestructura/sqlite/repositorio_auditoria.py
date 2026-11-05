@@ -19,8 +19,9 @@ class RepositorioAuditoriaSQLite:
         registro: str = "",
         antes: str = "",
         despues: str = "",
-    ) -> None:
-        self._con.execute(
+    ) -> int:
+        """Guarda la entrada y devuelve su id (sirve de clave al sincronizar)."""
+        cursor = self._con.execute(
             "INSERT INTO auditoria (fecha, usuario, accion, detalle, registro, antes, despues) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
@@ -34,6 +35,7 @@ class RepositorioAuditoriaSQLite:
             ),
         )
         self._con.commit()
+        return cursor.lastrowid
 
     def listar(
         self,

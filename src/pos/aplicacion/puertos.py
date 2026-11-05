@@ -12,7 +12,7 @@ from typing import Protocol, runtime_checkable
 
 from pos.dominio.caja import MovimientoCaja, TurnoCaja
 from pos.dominio.categorias import Categoria
-from pos.dominio.clientes import Cliente, MovimientoCliente
+from pos.dominio.clientes import Cliente, LineaConsumo, MovimientoCliente
 from pos.dominio.compras import FacturaCompra, Proveedor
 from pos.dominio.inventario import (
     AjusteInventario,
@@ -32,6 +32,7 @@ class RepositorioProductos(Protocol):
     def obtener_por_codigo(self, codigo: str) -> Producto | None: ...
     def listar(self) -> list[Producto]: ...
     def buscar(self, termino: str) -> list[Producto]: ...
+    def cambiar_codigo(self, anterior: str, nuevo: str) -> None: ...
 
 
 @runtime_checkable
@@ -147,6 +148,7 @@ class RepositorioClientes(Protocol):
     def agregar_movimiento(self, movimiento: MovimientoCliente) -> None: ...
     def movimientos(self, cliente_id: int) -> list[MovimientoCliente]: ...
     def abonos_en_efectivo_del_turno(self, turno_caja_id: int) -> int: ...
+    def lineas_de_consumo(self, venta_uuid: str) -> list[LineaConsumo]: ...
 
 
 @runtime_checkable
@@ -180,7 +182,7 @@ class RepositorioAuditoria(Protocol):
         registro: str = "",
         antes: str = "",
         despues: str = "",
-    ) -> None: ...
+    ) -> int: ...
     def listar(
         self,
         accion: str | None = None,

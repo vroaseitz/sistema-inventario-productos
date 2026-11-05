@@ -45,7 +45,7 @@ from pos.aplicacion.puertos import (
 from pos.dominio.caja import TipoMovimientoCaja, calcular_arqueo
 from pos.dominio.clientes import saldo_de
 from pos.dominio.errores import ErrorDominio, ErrorImpresion
-from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.dominio.formato import formatear_clp, parsear_monto, rango_de_busqueda
 from pos.dominio.pagos import (
     DENOMINACIONES_CLP,
     ConteoDenominaciones,
@@ -82,6 +82,16 @@ MOTIVOS_MOVIMIENTO_CAJA = (
     "Retiro por resguardo durante la jornada",
     "Propinas en fechas especiales",
 )
+# O-35: cada tipo muestra solo sus motivos. Las propinas son un retiro: segun la Product Owner
+# (acta del 22-09) «se entregan propinas en fechas especiales», es decir, sale plata de la caja.
+MOTIVOS_POR_TIPO = {
+    TipoMovimientoCaja.INGRESO: (MOTIVOS_MOVIMIENTO_CAJA[0],),
+    TipoMovimientoCaja.RETIRO: (
+        MOTIVOS_MOVIMIENTO_CAJA[1],
+        MOTIVOS_MOVIMIENTO_CAJA[2],
+        MOTIVOS_MOVIMIENTO_CAJA[3],
+    ),
+}
 
 NOMBRES_MEDIO_PAGO = {
     MedioPago.EFECTIVO: "Efectivo",
@@ -548,7 +558,7 @@ class VentanaVentas(ttk.Frame):
 
         columnas = ttk.Frame(padre)
         columnas.pack(fill="x", padx=12, pady=8)
-        izquierda = ttk.LabelFrame(columnas, text="Venta de la jornada", padding=8)
+        izquierda = ttk.LabelFrame(columnas, text="Venta del turno", padding=8)
         izquierda.pack(side="left", fill="both", expand=True, padx=(0, 10))
         self._tabla_jornada = ttk.Treeview(
             izquierda, columns=("medio", "monto"), show="headings", height=5
@@ -881,19 +891,29 @@ class VentanaVentas(ttk.Frame):
 
         ttk.Label(dialogo, text="Tipo").grid(row=0, column=0, padx=8, pady=6, sticky="w")
         tipo_var = StringVar(value=TipoMovimientoCaja.RETIRO.value)
-        ttk.Combobox(
+        combo_tipo = ttk.Combobox(
             dialogo,
             textvariable=tipo_var,
             values=[t.value for t in TipoMovimientoCaja],
             state="readonly",
             width=20,
-        ).grid(row=0, column=1, padx=8, pady=6)
+        )
+        combo_tipo.grid(row=0, column=1, padx=8, pady=6)
 
         ttk.Label(dialogo, text="Motivo").grid(row=1, column=0, padx=8, pady=6, sticky="w")
-        motivo_var = StringVar(value=MOTIVOS_MOVIMIENTO_CAJA[0])
-        ttk.Combobox(
-            dialogo, textvariable=motivo_var, values=MOTIVOS_MOVIMIENTO_CAJA, width=36
-        ).grid(row=1, column=1, padx=8, pady=6)
+        motivos_iniciales = MOTIVOS_POR_TIPO[TipoMovimientoCaja(tipo_var.get())]
+        motivo_var = StringVar(value=motivos_iniciales[0])
+        combo_motivo = ttk.Combobox(
+            dialogo, textvariable=motivo_var, values=motivos_iniciales, state="readonly", width=36
+        )
+        combo_motivo.grid(row=1, column=1, padx=8, pady=6)
+
+        def al_cambiar_tipo(_evento: object = None) -> None:
+            motivos = MOTIVOS_POR_TIPO[TipoMovimientoCaja(tipo_var.get())]
+            combo_motivo.config(values=motivos)
+            motivo_var.set(motivos[0])
+
+        combo_tipo.bind("<<ComboboxSelected>>", al_cambiar_tipo)
 
         ttk.Label(dialogo, text="Observacion").grid(row=2, column=0, padx=8, pady=6, sticky="w")
         entrada_obs = ttk.Entry(dialogo, width=38)
@@ -1047,7 +1067,7 @@ class VentanaVentas(ttk.Frame):
             [("nota", "Nota", venta.nota, None)],
             guardar,
             "Guardar nota",
-            nota="Queda guardada junto al ticket y en la auditoría. No se imprime.",
+            nota="Queda guardada junto al ticket, en la auditoría y en el comprobante impreso.",
         )
 
     def _dialogo_espera(self) -> DialogoEspera:
@@ -1299,6 +1319,14 @@ class VentanaVentas(ttk.Frame):
             messagebox.showerror("Cantidad inválida", "La cantidad debe ser un número")
             return
         producto = self._repo_productos.obtener_por_codigo(codigo)
+        if producto is not None and not producto.activo:
+            # O-31: se avisa al escanearlo o elegirlo, antes de pedir el peso o la cantidad.
+            messagebox.showerror(
+                "No se pudo agregar el producto", f"El producto {producto.nombre} está desactivado"
+            )
+            self._entrada_codigo.delete(0, "end")
+            self._entrada_codigo.focus_set()
+            return
         if producto is not None and producto.unidad_venta is UnidadVenta.GRANEL:
             # O-02b: a granel siempre se pide el peso (con el importe a la vista).
             cantidad = self._pedir_peso(producto)
@@ -1464,9 +1492,13 @@ class VentanaVentas(ttk.Frame):
         def refrescar_lista(*_args: object) -> None:
             termino = _normalizar(entrada.get().strip())
             lista.delete(0, "end")
-            for producto in productos:
-                if termino in _normalizar(producto.nombre):
-                    lista.insert("end", f"{producto.codigo} - {producto.nombre}")
+            coinciden = [p for p in productos if termino in _normalizar(p.nombre)]
+            # CA-15: primero los que empiezan con lo escrito (p. ej. «Té verde» al buscar «te»).
+            coinciden.sort(
+                key=lambda p: (rango_de_busqueda(p.nombre, termino), _normalizar(p.nombre))
+            )
+            for producto in coinciden:
+                lista.insert("end", f"{producto.codigo} - {producto.nombre}")
 
         def elegir(_evento: object = None) -> None:
             seleccion = lista.curselection()
@@ -1476,6 +1508,11 @@ class VentanaVentas(ttk.Frame):
             self._entrada_codigo.delete(0, "end")
             self._entrada_codigo.insert(0, codigo)
             dialogo.destroy()
+            elegido = self._repo_productos.obtener_por_codigo(codigo)
+            if elegido is not None and elegido.unidad_venta is UnidadVenta.GRANEL:
+                # O-32: un granel elegido en F10 pide el peso de inmediato y entra al ticket.
+                self._agregar_producto()
+                return
             self._entrada_cantidad.focus_set()
 
         def elegir_con_enter(_evento: object = None) -> None:

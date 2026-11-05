@@ -107,6 +107,22 @@ def test_el_comprobante_cabe_en_el_papel_y_dice_que_no_es_tributario(app):
     assert "Atendió: ana" in texto
 
 
+def test_la_nota_de_la_venta_sale_en_el_comprobante_y_cabe_en_el_papel(app):
+    """O-33: la nota (Ctrl+N) no se pierde: aparece en el detalle impreso, en varias lineas."""
+    venta = _vender(app)
+    venta.nota = "Retira mañana por la tarde; el cliente pide factura a nombre de la empresa"
+    lineas = comprobante_de_venta(venta, {"AVE": "Barra de avena", "NUE": "Nueces"})
+    assert all(len(linea) <= ANCHO for linea in lineas)
+    texto = "\n".join(lineas)
+    unido = " ".join(texto.split())  # la nota se parte en lineas de 32 caracteres
+    assert (
+        "Nota: Retira mañana por la tarde; el cliente pide factura a nombre de la empresa" in unido
+    )
+    assert texto.index("Nota:") > texto.index("TOTAL")  # va despues del total y los pagos
+    venta.nota = "  "
+    assert "Nota:" not in "\n".join(comprobante_de_venta(venta, {}))  # sin nota, no hay linea
+
+
 def test_cobrar_e_imprimir_abre_el_cajon_solo_con_efectivo(app):
     app.imprimir.comprobante(_vender(app))
     app.imprimir.comprobante(_vender(app, MedioPago.TARJETA))

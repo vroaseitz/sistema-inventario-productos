@@ -1,10 +1,11 @@
-"""Categorias del catalogo: crear, renombrar, fusionar y desactivar (CA-16, HU-PRD-10).
+"""Categorias del catalogo: crear, renombrar, fusionar, desactivar y eliminar (CA-16/17, HU-PRD-10).
 
 Renombrar cambia solo la etiqueta: los productos siguen siendo los mismos y el historial de ventas
 queda intacto. Si el nombre nuevo ya existe se rechaza y se propone fusionar. Fusionar pasa todos
 los productos de una categoria a otra y borra la de origen; no se puede deshacer y queda en la
 auditoria con quien la hizo y cuantos productos movio. Desactivar la saca del selector sin tocar los
-productos que ya la usan (una categoria con productos nunca se borra a la fuerza).
+productos que ya la usan. Eliminar solo se permite si no tiene productos (nunca se borra a la
+fuerza); queda en la auditoria.
 """
 
 from __future__ import annotations
@@ -81,6 +82,19 @@ class GestionarCategorias:
             {"productos_movidos": movidos},
         )
         return movidos
+
+    def eliminar(self, categoria_id: int) -> None:
+        """Borra una categoria SIN productos (CA-17). Si los tiene, pide fusionar o reasignar."""
+        categoria = self._obtener(categoria_id)
+        usados = self.repositorio.contar_productos().get(categoria_id, 0)
+        if usados:
+            raise DatosProductoInvalidos(
+                f"«{categoria.nombre}» tiene {usados} producto{'s' if usados != 1 else ''}: "
+                "usa «Fusionar» con otra categoría o reasígnalos antes de eliminarla"
+            )
+        self.repositorio.eliminar(categoria_id)
+        encolar_categoria_eliminada(self.cola, categoria.nombre)
+        self._auditar("Eliminación de categoría", categoria.nombre, "Existía", "Eliminada")
 
     def cambiar_estado(self, categoria_id: int, activa: bool) -> Categoria:
         categoria = self._obtener(categoria_id)

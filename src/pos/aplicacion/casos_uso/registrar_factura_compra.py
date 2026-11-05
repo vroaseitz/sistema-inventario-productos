@@ -22,7 +22,7 @@ from pos.aplicacion.puertos import (
     RepositorioProductos,
 )
 from pos.aplicacion.registro_movimientos import RegistroMovimientos
-from pos.aplicacion.sincronizacion import encolar_producto
+from pos.aplicacion.sincronizacion import encolar_factura_compra, encolar_producto
 from pos.dominio.compras import FacturaCompra
 from pos.dominio.errores import ReglaCompraInvalida
 from pos.dominio.value_objects import Costo, Dinero
@@ -85,6 +85,7 @@ class RegistrarFacturaCompra:
                 codigo_lote=linea.codigo_lote,
             )
         self.repositorio_facturas.guardar(factura)
+        encolar_factura_compra(self.cola, factura)
         if self.auditor is not None:
             self.auditor.registrar(
                 "Confirmación de factura",
