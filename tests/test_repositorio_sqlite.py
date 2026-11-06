@@ -7,8 +7,11 @@ Cubre el hallazgo:
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
+from pos.dominio.categorias import CATEGORIAS_VALIDADAS
 from pos.dominio.productos import Producto
 from pos.dominio.value_objects import Costo, Dinero
 from pos.infraestructura.sqlite.conexion import crear_conexion
@@ -19,9 +22,15 @@ from pos.infraestructura.sqlite.repositorio_productos import RepositorioProducto
 class TestOrdenBusqueda:
     def test_orden_busqueda_prioriza_inicio(self, repositorio):
         """QA C-15: los que EMPIEZAN con el termino van primero, luego los que solo lo contienen."""
-        repositorio.guardar(Producto(codigo="A-1", nombre="Aceite", precio=Dinero(2000), categoria_id=1))
-        repositorio.guardar(Producto(codigo="T-1", nombre="Té verde", precio=Dinero(1500), categoria_id=1))
-        repositorio.guardar(Producto(codigo="B-1", nombre="Botella de vidrio", precio=Dinero(3000), categoria_id=1))
+        repositorio.guardar(
+            Producto(codigo="A-1", nombre="Aceite", precio=Dinero(2000), categoria_id=1)
+        )
+        repositorio.guardar(
+            Producto(codigo="T-1", nombre="Té verde", precio=Dinero(1500), categoria_id=1)
+        )
+        repositorio.guardar(
+            Producto(codigo="B-1", nombre="Botella de vidrio", precio=Dinero(3000), categoria_id=1)
+        )
 
         resultados = repositorio.buscar("te")
 
@@ -49,23 +58,18 @@ def repositorio(conexion_memoria):
 
 
 class TestCategoriasDesdeBD:
-    def test_esquema_crea_tabla_categoria_con_seed(self, conexion_memoria):
-        """La tabla categoria existe y viene sembrada con las 4 categorias."""
-        filas = conexion_memoria.execute("SELECT id, nombre FROM categoria ORDER BY id").fetchall()
-        assert [(f["id"], f["nombre"]) for f in filas] == [
-            (1, "frutas"),
-            (2, "verduras"),
-            (3, "abarrotes"),
-            (4, "limpieza"),
-        ]
+    def test_esquema_crea_tabla_categorias_con_seed(self, conexion_memoria):
+        """La tabla categorias viene sembrada con las 20 validadas por la PO (CA-02)."""
+        filas = conexion_memoria.execute("SELECT nombre FROM categorias ORDER BY id").fetchall()
+        assert [f["nombre"] for f in filas] == list(CATEGORIAS_VALIDADAS)
 
     def test_listar_categorias_desde_bd(self, repositorio):
         # La PO podra agregar una categoria en BD y la GUI la verá sin cambiar codigo.
-        repositorio._con.execute("INSERT INTO categoria (nombre) VALUES ('panaderia')")
+        repositorio._con.execute("INSERT INTO categorias (nombre) VALUES ('panaderia')")
 
         nombres = [c.nombre for c in repositorio.listar_categorias()]
 
-        assert nombres == ["frutas", "verduras", "abarrotes", "limpieza", "panaderia"]
+        assert nombres == [*CATEGORIAS_VALIDADAS, "panaderia"]
 
     def test_crear_categoria(self, repositorio):
         repositorio.crear_categoria("panaderia")
@@ -73,7 +77,7 @@ class TestCategoriasDesdeBD:
         nombres = [c.nombre for c in repositorio.listar_categorias()]
         assert "panaderia" in nombres
         # Idempotente: crear dos veces la misma no duplica.
-        with pytest.raises(Exception):
+        with pytest.raises(sqlite3.IntegrityError):
             repositorio.crear_categoria("panaderia")
 
 

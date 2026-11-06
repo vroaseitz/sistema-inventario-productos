@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from pos.dominio.categorias import Categoria
@@ -28,9 +29,9 @@ class RepositorioProductosSQLite:
             """
             INSERT INTO productos (
                 codigo, nombre, precio, unidad_venta, categoria_id, activo,
-                costo_neto, perecible, dias_aviso
+                costo_neto, perecible, dias_aviso, stock_minimo
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(codigo) DO UPDATE SET
                 nombre=excluded.nombre,
                 precio=excluded.precio,
@@ -39,7 +40,8 @@ class RepositorioProductosSQLite:
                 activo=excluded.activo,
                 costo_neto=excluded.costo_neto,
                 perecible=excluded.perecible,
-                dias_aviso=excluded.dias_aviso
+                dias_aviso=excluded.dias_aviso,
+                stock_minimo=excluded.stock_minimo
             """,
             (
                 producto.codigo,
@@ -51,8 +53,53 @@ class RepositorioProductosSQLite:
                 producto.costo.neto.monto if producto.costo is not None else None,
                 1 if producto.perecible else 0,
                 producto.dias_aviso,
+                producto.stock_minimo,
             ),
         )
+
+    # Tablas que guardan el codigo del producto (CA-19): al cambiarlo deben seguirlo, o el historial
+    # (ventas, lotes, movimientos, precios) quedaria apuntando a un codigo que ya no existe.
+    _TABLAS_CON_CODIGO = (
+        ("existencias", "codigo_producto"),
+        ("historial_precios", "codigo_producto"),
+        ("historial_ajustes_inventario", "codigo_producto"),
+        ("movimientos_inventario", "codigo_producto"),
+        ("facturas_compra_lineas", "codigo_producto"),
+        ("venta_detalles", "producto_codigo"),
+        ("lotes", "codigo_producto"),
+    )
+
+    def cambiar_codigo(self, anterior: str, nuevo: str) -> None:
+        """Cambia el codigo del producto y de todo lo que lo referencia, todo o nada."""
+        self._con.execute("BEGIN")
+        try:
+            self._con.execute("PRAGMA defer_foreign_keys = ON")  # se revisa recien al COMMIT
+            self._con.execute("UPDATE productos SET codigo = ? WHERE codigo = ?", (nuevo, anterior))
+            for tabla, columna in self._TABLAS_CON_CODIGO:
+                self._con.execute(
+                    f"UPDATE {tabla} SET {columna} = ? WHERE {columna} = ?", (nuevo, anterior)
+                )
+            self._cambiar_codigo_en_tickets(anterior, nuevo)
+        except Exception:
+            self._con.execute("ROLLBACK")
+            raise
+        self._con.execute("COMMIT")
+
+    def _cambiar_codigo_en_tickets(self, anterior: str, nuevo: str) -> None:
+        """Los tickets en espera guardan codigos dentro de un JSON: tambien se actualizan."""
+        for fila in self._con.execute("SELECT id, datos_json FROM tickets_en_espera").fetchall():
+            ticket = json.loads(fila["datos_json"])
+            ticket["productos"] = [
+                [nuevo if codigo == anterior else codigo, cantidad]
+                for codigo, cantidad in ticket.get("productos", [])
+            ]
+            lotes = ticket.get("lotes", {})
+            if anterior in lotes:
+                lotes[nuevo] = lotes.pop(anterior)
+            self._con.execute(
+                "UPDATE tickets_en_espera SET datos_json = ? WHERE id = ?",
+                (json.dumps(ticket), fila["id"]),
+            )
 
     def obtener_por_codigo(self, codigo: str) -> Producto | None:
         fila = self._con.execute("SELECT * FROM productos WHERE codigo = ?", (codigo,)).fetchone()
@@ -64,18 +111,22 @@ class RepositorioProductosSQLite:
 
     # --- Catalogo de categorias (C-02/C-04) ---------------------------------
 
+    # Atajos sobre la tabla `categorias` (la misma que usa RepositorioCategoriasSQLite).
+
     def listar_categorias(self) -> list[Categoria]:
         """Categorias desde la BD: la lista la define el negocio, no el codigo."""
-        filas = self._con.execute("SELECT id, nombre FROM categoria ORDER BY id").fetchall()
-        return [Categoria(id=f["id"], nombre=f["nombre"]) for f in filas]
+        filas = self._con.execute(
+            "SELECT id, nombre, activa FROM categorias ORDER BY id"
+        ).fetchall()
+        return [Categoria(f["id"], f["nombre"], bool(f["activa"])) for f in filas]
 
     def crear_categoria(self, nombre: str) -> Categoria:
         """Agrega una categoria nueva. Falla si ya existe (nombre UNIQUE)."""
-        nombre = nombre.strip().lower()
+        nombre = " ".join(nombre.split())
         if not nombre:
             raise ValueError("El nombre de categoria no puede estar vacio")
-        cursor = self._con.execute("INSERT INTO categoria (nombre) VALUES (?)", (nombre,))
-        return Categoria(id=cursor.lastrowid, nombre=nombre)
+        cursor = self._con.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
+        return Categoria(cursor.lastrowid, nombre)
 
     @staticmethod
     def _a_producto(fila: sqlite3.Row) -> Producto:
@@ -98,6 +149,7 @@ class RepositorioProductosSQLite:
             costo=costo,
             perecible=bool(fila["perecible"]),
             dias_aviso=fila["dias_aviso"],
+            stock_minimo=fila["stock_minimo"],
         )
 
     def buscar(self, termino: str) -> list[Producto]:

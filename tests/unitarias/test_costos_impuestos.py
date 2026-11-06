@@ -44,13 +44,13 @@ class TestCalculoImpuestosYRentabilidad:
         producto = Producto(
             codigo="12345",
             nombre="Bebida Isotónica",
-            precio=Dinero(1500),
+            precio=Dinero(1785),  # con IVA: neto 1785 / 1,19 = 1500
             categoria_id=1,
             costo=costo,
         )
 
-        # Margen sobre venta: (1500 - 1000) / 1500 = 0.3333 (33.33%)
+        # Margen sobre venta neta: (1500 - 1000) / 1500 = 0.3333 (33.33%)
         assert producto.margen == Decimal("0.3333")
 
-        # Markup sobre costo: (1500 - 1000) / 1000 = 0.5000 (50.00%)
+        # Markup sobre costo: (1500 neto - 1000) / 1000 = 0.5000 (50.00%)
         assert producto.markup == Decimal("0.5000")

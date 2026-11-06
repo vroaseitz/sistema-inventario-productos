@@ -17,9 +17,11 @@ from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.editar_producto import EditarProducto
 from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
-from pos.aplicacion.puertos import RepositorioProductos
+from pos.aplicacion.puertos import RepositorioCategorias, RepositorioProductos
+from pos.dominio.categorias import CATEGORIAS_INICIALES, Categoria
 from pos.dominio.errores import ErrorDominio
-from pos.dominio.productos import CATEGORIAS_VALIDAS, Producto, UnidadVenta
+from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
 
 
@@ -34,31 +36,59 @@ def _cargar_nombres_categorias(repo) -> list[str]:
     """C-02: nombres de categoria desde la BD, no desde una tupla fijada.
 
     Si el repositorio no expone el catalogo (implementacion vieja), cae a la
-    tupla CATEGORIAS_VALIDAS para no romper la pantalla.
+    lista validada por la PO para no romper la pantalla.
     """
     listar = getattr(repo, "listar_categorias", None)
     if listar is None:
-        return list(CATEGORIAS_VALIDAS)
+        return list(CATEGORIAS_INICIALES)
     return [c.nombre for c in listar()]
 
 
-class VentanaProductos(tk.Tk):
+class VentanaProductos(ttk.Frame):
+    """Pantalla de Catalogo (F2). Es un marco: la ventana la aporta VentanaPrincipal."""
+
+    # Valor por defecto a nivel de clase: las pruebas de regresion crean la vista con `__new__`.
+    _categorias: RepositorioCategorias | None = None
+    _sesion = None  # las pruebas con __new__ no la pasan
+
     def __init__(
         self,
+        parent: tk.Misc,
         repositorio: RepositorioProductos,
         registrar_producto: RegistrarProducto,
         editar_producto: EditarProducto,
+        repo_categorias: RepositorioCategorias | None = None,
+        sesion=None,
     ) -> None:
-        super().__init__()
+        super().__init__(parent)
+        self._categorias = repo_categorias
+        self._sesion = sesion
         self._repo = repositorio
         self._registrar = registrar_producto
         self._editar = editar_producto
 
-        self.title("NaturalSur - Productos")
-        self.geometry("900x560")
         self._construir_busqueda()
         self._construir()
         self._refrescar()
+
+    # --- Categorias (C-02): salen de la tabla `categorias`, no de una lista fija ---
+
+    def _lista_categorias(self) -> list[Categoria]:
+        if self._categorias is not None:
+            return self._categorias.listar()
+        return [Categoria(i + 1, n) for i, n in enumerate(CATEGORIAS_INICIALES)]
+
+    def _id_categoria(self, nombre: str) -> int:
+        for categoria in self._lista_categorias():
+            if categoria.nombre == nombre:
+                return categoria.id
+        raise ValueError(f"La categoría {nombre!r} no existe.")
+
+    def _nombre_categoria(self, categoria_id: int | None) -> str | None:
+        for categoria in self._lista_categorias():
+            if categoria.id == categoria_id:
+                return categoria.nombre
+        return None
 
     # --- Barra de busqueda (HU-PRD-07) -------------------------------------
 
@@ -130,11 +160,11 @@ class VentanaProductos(tk.Tk):
         self._entradas["nombre"].grid(row=0, column=3, padx=4, pady=6)
 
         ttk.Label(marco_form, text="Categoría").grid(row=0, column=4, padx=4, pady=6)
-        # C-02 / C-04: categoria por lista desplegable leida de la BD.
+        # C-02 / C-04: categoria por lista desplegable, no texto libre.
         self._categoria = ttk.Combobox(
             marco_form,
-            values=_cargar_nombres_categorias(self._repo),
-            width=12,
+            values=[c.nombre for c in self._lista_categorias()],
+            width=34,  # CA-02: la lista desplegable no corta los nombres largos
             state="readonly",
         )
         self._categoria.grid(row=0, column=5, padx=4, pady=6)
@@ -165,7 +195,7 @@ class VentanaProductos(tk.Tk):
             row=2, column=0, columnspan=2, sticky="w", padx=4
         )
 
-        # C-05: producto perecible requiere dias de aviso.
+        # C-05: producto perecible requiere días de aviso.
         self._perecible = tk.BooleanVar(value=False)
         ttk.Checkbutton(marco_form, text="Perecible", variable=self._perecible).grid(
             row=2, column=2, sticky="w", padx=4
@@ -180,7 +210,7 @@ class VentanaProductos(tk.Tk):
         self._tabla = ttk.Treeview(self, columns=columnas, show="headings")
         for col, titulo in zip(
             columnas,
-            ("Codigo", "Nombre", "Precio", "Unidad", "Categoría", "Costo"),
+            ("Código", "Nombre", "Precio", "Unidad", "Categoría", "Costo"),
             strict=True,
         ):
             self._tabla.heading(col, text=titulo)
@@ -191,7 +221,7 @@ class VentanaProductos(tk.Tk):
         self._tabla.column("codigo", width=100, minwidth=80)
         self._tabla.column("precio", width=90, anchor="e")
         self._tabla.column("unidad", width=90, anchor="center")
-        self._tabla.column("categoria", width=100)
+        self._tabla.column("categoria", width=210)
         self._tabla.column("costo", width=100, anchor="e")
         self._tabla.pack(fill="both", expand=True, padx=12, pady=8)
 
@@ -223,8 +253,8 @@ class VentanaProductos(tk.Tk):
             return
 
         try:
-            costo = int(costo_str)
-            precio = int(precio_str) if precio_str else 0
+            costo = parsear_monto(costo_str)
+            precio = parsear_monto(precio_str) if precio_str else 0
 
             # C-06: el markup sobre costo neto 0 no esta definido y el margen
             # con costo 0 es 100% falso: ambos se reportan como dato faltante.
@@ -262,21 +292,21 @@ class VentanaProductos(tk.Tk):
             unidad = UnidadVenta.GRANEL if self._granel.get() else UnidadVenta.UNIDAD
             cat_str = self._categoria.get().strip()
             if not cat_str:
-                raise ValueError("La categoria es obligatoria (C-04).")
-            cat_id = CATEGORIAS_VALIDAS.index(cat_str) + 1
+                raise ValueError("La categoría es obligatoria (C-04).")
+            cat_id = self._id_categoria(cat_str)
             costo_str = self._costo_var.get().strip()
-            costo_val = int(costo_str) if costo_str else None
+            costo_val = parsear_monto(costo_str) if costo_str else None
             perecible = self._perecible.get()
             dias_str = self._dias_aviso.get().strip()
             dias_aviso = int(dias_str) if dias_str else None
 
             if perecible and dias_aviso is None:
-                raise ValueError("Un producto perecible requiere dias de aviso (C-05a).")
+                raise ValueError("Un producto perecible requiere días de aviso (C-05a).")
 
             producto = self._registrar.ejecutar(
                 codigo=self._entradas["codigo"].get().strip(),
                 nombre=self._entradas["nombre"].get().strip(),
-                precio=int(self._entradas["precio"].get() or 0),
+                precio=parsear_monto(self._entradas["precio"].get() or "0"),
                 unidad_venta=unidad,
                 categoria_id=cat_id,
                 costo=costo_val,
@@ -329,17 +359,18 @@ class VentanaProductos(tk.Tk):
         self._entradas["nombre"].delete(0, tk.END)
         self._entradas["nombre"].insert(0, producto.nombre)
         self._entradas["precio"].delete(0, tk.END)
-        self._entradas["precio"].insert(0, str(producto.precio.monto))
-        self._costo_var.set(str(producto.costo.neto.monto) if producto.costo else "")
+        self._entradas["precio"].insert(0, formatear_clp(producto.precio.monto).lstrip("$"))
+        self._costo_var.set(
+            formatear_clp(producto.costo.neto.monto).lstrip("$") if producto.costo else ""
+        )
         self._dias_aviso.delete(0, tk.END)
         if producto.dias_aviso is not None:
             self._dias_aviso.insert(0, str(producto.dias_aviso))
         self._granel.set(producto.es_granel)
         self._perecible.set(producto.perecible)
-        if producto.categoria_id is not None and 1 <= producto.categoria_id <= len(
-            CATEGORIAS_VALIDAS
-        ):
-            self._categoria.set(CATEGORIAS_VALIDAS[producto.categoria_id - 1])
+        nombre_categoria = self._nombre_categoria(producto.categoria_id)
+        if nombre_categoria is not None:
+            self._categoria.set(nombre_categoria)
 
         # Cambiar a modo edicion.
         self._producto_en_edicion = producto.codigo
@@ -359,10 +390,10 @@ class VentanaProductos(tk.Tk):
         try:
             cat_str = self._categoria.get().strip()
             if not cat_str:
-                raise ValueError("La categoria es obligatoria (C-04).")
-            cat_id = CATEGORIAS_VALIDAS.index(cat_str) + 1
+                raise ValueError("La categoría es obligatoria (C-04).")
+            cat_id = self._id_categoria(cat_str)
             costo_str = self._costo_var.get().strip()
-            costo_val = int(costo_str) if costo_str else None
+            costo_val = parsear_monto(costo_str) if costo_str else None
             dias_str = self._dias_aviso.get().strip()
             dias_aviso = int(dias_str) if dias_str else None
             perecible = self._perecible.get()
@@ -370,9 +401,9 @@ class VentanaProductos(tk.Tk):
             self._editar.ejecutar(
                 codigo=codigo,
                 nuevo_nombre=self._entradas["nombre"].get().strip(),
-                nuevo_precio=int(self._entradas["precio"].get() or 0),
+                nuevo_precio=parsear_monto(self._entradas["precio"].get() or "0"),
                 nueva_categoria_id=cat_id,
-                usuario="Usuario_POS",
+                usuario=(self._sesion.nombre if self._sesion else "") or "Usuario_POS",
                 costo=costo_val,
                 perecible=perecible,
                 dias_aviso=dias_aviso if perecible else None,
@@ -408,20 +439,17 @@ class VentanaProductos(tk.Tk):
 
     def _insertar_fila(self, p: Producto) -> None:
         # C-02: mostrar el NOMBRE de la categoria, no su id numerico.
-        if p.categoria_id is not None and 1 <= p.categoria_id <= len(CATEGORIAS_VALIDAS):
-            categoria = CATEGORIAS_VALIDAS[p.categoria_id - 1]
-        else:
-            categoria = "Sin categoría"
+        categoria = self._nombre_categoria(p.categoria_id) or "Sin categoría"
         self._tabla.insert(
             "",
             "end",
             values=(
                 p.codigo,
                 p.nombre,
-                p.precio.monto,
+                formatear_clp(p.precio.monto),  # O-07: punto de miles
                 p.unidad_venta.value,
                 categoria,
-                p.costo.neto.monto if p.costo else "",
+                formatear_clp(p.costo.neto.monto) if p.costo else "",
             ),
         )
 
