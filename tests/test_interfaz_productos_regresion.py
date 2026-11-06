@@ -169,6 +169,24 @@ class TestBusqueda:
         valores = vista._tabla.insert.call_args.kwargs["values"]
         assert valores[1] == "Café de grano"
 
+    def test_busqueda_prioriza_los_que_empiezan_con_lo_escrito(self, vista):
+        """QA CA-15: «te» muestra «Té verde» antes que «Aceite de coco» y «Pan integral»."""
+        from pos.dominio.productos import Producto
+        from pos.dominio.value_objects import Dinero
+
+        vista._repo.listar.return_value = [
+            Producto(codigo="A-1", nombre="Aceite de coco", precio=Dinero(5000), categoria_id=1),
+            Producto(codigo="P-1", nombre="Pan integral", precio=Dinero(2000), categoria_id=1),
+            Producto(codigo="T-1", nombre="Té verde", precio=Dinero(1500), categoria_id=1),
+        ]
+        vista._tabla.get_children.return_value = []
+        vista._entrada_busqueda.get.return_value = "te"
+
+        vista._ejecutar_busqueda()
+
+        nombres = [c.kwargs["values"][1] for c in vista._tabla.insert.call_args_list]
+        assert nombres == ["Té verde", "Aceite de coco", "Pan integral"]
+
     def test_busqueda_por_codigo_exacto(self, vista):
         from pos.dominio.productos import Producto
         from pos.dominio.value_objects import Dinero

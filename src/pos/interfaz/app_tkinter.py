@@ -20,7 +20,7 @@ from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
 from pos.aplicacion.puertos import RepositorioCategorias, RepositorioProductos
 from pos.dominio.categorias import CATEGORIAS_INICIALES, Categoria
 from pos.dominio.errores import ErrorDominio
-from pos.dominio.formato import formatear_clp, parsear_monto
+from pos.dominio.formato import formatear_clp, parsear_monto, rango_de_busqueda
 from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
 
@@ -125,6 +125,8 @@ class VentanaProductos(ttk.Frame):
             for p in self._repo.listar()
             if termino in _normalizar(p.nombre) or termino in _normalizar(p.codigo)
         ]
+        # CA-15: primero los que empiezan con lo escrito (o alguna de sus palabras), luego el resto.
+        resultados.sort(key=lambda p: (rango_de_busqueda(p.nombre, termino), _normalizar(p.nombre)))
         for p in resultados:
             self._insertar_fila(p)
 
@@ -156,7 +158,8 @@ class VentanaProductos(ttk.Frame):
         self._entradas["codigo"].grid(row=0, column=1, padx=4, pady=6)
 
         ttk.Label(marco_form, text="Nombre").grid(row=0, column=2, padx=4, pady=6)
-        self._entradas["nombre"] = ttk.Entry(marco_form, width=16)
+        # CA-14: el nombre no se corta (antes 16 caracteres, igual que en la ficha de F2).
+        self._entradas["nombre"] = ttk.Entry(marco_form, width=44)
         self._entradas["nombre"].grid(row=0, column=3, padx=4, pady=6)
 
         ttk.Label(marco_form, text="Categoría").grid(row=0, column=4, padx=4, pady=6)
