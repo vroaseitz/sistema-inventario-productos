@@ -45,7 +45,7 @@ class TipoValorEmbebido(Enum):
 def _solo_digitos(codigo: str) -> str:
     limpio = codigo.strip()
     if not limpio.isdigit():
-        raise CodigoBarrasInvalido(f"El codigo debe ser numerico: {codigo!r}")
+        raise CodigoBarrasInvalido(f"El código debe ser numérico: {codigo!r}")
     return limpio
 
 
@@ -57,7 +57,7 @@ def calcular_digito_verificador(doce_digitos: str) -> int:
     """
     d = _solo_digitos(doce_digitos)
     if len(d) != 12:
-        raise CodigoBarrasInvalido("Se requieren exactamente 12 digitos para el calculo")
+        raise CodigoBarrasInvalido("Se requieren exactamente 12 dígitos para el cálculo")
     suma = sum(int(n) * (1 if i % 2 == 0 else 3) for i, n in enumerate(d))
     return (10 - (suma % 10)) % 10
 
@@ -110,9 +110,9 @@ def analizar_codigo(
     """
     d = _solo_digitos(codigo)
     if len(d) != LONGITUD_EAN13:
-        raise CodigoBarrasInvalido(f"Un EAN-13 tiene {LONGITUD_EAN13} digitos, llegaron {len(d)}")
+        raise CodigoBarrasInvalido(f"Un EAN-13 tiene {LONGITUD_EAN13} dígitos, llegaron {len(d)}")
     if not es_ean13_valido(d):
-        raise CodigoBarrasInvalido(f"Digito verificador EAN-13 invalido: {d}")
+        raise CodigoBarrasInvalido(f"Dígito verificador EAN-13 inválido: {d}")
 
     if not es_codigo_interno(d):
         return LecturaCodigoBarras(codigo=d, es_interno=False, codigo_producto=d)

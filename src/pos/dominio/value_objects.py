@@ -7,6 +7,17 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from .errores import DatosProductoInvalidos
 
+TASA_IVA = Decimal("0.19")  # IVA chileno
+
+
+def neto_de_precio(monto: int) -> int:
+    """Lleva un monto con IVA incluido a neto (ADR 0004): `monto / 1,19`, redondeado HALF_UP.
+
+    El precio de venta al publico incluye IVA y el costo se guarda neto; para medir ganancia
+    y margen hay que comparar ambos sin IVA (el IVA de la venta no es ganancia del negocio).
+    """
+    return _a_pesos(Decimal(monto) / (1 + TASA_IVA))
+
 
 def _a_pesos(valor: Decimal) -> int:
     """Redondea un Decimal a pesos enteros con politica HALF_UP.
