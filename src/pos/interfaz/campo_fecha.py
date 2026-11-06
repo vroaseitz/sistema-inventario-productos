@@ -12,6 +12,8 @@ import tkinter as tk
 from datetime import date, datetime
 from tkinter import ttk
 
+from pos.interfaz.tema import MARCA, MODULOS_COLOR, PAPEL, RELLENO, TINTA, fuente
+
 MESES = (
     "enero",
     "febrero",
@@ -36,9 +38,27 @@ def _interpretar(texto: str) -> date | None:
         return None
 
 
+def colores_del_dia(dia: date, elegido: date | None, hoy: date, modulo: str) -> dict:
+    """A-08: el dia elegido va relleno con el color del modulo; hoy, con el color en el texto,
+    en negrita y con borde. El resto, sin resaltar."""
+    fuerte, claro = MODULOS_COLOR.get(modulo, (MARCA, RELLENO))
+    if dia == elegido:
+        return {"bg": fuerte, "fg": "#ffffff", "font": fuente(10, True), "relief": "flat"}
+    if dia == hoy:
+        return {"bg": claro, "fg": fuerte, "font": fuente(10, True), "relief": "solid"}
+    return {"bg": PAPEL, "fg": TINTA, "font": fuente(10), "relief": "flat"}
+
+
 class CampoFecha(ttk.Frame):
-    def __init__(self, parent: tk.Misc, valor: date | None = None, width: int = 14) -> None:
+    def __init__(
+        self,
+        parent: tk.Misc,
+        valor: date | None = None,
+        width: int = 14,
+        modulo: str = "",
+    ) -> None:
         super().__init__(parent)
+        self._modulo = modulo  # A-08: "F3", "F5", "F6"... colorea hoy y el dia elegido
         self._texto = tk.StringVar(value=valor.isoformat() if valor else "")
         self._entrada = ttk.Entry(self, textvariable=self._texto, width=width)
         self._entrada.pack(side="left")
@@ -119,10 +139,12 @@ class CampoFecha(ttk.Frame):
                 if numero == 0:
                     continue
                 dia = date(self._mes.year, self._mes.month, numero)
-                marca = "•" if dia == elegido else ("·" if dia == hoy else "")
-                ttk.Button(
+                tk.Button(
                     marco,
-                    text=f"{numero}{marca}",
+                    text=str(numero),
                     width=3,
+                    bd=1,
+                    cursor="hand2",
                     command=lambda d=dia: self._elegir(d),
-                ).grid(row=fila, column=columna)
+                    **colores_del_dia(dia, elegido, hoy, self._modulo),
+                ).grid(row=fila, column=columna, padx=1, pady=1)

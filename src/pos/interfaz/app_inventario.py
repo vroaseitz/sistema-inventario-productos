@@ -179,7 +179,7 @@ class PanelEntradaYAlertas:
         marco = ttk.Frame(self.dlg_entrada, padding=14)
         marco.pack(fill="both", expand=True)
         # R-01: "Vence" tiene calendario desplegable (tambien se puede escribir AAAA-MM-DD).
-        self._vence = CampoFecha(marco, width=14)
+        self._vence = CampoFecha(marco, width=14, modulo="F3")
         campos = (
             ("Código de producto", self._codigo),
             ("Cantidad", self._cantidad),

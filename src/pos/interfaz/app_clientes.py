@@ -669,7 +669,7 @@ class VentanaClientes(ttk.Frame):
         entrada.grid(row=1, column=1, padx=12, pady=4, sticky="w")
         entrada.focus_set()
         ttk.Label(ventana, text="Fecha").grid(row=2, column=0, sticky="w", padx=12, pady=4)
-        fecha = CampoFecha(ventana, date.today(), width=14)
+        fecha = CampoFecha(ventana, date.today(), width=14, modulo="F4")
         fecha.grid(row=2, column=1, padx=12, pady=4, sticky="w")
         ttk.Label(ventana, text="Medio de pago").grid(row=3, column=0, sticky="w", padx=12, pady=4)
         ttk.Combobox(

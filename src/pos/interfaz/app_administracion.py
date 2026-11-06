@@ -253,10 +253,12 @@ class VentanaAdministracion(ttk.Frame):
         )
         self._combo_usuario.grid(row=1, column=0, padx=4)
         ttk.Label(filtros, text="Desde").grid(row=0, column=1, sticky="w", padx=4)
-        self._f_desde = CampoFecha(filtros, date.today() - timedelta(days=30), width=12)
+        self._f_desde = CampoFecha(
+            filtros, date.today() - timedelta(days=30), width=12, modulo="F7"
+        )
         self._f_desde.grid(row=1, column=1, padx=4)
         ttk.Label(filtros, text="Hasta").grid(row=0, column=2, sticky="w", padx=4)
-        self._f_hasta = CampoFecha(filtros, date.today(), width=12)
+        self._f_hasta = CampoFecha(filtros, date.today(), width=12, modulo="F7")
         self._f_hasta.grid(row=1, column=2, padx=4)
         ttk.Label(filtros, text="Operación").grid(row=0, column=3, sticky="w", padx=4)
         self._combo_operacion = ttk.Combobox(

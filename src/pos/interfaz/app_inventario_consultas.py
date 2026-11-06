@@ -311,8 +311,8 @@ class PanelMovimientos(ttk.Frame):
         self._codigo = tk.StringVar()
         filtros = ttk.Frame(self)
         filtros.pack(fill="x")
-        self._desde = CampoFecha(filtros, date.today() - timedelta(days=30), width=12)
-        self._hasta = CampoFecha(filtros, date.today(), width=12)
+        self._desde = CampoFecha(filtros, date.today() - timedelta(days=30), width=12, modulo="F3")
+        self._hasta = CampoFecha(filtros, date.today(), width=12, modulo="F3")
         tipo = ttk.Combobox(
             filtros, textvariable=self._tipo, values=list(TIPOS), state="readonly", width=12
         )
