@@ -177,9 +177,10 @@ def test_el_aviso_por_defecto_de_la_configuracion_gobierna_las_alertas(app):
     app.productos.guardar(Producto("YOG", "Yogurt", Dinero(2000), categoria_id=1))
     ingresar.ejecutar("YOG", 5, "Compra", fecha_vencimiento=date.today() + timedelta(days=10))
     alertas = ConsultarAlertasVencimiento(app.lotes, app.productos, configuracion=app.config)
-    assert alertas.ejecutar() == []  # 10 dias > aviso por defecto de 7
-    app.config.guardar("aviso_defecto_dias", 14)
-    assert [a.nombre_producto for a in alertas.ejecutar()] == ["Yogurt"]
+    assert app.config.obtener("aviso_defecto_dias") == 14  # lo definio la Product Owner
+    assert [a.nombre_producto for a in alertas.ejecutar()] == ["Yogurt"]  # 10 dias <= 14
+    app.config.guardar("aviso_defecto_dias", 7)
+    assert alertas.ejecutar() == []  # 10 dias > 7
 
 
 def test_permisos_por_perfil():

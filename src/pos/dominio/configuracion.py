@@ -31,12 +31,12 @@ PARAMETROS = (
     Parametro(
         "aviso_defecto_dias",
         "Aviso de vencimiento por defecto",
-        7,
+        14,
         1,
         365,
         "dias",
-        "Para productos sin «Días aviso» propio (HU-INV-03). El prototipo propone 14: "
-        "pendiente de confirmar con la Product Owner.",
+        "Para productos sin «Días aviso» propio (HU-INV-03). La Product Owner definio 14 dias "
+        "(06-11-2026).",
     ),
     Parametro(
         "abrir_cajon",
@@ -49,30 +49,31 @@ PARAMETROS = (
     ),
     Parametro(
         "meta_lunes_viernes",
-        "Meta de ganancia: lunes a viernes",
-        0,
+        "Meta de venta: lunes a viernes",
+        220_000,
         0,
         100_000_000,
         "CLP",
-        "Ganancia diaria que se espera. 0 = sin meta cargada (HU-REP-05).",
+        "Monto vendido que se espera en el dia. 0 = sin meta (HU-REP-05). Definida por la PO.",
     ),
     Parametro(
         "meta_sabado",
-        "Meta de ganancia: sábado",
-        0,
+        "Meta de venta: sábado",
+        182_000,
         0,
         100_000_000,
         "CLP",
-        "0 = sin meta cargada. Los valores reales salen del Excel de punto de equilibrio.",
+        "Monto vendido que se espera el sabado. 0 = sin meta. Definida por la PO.",
     ),
     Parametro(
         "meta_domingo",
-        "Meta de ganancia: domingo y festivos",
-        0,
+        "Meta de venta: domingo y festivos",
+        88_000,
         0,
         100_000_000,
         "CLP",
-        "0 = sin meta cargada. Hoy los festivos no se distinguen: rige el domingo.",
+        "Monto vendido que se espera el domingo. 0 = sin meta. Los festivos no se distinguen "
+        "todavia: rige el domingo.",
     ),
     Parametro(
         "inactividad_minutos",

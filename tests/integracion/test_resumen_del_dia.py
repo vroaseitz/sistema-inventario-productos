@@ -88,17 +88,24 @@ def test_venta_ganancia_medios_y_ranking(app):
     assert r.venta_semana >= r.venta_hoy and r.jornadas_semana == 1
 
 
-def test_sin_meta_cargada_no_se_inventa_un_cumplimiento(app):
+def test_las_metas_por_defecto_son_las_de_la_product_owner(app):
+    assert app.config.obtener("meta_lunes_viernes") == 220_000
+    assert app.config.obtener("meta_sabado") == 182_000
+    assert app.config.obtener("meta_domingo") == 88_000
+
+
+def test_con_la_meta_en_cero_no_se_inventa_un_cumplimiento(app):
     _vender(app, [("CAS", 10)])
+    app.config.guardar(clave_de_meta(HOY), 0)
     r = app.resumen.ejecutar()
     assert r.meta == 0 and r.cumplimiento is None
 
 
 def test_meta_por_tipo_de_dia_y_cumplimiento(app):
-    _vender(app, [("CAS", 10)])  # ganancia 2.403 (venta neta 8.403 - costo 6.000)
-    app.config.guardar(clave_de_meta(HOY), 4806)
+    _vender(app, [("CAS", 10)])  # vende $10.000 (la meta es sobre el monto vendido)
+    app.config.guardar(clave_de_meta(HOY), 20_000)
     assert app.resumen.ejecutar().cumplimiento == pytest.approx(0.5)
-    app.config.guardar(clave_de_meta(HOY), 2403)
+    app.config.guardar(clave_de_meta(HOY), 10_000)
     assert app.resumen.ejecutar().cumplimiento == pytest.approx(1.0)
     assert clave_de_meta(date(2026, 11, 7)) == "meta_sabado"
     assert clave_de_meta(date(2026, 11, 8)) == "meta_domingo"
