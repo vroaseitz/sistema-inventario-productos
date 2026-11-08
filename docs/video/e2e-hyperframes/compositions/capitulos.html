@@ -1,0 +1,35 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; font-family: "Inter", sans-serif; color: #f3f5f4; }
+    .chip { position: absolute; left: 56px; top: 68px; height: 60px; padding: 0 26px 0 20px; border-radius: 12px; background: rgba(15,16,22,.92); backdrop-filter: blur(22px); border-left: 6px solid #7fbf95; white-space: nowrap; }
+    .ch-n { font-size: 16px; font-weight: 800; letter-spacing: 0.16em; color: #7fbf95; line-height: 60px; margin-right: 16px; }
+    .ch-t { font-size: 28px; font-weight: 700; line-height: 60px; }
+  </style>
+  <div id="root" data-composition-id="capitulos" data-width="1920" data-height="1080">
+    <div id="ch-1" class="clip chip" data-start="0.3" data-duration="2.4" data-track-index="3"><span class="ch-n">ESCENA 1</span><span class="ch-t">Ingreso y vendedora</span></div>
+    <div id="ch-2" class="clip chip" data-start="44.57" data-duration="2.4" data-track-index="4"><span class="ch-n">ESCENA 2</span><span class="ch-t">Proveedor y factura</span></div>
+    <div id="ch-3" class="clip chip" data-start="76.53" data-duration="2.4" data-track-index="5"><span class="ch-n">ESCENA 3</span><span class="ch-t">Stock, alerta y merma</span></div>
+    <div id="ch-4" class="clip chip" data-start="102.58" data-duration="2.4" data-track-index="6"><span class="ch-n">ESCENA 4</span><span class="ch-t">Cliente con crédito</span></div>
+    <div id="ch-5" class="clip chip" data-start="112.4" data-duration="2.4" data-track-index="7"><span class="ch-n">ESCENA 5</span><span class="ch-t">Venta completa</span></div>
+    <div id="ch-6" class="clip chip" data-start="183.53" data-duration="2.4" data-track-index="8"><span class="ch-n">ESCENA 6</span><span class="ch-t">Cuenta y abono</span></div>
+    <div id="ch-7" class="clip chip" data-start="208.75" data-duration="2.4" data-track-index="9"><span class="ch-n">ESCENA 7</span><span class="ch-t">Reportes y auditoría</span></div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#ch-1", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 0.3);
+    tl.fromTo("#ch-1", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 2.4);
+    tl.fromTo("#ch-2", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 44.57);
+    tl.fromTo("#ch-2", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 46.67);
+    tl.fromTo("#ch-3", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 76.53);
+    tl.fromTo("#ch-3", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 78.63);
+    tl.fromTo("#ch-4", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 102.58);
+    tl.fromTo("#ch-4", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 104.68);
+    tl.fromTo("#ch-5", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 112.4);
+    tl.fromTo("#ch-5", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 114.5);
+    tl.fromTo("#ch-6", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 183.53);
+    tl.fromTo("#ch-6", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 185.63);
+    tl.fromTo("#ch-7", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 208.75);
+    tl.fromTo("#ch-7", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 210.85);
+    window.__timelines["capitulos"] = tl;
+  </script>
+</template>
