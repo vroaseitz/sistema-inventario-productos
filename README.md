@@ -15,7 +15,7 @@
 
 Prueba de punta a punta de la aplicación real (11 pasos, 2:41): ingreso, apertura de jornada, venta con granel, cobro mixto, descuento a la línea, catálogo y categorías, inventario con vencimiento, clientes, corte de caja, compras con proveedor nuevo y reportes. Usa una base de prueba y usuarios ficticios.
 
-https://github.com/user-attachments/assets/5cdea2ca-2888-4513-8f9b-99e65ebb2592
+[https://github.com/user-attachments/assets/5cdea2ca-2888-4513-8f9b-99e65ebb2592](https://github.com/user-attachments/assets/589df391-045b-4a05-ad69-f86d3d4fcc12)
 
 > El video se reproduce aquí mismo (GitHub). Versión en calidad completa (1080p, 25 MB): [ver en Drive](https://drive.google.com/file/d/1-z5JVGs8RdMMh5vvEZGA4-wTqX-XX600/view?usp=sharing). El archivo también está en `docs/video/`.
 
