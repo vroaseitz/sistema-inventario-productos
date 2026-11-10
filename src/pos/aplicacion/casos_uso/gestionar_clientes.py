@@ -24,6 +24,8 @@ from pos.dominio.clientes import (
 from pos.dominio.errores import ReglaClienteInvalida
 from pos.dominio.formato import formatear_clp
 
+_CONSERVAR = object()  # «no se toco el cupo»: modificar otros datos no lo borra
+
 
 def _clave(nombre: str) -> str:
     sin_tildes = "".join(
@@ -38,9 +40,15 @@ class GestionarClientes:
     cola: ColaSincronizacion | None = None
 
     def crear(
-        self, nombre: str, telefono: str = "", correo: str = "", observaciones: str = ""
+        self,
+        nombre: str,
+        telefono: str = "",
+        correo: str = "",
+        observaciones: str = "",
+        cupo: int | None = None,
     ) -> Cliente:
-        cliente = Cliente(nombre, telefono, correo, observaciones)  # valida nombre y contacto
+        # valida nombre, contacto y cupo
+        cliente = Cliente(nombre, telefono, correo, observaciones, cupo=cupo)
         self._validar_nombre_unico(cliente)
         self.repositorio.guardar(cliente)
         encolar_cliente(self.cola, cliente)
@@ -53,9 +61,13 @@ class GestionarClientes:
         telefono: str = "",
         correo: str = "",
         observaciones: str = "",
+        cupo: int | None | object = _CONSERVAR,
     ) -> Cliente:
         actual = self._obtener(cliente_id)
-        cliente = Cliente(nombre, telefono, correo, observaciones, actual.activo, actual.id)
+        nuevo_cupo = actual.cupo if cupo is _CONSERVAR else cupo
+        cliente = Cliente(
+            nombre, telefono, correo, observaciones, actual.activo, actual.id, cupo=nuevo_cupo
+        )
         self._validar_nombre_unico(cliente)
         self.repositorio.guardar(cliente)
         encolar_cliente(self.cola, cliente)

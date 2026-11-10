@@ -252,3 +252,48 @@ def test_sin_consumos_en_el_ciclo_no_hay_nada_que_pagar(app):
     cliente = app.gestion.crear("Cliente B", telefono="2")
     with pytest.raises(ReglaClienteInvalida, match="no tiene consumos"):
         PagarEstadoDeCuenta(app.clientes).ejecutar(cliente.id, HOY.year, HOY.month)
+
+
+# --- CL-01 (QA 09-11): cupo de credito por cliente ----------------------------------------------
+
+
+def test_el_cupo_se_guarda_y_modificar_otros_datos_no_lo_borra(app):
+    c = app.gestion.crear("Cliente A", telefono="1", cupo=50000)
+    assert app.clientes.obtener(c.id).cupo == 50000
+    app.gestion.modificar(c.id, "Cliente A.", telefono="2")  # sin tocar el cupo
+    assert app.clientes.obtener(c.id).cupo == 50000
+    app.gestion.modificar(c.id, "Cliente A.", telefono="2", cupo=80000)
+    assert app.clientes.obtener(c.id).cupo == 80000
+    with pytest.raises(ReglaClienteInvalida, match="negativo"):
+        app.gestion.crear("Cliente B", telefono="3", cupo=-1)
+
+
+def test_no_se_vende_a_credito_si_la_compra_pasa_el_cupo_y_el_aviso_dice_cuanto_queda(app):
+    c = app.gestion.crear("Cliente A", telefono="1", cupo=5000)
+    _vender_a_credito(app, c.id, 3)  # debe 3.000; quedan 2.000
+    with pytest.raises(ReglaVentaInvalida, match=r"le quedan \$2\.000"):
+        _vender_a_credito(app, c.id, 3)  # 3.000 > 2.000
+    assert saldo_de(app.clientes.movimientos(c.id)) == 3000  # la venta rechazada no cargo nada
+    _vender_a_credito(app, c.id, 2)  # justo el cupo que queda: se puede
+    assert saldo_de(app.clientes.movimientos(c.id)) == 5000
+
+
+def test_pagar_libera_cupo_sea_todo_o_un_abono(app):
+    c = app.gestion.crear("Cliente A", telefono="1", cupo=4000)
+    _vender_a_credito(app, c.id, 4)  # ocupo todo el cupo
+    with pytest.raises(ReglaVentaInvalida, match="cupo"):
+        _vender_a_credito(app, c.id, 1)
+    app.abono.ejecutar(c.id, 1000, "efectivo")  # un abono libera 1.000
+    _vender_a_credito(app, c.id, 1)
+    with pytest.raises(ReglaVentaInvalida, match="cupo"):
+        _vender_a_credito(app, c.id, 1)
+    app.abono.ejecutar(c.id, 4000, "efectivo")  # pago total: vuelve a comprar
+    _vender_a_credito(app, c.id, 2)
+
+
+def test_cliente_sin_cupo_definido_no_se_limita_y_con_cupo_cero_no_compra_a_credito(app):
+    libre = app.gestion.crear("Libre", telefono="1")  # sin cupo definido
+    _vender_a_credito(app, libre.id, 50)
+    sin_credito = app.gestion.crear("Sin credito", telefono="2", cupo=0)
+    with pytest.raises(ReglaVentaInvalida, match=r"le quedan \$0"):
+        _vender_a_credito(app, sin_credito.id, 1)

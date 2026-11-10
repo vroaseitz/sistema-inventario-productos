@@ -216,13 +216,15 @@ CLIENTE = {
     "correo": "",
     "observaciones": "Familia",
     "activo": True,
+    "cupo": 150000,
 }
 
 
 def test_cliente_es_upsert_por_su_id_y_tiene_credito():
     ((sql, params),) = traducir_operacion(_op("cliente", CLIENTE))
     assert "INSERT INTO pos.cliente" in sql and "ON CONFLICT (id_cliente) DO UPDATE" in sql
-    assert params == ("cliente:7", "Carolina Muñoz", "+56 9 1111 1111", "", "Familia", True)
+    assert "cupo_credito" in sql  # CL-01: el cupo viaja con el cliente
+    assert params == ("cliente:7", "Carolina Muñoz", "+56 9 1111 1111", "", "Familia", True, 150000)
 
 
 def test_el_consumo_es_un_cargo_y_lleva_al_cliente_por_si_aun_no_llego():

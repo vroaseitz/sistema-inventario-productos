@@ -306,7 +306,7 @@ for tipo, esperado in (
             "Retiro por resguardo durante la jornada",
         ),
     ),
-    ("ingreso", ("Ingreso de sencillo", "Propinas en fechas especiales")),
+    ("ingreso", ("Ingreso de sencillo",)),
 ):
     combo_tipo.set(tipo)
     combo_tipo.event_generate("<<ComboboxSelected>>")

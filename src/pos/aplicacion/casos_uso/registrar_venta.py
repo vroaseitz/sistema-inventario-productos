@@ -27,7 +27,13 @@ from pos.aplicacion.sincronizacion import (
     encolar_movimiento_cliente,
     encolar_venta,
 )
-from pos.dominio.clientes import MovimientoCliente, TipoMovimientoCliente
+from pos.dominio.clientes import (
+    MovimientoCliente,
+    TipoMovimientoCliente,
+    aviso_cupo_insuficiente,
+    cupo_disponible,
+    saldo_de,
+)
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
 from pos.dominio.inventario import TipoMovimiento
 from pos.dominio.lotes import Lote, consumir_fefo, proponer_lote
@@ -150,6 +156,12 @@ class RegistrarVenta:
             raise ReglaVentaInvalida("Elige el cliente al que se carga el credito")
         if not cliente.activo:
             raise ReglaVentaInvalida(f"El cliente {cliente.nombre} esta inactivo")
+        # CL-01: si lo que ya debe mas esta compra supera el cupo, no se vende a credito.
+        disponible = cupo_disponible(
+            cliente.cupo, saldo_de(self.repositorio_clientes.movimientos(cliente.id))
+        )
+        if disponible is not None and credito > disponible:
+            raise ReglaVentaInvalida(aviso_cupo_insuficiente(cliente.nombre, disponible, credito))
         return credito
 
     def _cargar_a_la_cuenta(self, venta: Venta, credito: int) -> None:

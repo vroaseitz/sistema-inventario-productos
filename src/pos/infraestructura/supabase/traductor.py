@@ -115,10 +115,11 @@ _SQL_LOTE = (
 
 _SQL_CLIENTE = (
     "INSERT INTO pos.cliente (id_cliente, nombre, tiene_credito, telefono, correo, "
-    "observaciones, activo) VALUES (%s, %s, TRUE, %s, %s, %s, %s) "
+    "observaciones, activo, cupo_credito) VALUES (%s, %s, TRUE, %s, %s, %s, %s, %s) "
     "ON CONFLICT (id_cliente) DO UPDATE SET nombre = EXCLUDED.nombre, "
     "telefono = EXCLUDED.telefono, correo = EXCLUDED.correo, "
-    "observaciones = EXCLUDED.observaciones, activo = EXCLUDED.activo"
+    "observaciones = EXCLUDED.observaciones, activo = EXCLUDED.activo, "
+    "cupo_credito = EXCLUDED.cupo_credito"
 )
 
 # El consumo local es un «cargo» en el destino. Si la venta aun no llego, venta_id queda vacio.
@@ -184,6 +185,7 @@ def _params_cliente(c: dict) -> tuple:
         c.get("correo") or "",
         c.get("observaciones") or "",
         c.get("activo", True),
+        c.get("cupo"),
     )
 
 

@@ -212,6 +212,7 @@ def _datos_cliente(cliente: Cliente) -> dict:
         "correo": cliente.correo,
         "observaciones": cliente.observaciones,
         "activo": cliente.activo,
+        "cupo": cliente.cupo,
     }
 
 

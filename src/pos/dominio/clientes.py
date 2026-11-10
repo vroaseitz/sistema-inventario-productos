@@ -14,6 +14,7 @@ from enum import StrEnum
 from uuid import uuid4
 
 from .errores import ReglaClienteInvalida
+from .formato import formatear_clp
 from .value_objects import _a_pesos
 
 MEDIOS_ABONO = ("efectivo", "transferencia", "tarjeta")
@@ -40,8 +41,12 @@ class Cliente:
     observaciones: str = ""
     activo: bool = True
     id: int | None = None
+    # CL-01: tope de lo que puede deber. None = sin cupo definido (no se limita); 0 = sin credito.
+    cupo: int | None = None
 
     def __post_init__(self) -> None:
+        if self.cupo is not None and self.cupo < 0:
+            raise ReglaClienteInvalida("El cupo de crédito no puede ser negativo")
         self.nombre = " ".join(self.nombre.split())
         self.telefono = self.telefono.strip()
         self.correo = self.correo.strip()
@@ -104,6 +109,22 @@ class LineaConsumo:
 
 def saldo_de(movimientos: list[MovimientoCliente]) -> int:
     return sum(m.efecto for m in movimientos)
+
+
+def aviso_cupo_insuficiente(nombre: str, disponible: int, compra: int) -> str:
+    """Texto unico (venta y cobro) cuando la compra a credito pasa el cupo."""
+    return (
+        f"El cupo de crédito de {nombre} no alcanza: le quedan {formatear_clp(disponible)} "
+        f"y esta venta a crédito es de {formatear_clp(compra)}"
+    )
+
+
+def cupo_disponible(cupo: int | None, saldo: int) -> int | None:
+    """CL-01: lo que aun puede comprar a credito (None si el cliente no tiene cupo definido).
+
+    Pagar, sea todo o un abono, baja el saldo y por eso libera cupo.
+    """
+    return None if cupo is None else max(cupo - saldo, 0)
 
 
 def en_ciclo(movimiento: MovimientoCliente, anio: int, mes: int) -> bool:

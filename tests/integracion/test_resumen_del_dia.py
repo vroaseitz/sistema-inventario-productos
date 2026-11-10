@@ -119,3 +119,4 @@ def test_avisos_lotes_bajo_minimo_y_sin_costo(app):
     assert "Pan vence en 2 días" in titulos["alertas"].detalle
     assert titulos["existencias"].titulo == "1 producto bajo el mínimo"  # CAS: 100 < 200
     assert titulos["productos"].titulo == "1 producto sin costo cargado"  # CRE
+    assert titulos["productos"].detalle.startswith("Crema")  # O-39: dice cual es

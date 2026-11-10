@@ -25,6 +25,7 @@ from pos.dominio.clientes import (
     TipoMovimientoCliente,
     abonos_del_ciclo,
     consumos_del_ciclo,
+    cupo_disponible,
     descuento_credito,
     en_ciclo,
     saldo_anterior,
@@ -32,10 +33,11 @@ from pos.dominio.clientes import (
     total_a_pagar,
     ultimo_consumo,
 )
-from pos.dominio.errores import ErrorDominio
+from pos.dominio.errores import ErrorDominio, ReglaClienteInvalida
 from pos.dominio.formato import formatear_cantidad, formatear_clp, parsear_monto
 from pos.interfaz import tema
 from pos.interfaz.campo_fecha import CampoFecha
+from pos.interfaz.combo_filtrable import ComboFiltrable
 from pos.interfaz.exportar import exportar_con_dialogo
 
 MESES = (
@@ -68,6 +70,15 @@ def _ciclo_de(rotulo: str) -> tuple[int, int]:
     return int(anio), MESES.index(nombre) + 1
 
 
+def _texto_cupo(cupo: int | None) -> str:
+    return "Sin definir" if cupo is None else formatear_clp(cupo)
+
+
+def _texto_disponible(cupo: int | None, saldo: int) -> str:
+    disponible = cupo_disponible(cupo, saldo)
+    return "—" if disponible is None else formatear_clp(disponible)
+
+
 def _ultimos_ciclos(cantidad: int = 12) -> list[str]:
     hoy = date.today()
     ciclos = []
@@ -96,6 +107,10 @@ class VentanaClientes(ttk.Frame):
         self._pagador = pagar_estado or PagarEstadoDeCuenta(repo_clientes)
         self._cliente_id: int | None = None  # cliente de la pestana Cuenta / Estado de cuenta
         self._ciclo = tk.StringVar(value=_ultimos_ciclos(1)[0])
+        # CL-04: Cuenta y Estado de cuenta eligen el cliente aqui mismo, con busqueda al escribir.
+        self._cliente_nombre = tk.StringVar()
+        self._opciones_clientes: dict[str, int] = {}
+        self._combos_cliente: list[ComboFiltrable] = []
         self._ciclo_saldos = tk.StringVar(value=_ultimos_ciclos(1)[0])
         self._buscar = tk.StringVar()
         self._estado = tk.StringVar(value="Activos")
@@ -121,6 +136,44 @@ class VentanaClientes(ttk.Frame):
             tabla.heading(clave, text=titulo)
             tabla.column(clave, width=ancho, anchor=ancla)
         return tabla
+
+    def _selector_cliente(self, padre: tk.Misc, fila: int, columna: int) -> None:
+        """CL-04: «Cliente» con busqueda al escribir; elegir uno muestra su cuenta al instante."""
+        ttk.Label(padre, text="Cliente").grid(row=fila, column=columna, padx=4, sticky="w")
+        combo = ComboFiltrable(padre, self._cliente_nombre, [], 28)
+        combo.grid(row=fila, column=columna + 1, padx=4, sticky="w")
+        combo.bind("<<ComboboxSelected>>", self._al_elegir_cliente, add="+")
+        self._combos_cliente.append(combo)
+
+    def _selector_ciclo(self, padre: tk.Misc, fila: int, columna: int) -> None:
+        ttk.Label(padre, text="Ciclo").grid(row=fila, column=columna, padx=4, sticky="w")
+        combo = ttk.Combobox(
+            padre, textvariable=self._ciclo, values=_ultimos_ciclos(), state="readonly", width=18
+        )
+        combo.grid(row=fila, column=columna + 1, padx=4, sticky="w")
+        combo.bind("<<ComboboxSelected>>", lambda _e: self._refrescar_cuenta())
+
+    def _al_elegir_cliente(self, _evento: object = None) -> None:
+        cliente_id = self._opciones_clientes.get(self._cliente_nombre.get())
+        if cliente_id is not None and cliente_id != self._cliente_id:
+            self._cliente_id = cliente_id
+            self._refrescar_cuenta()
+
+    def _sincronizar_selectores(self) -> None:
+        """Deja los selectores con los clientes activos (y el elegido, aunque este inactivo)."""
+        clientes = [c for c in self._repo.listar() if c.activo or c.id == self._cliente_id]
+        clientes.sort(key=lambda c: c.nombre.lower())
+        repetidos = {c.nombre for c in clientes if sum(o.nombre == c.nombre for o in clientes) > 1}
+        self._opciones_clientes = {
+            (f"{c.nombre} (N° {c.id})" if c.nombre in repetidos else c.nombre): c.id
+            for c in clientes
+        }
+        etiqueta = next(
+            (e for e, i in self._opciones_clientes.items() if i == self._cliente_id), ""
+        )
+        for combo in self._combos_cliente:
+            combo.poner_opciones(list(self._opciones_clientes))
+            combo.fijar(etiqueta)
 
     def _construir_lista(self) -> None:
         marco = ttk.Frame(self._pestanas, padding=8)
@@ -178,7 +231,9 @@ class VentanaClientes(ttk.Frame):
                 ("cliente", "Cliente", 220, "w"),
                 ("contacto", "Contacto", 200, "w"),
                 ("ultimo", "Último consumo", 120, "w"),
-                ("saldo", "Saldo", 110, "e"),
+                ("saldo", "Saldo", 100, "e"),
+                ("cupo", "Cupo", 100, "e"),  # CL-01
+                ("disponible", "Disponible", 100, "e"),
                 ("estado", "Estado", 90, "w"),
             ),
         )
@@ -190,21 +245,19 @@ class VentanaClientes(ttk.Frame):
         self._pestanas.add(marco, text="Cuenta")
         cab = ttk.Frame(marco)
         cab.pack(fill="x")
-        self._lbl_cliente = ttk.Label(
-            cab, text="Elige un cliente en la lista", font=("", 12, "bold")
-        )
-        self._lbl_cliente.grid(row=0, column=0, sticky="w", padx=4)
-        self._lbl_saldo = ttk.Label(cab, text="Saldo actual: -", font=("", 12, "bold"))
-        self._lbl_saldo.grid(row=0, column=1, padx=24)
-        ttk.Label(cab, text="Ciclo").grid(row=0, column=2, padx=4)
-        combo = ttk.Combobox(
-            cab, textvariable=self._ciclo, values=_ultimos_ciclos(), state="readonly", width=18
-        )
-        combo.grid(row=0, column=3, padx=4)
-        combo.bind("<<ComboboxSelected>>", lambda _e: self._refrescar_cuenta())
+        self._selector_cliente(cab, 0, 0)
+        self._selector_ciclo(cab, 0, 2)
         ttk.Button(cab, text="Registrar abono", command=self._abono_de_la_cuenta).grid(
             row=0, column=4, padx=12
         )
+        self._lbl_cliente = ttk.Label(
+            cab, text="Elige un cliente en la lista de arriba", font=("", 12, "bold")
+        )
+        self._lbl_cliente.grid(row=1, column=0, columnspan=3, sticky="w", padx=4, pady=(6, 0))
+        self._lbl_saldo = ttk.Label(cab, text="Saldo actual: -", font=("", 12, "bold"))
+        self._lbl_saldo.grid(row=1, column=3, columnspan=2, sticky="w", padx=4, pady=(6, 0))
+        self._lbl_cupo = ttk.Label(cab, text="Cupo de crédito: -", font=("", 11))
+        self._lbl_cupo.grid(row=2, column=0, columnspan=5, sticky="w", padx=4, pady=(2, 0))
         self._tabla_cuenta = self._tabla(
             marco,
             (
@@ -228,10 +281,12 @@ class VentanaClientes(ttk.Frame):
     def _construir_estado(self) -> None:
         marco = ttk.Frame(self._pestanas, padding=8)
         self._pestanas.add(marco, text="Estado de cuenta")
-        self._lbl_estado = ttk.Label(
-            marco, text="Elige un cliente en la lista", font=("", 12, "bold")
-        )
-        self._lbl_estado.pack(anchor="w", padx=4)
+        cab = ttk.Frame(marco)
+        cab.pack(fill="x")
+        self._selector_cliente(cab, 0, 0)
+        self._selector_ciclo(cab, 0, 2)
+        self._lbl_estado = ttk.Label(marco, text="Elige un cliente arriba", font=("", 12, "bold"))
+        self._lbl_estado.pack(anchor="w", padx=4, pady=(6, 0))
         self._tabla_estado = self._tabla(
             marco,
             (
@@ -252,27 +307,44 @@ class VentanaClientes(ttk.Frame):
         resumen.pack(side="bottom", anchor="e")
         self._lbl_resumen = {}
         self._rotulos_resumen = {}
-        for fila, (clave, rotulo, negrita) in enumerate(
+        # CL-03: las tres cifras que importan (consumos, descuento en pesos y total a pagar) van
+        # juntas y destacadas; los saldos del ciclo van al lado, mas discretos.
+        principal = ttk.LabelFrame(resumen, text="Lo que se paga este ciclo", padding=8)
+        principal.grid(row=0, column=0, padx=(0, 16), sticky="ne")
+        secundario = ttk.Frame(resumen)
+        secundario.grid(row=0, column=1, sticky="ne")
+        for padre, filas in (
             (
-                ("anterior", "Saldo anterior", False),
-                ("consumos", "Consumos del ciclo", False),
+                principal,
                 (
-                    "descuento",
-                    f"Descuento del crédito familiar ({PORCENTAJE_DESCUENTO_CREDITO} %)",
-                    False,
+                    ("consumos", "Total de consumos del ciclo", False),
+                    (
+                        "descuento",
+                        f"Descuento del {PORCENTAJE_DESCUENTO_CREDITO} % (crédito familiar)",
+                        False,
+                    ),
+                    ("total", "Total a pagar", True),
                 ),
-                ("total", "Total a pagar del ciclo", True),
-                ("abonos", "Abonos del ciclo", False),
-                ("final", "Saldo final", True),
-            )
+            ),
+            (
+                secundario,
+                (
+                    ("anterior", "Saldo anterior", False),
+                    ("abonos", "Abonos del ciclo", False),
+                    ("final", "Saldo final", True),
+                ),
+            ),
         ):
-            fuente = ("", 11, "bold") if negrita else ("", 10)
-            etiqueta = ttk.Label(resumen, text=rotulo, font=fuente)
-            etiqueta.grid(row=fila, column=0, sticky="e", padx=8)
-            self._rotulos_resumen[clave] = etiqueta
-            valor = ttk.Label(resumen, text="—", font=fuente, anchor="e", width=14)
-            valor.grid(row=fila, column=1, sticky="e")
-            self._lbl_resumen[clave] = valor
+            grande = padre is principal
+            for fila, (clave, rotulo, negrita) in enumerate(filas):
+                tamano = 13 if grande else 10
+                fuente = ("", tamano, "bold") if negrita else ("", tamano)
+                etiqueta = ttk.Label(padre, text=rotulo, font=fuente)
+                etiqueta.grid(row=fila, column=0, sticky="e", padx=8, pady=1)
+                self._rotulos_resumen[clave] = etiqueta
+                valor = ttk.Label(padre, text="—", font=fuente, anchor="e", width=14)
+                valor.grid(row=fila, column=1, sticky="e")
+                self._lbl_resumen[clave] = valor
         botones = ttk.Frame(marco)
         botones.pack(side="bottom", anchor="e", pady=(6, 0))
         ttk.Button(
@@ -354,11 +426,14 @@ class VentanaClientes(ttk.Frame):
                     cliente.contacto,
                     _fecha(ultimo),
                     formatear_clp(saldo),
+                    _texto_cupo(cliente.cupo),
+                    _texto_disponible(cliente.cupo, saldo),
                     "Activo" if cliente.activo else "Inactivo",
                 ),
             )
 
     def _refrescar_cuenta(self) -> None:
+        self._sincronizar_selectores()
         self._tabla_cuenta.delete(*self._tabla_cuenta.get_children())
         self._tabla_estado.delete(*self._tabla_estado.get_children())
         cliente = self._repo.obtener(self._cliente_id) if self._cliente_id else None
@@ -367,7 +442,14 @@ class VentanaClientes(ttk.Frame):
         movs = self._repo.movimientos(cliente.id)
         anio, mes = _ciclo_de(self._ciclo.get())
         self._lbl_cliente.config(text=f"{cliente.nombre} · {cliente.contacto}")
-        self._lbl_saldo.config(text=f"Saldo actual: {formatear_clp(saldo_de(movs))}")
+        saldo_actual = saldo_de(movs)
+        self._lbl_saldo.config(text=f"Saldo actual: {formatear_clp(saldo_actual)}")
+        self._lbl_cupo.config(  # CL-01: cupo y lo que aun puede comprar a credito
+            text="Cupo de crédito: sin definir"
+            if cliente.cupo is None
+            else f"Cupo de crédito: {formatear_clp(cliente.cupo)}  ·  disponible: "
+            f"{formatear_clp(cupo_disponible(cliente.cupo, saldo_actual) or 0)}"
+        )
         corrido = saldo_anterior(movs, anio, mes)
         self._tabla_cuenta.insert(
             "",
@@ -437,7 +519,7 @@ class VentanaClientes(ttk.Frame):
         descuento = descuento_credito(consumos)
         self._lbl_resumen["anterior"].config(text=formatear_clp(saldo_anterior(movs, anio, mes)))
         self._lbl_resumen["consumos"].config(text=formatear_clp(consumos))
-        self._lbl_resumen["descuento"].config(text=f"- {formatear_clp(descuento)}")
+        self._lbl_resumen["descuento"].config(text=f"− {formatear_clp(descuento)}")  # CL-03
         self._lbl_resumen["total"].config(text=formatear_clp(total_a_pagar(consumos)))
         self._lbl_resumen["abonos"].config(text=formatear_clp(abonos))
         self._lbl_resumen["final"].config(text=formatear_clp(corrido))
@@ -561,13 +643,23 @@ class VentanaClientes(ttk.Frame):
         self.refrescar()
 
     def guardar_cliente(
-        self, cliente_id: int | None, nombre: str, telefono: str, correo: str, obs: str
+        self,
+        cliente_id: int | None,
+        nombre: str,
+        telefono: str,
+        correo: str,
+        obs: str,
+        cupo_texto: str | None = None,
     ) -> bool:
+        """`cupo_texto` None = no se toca el cupo (el formulario siempre lo envia: CL-01)."""
         try:
+            cupo = self._leer_cupo(nombre, cupo_texto)
             if cliente_id is None:
-                self._gestion.crear(nombre, telefono, correo, obs)
-            else:
+                self._gestion.crear(nombre, telefono, correo, obs, cupo=cupo)
+            elif cupo_texto is None:
                 self._gestion.modificar(cliente_id, nombre, telefono, correo, obs)
+            else:
+                self._gestion.modificar(cliente_id, nombre, telefono, correo, obs, cupo=cupo)
         except ErrorDominio as error:
             messagebox.showerror("Clientes", str(error))
             return False
@@ -575,13 +667,27 @@ class VentanaClientes(ttk.Frame):
         self.refrescar()
         return True
 
+    @staticmethod
+    def _leer_cupo(nombre: str, cupo_texto: str | None) -> int | None:
+        if cupo_texto is None:
+            return None
+        if not cupo_texto.strip():
+            raise ReglaClienteInvalida(
+                f"Escribe el cupo de crédito de {nombre.strip() or 'el cliente'} "
+                "(0 si no tiene crédito)"
+            )
+        try:
+            return parsear_monto(cupo_texto)
+        except ValueError:
+            raise ReglaClienteInvalida("El cupo de crédito debe ser un monto en pesos") from None
+
     def _dialogo_cliente(self, cliente: Cliente | None) -> None:
         ventana = tk.Toplevel(self)
         ventana.title("Cliente con crédito" if cliente is None else "Modificar cliente")
         ventana.transient(self.winfo_toplevel())
         ttk.Label(
             ventana,
-            text="Solo familiares, según lo definido por las propietarias",
+            text="Solo familiares. El cupo es lo máximo que puede deber; 0 = sin crédito",
             foreground="#666",
         ).grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 4))
         variables = {}
@@ -591,6 +697,13 @@ class VentanaClientes(ttk.Frame):
                 ("telefono", "Teléfono", cliente.telefono if cliente else ""),
                 ("correo", "Correo", cliente.correo if cliente else ""),
                 ("obs", "Observaciones", cliente.observaciones if cliente else ""),
+                (
+                    "cupo",
+                    "Cupo de crédito ($)",
+                    formatear_clp(cliente.cupo).lstrip("$")
+                    if cliente and cliente.cupo is not None
+                    else "",
+                ),
             ),
             start=1,
         ):
@@ -608,6 +721,7 @@ class VentanaClientes(ttk.Frame):
                 variables["telefono"].get(),
                 variables["correo"].get(),
                 variables["obs"].get(),
+                variables["cupo"].get(),
             ):
                 ventana.destroy()
 

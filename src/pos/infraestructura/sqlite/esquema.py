@@ -112,7 +112,8 @@ CREATE TABLE IF NOT EXISTS clientes (
     telefono       TEXT NOT NULL DEFAULT '',
     correo         TEXT NOT NULL DEFAULT '',
     observaciones  TEXT NOT NULL DEFAULT '',
-    activo         INTEGER NOT NULL DEFAULT 1
+    activo         INTEGER NOT NULL DEFAULT 1,
+    cupo           INTEGER CHECK (cupo IS NULL OR cupo >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS movimientos_cliente (
@@ -279,6 +280,7 @@ _MIGRACIONES = (
     "ALTER TABLE auditoria ADD COLUMN antes TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE auditoria ADD COLUMN despues TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE historial_ajustes_inventario ADD COLUMN observacion TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE clientes ADD COLUMN cupo INTEGER",
     "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
     "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",

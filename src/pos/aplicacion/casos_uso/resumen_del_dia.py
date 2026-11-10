@@ -132,10 +132,14 @@ class ResumenDelDia:
         ]
         if sin_costo:
             plural = "s" if len(sin_costo) != 1 else ""
+            # O-39: el aviso dice cuales son (los dos primeros y «y N mas»).
+            nombres = ", ".join(p.nombre for p in sin_costo[:2]) + (
+                f" y {len(sin_costo) - 2} más" if len(sin_costo) > 2 else ""
+            )
             avisos.append(
                 Aviso(
                     f"{len(sin_costo)} producto{plural} sin costo cargado",
-                    "Su margen no se puede calcular",
+                    f"{nombres}: su margen no se puede calcular",
                     "productos",
                 )
             )

@@ -45,7 +45,12 @@ from pos.aplicacion.puertos import (
 from pos.dominio.caja import TipoMovimientoCaja, calcular_arqueo
 from pos.dominio.clientes import saldo_de
 from pos.dominio.errores import ErrorDominio, ErrorImpresion
-from pos.dominio.formato import formatear_clp, parsear_monto, rango_de_busqueda
+from pos.dominio.formato import (
+    formatear_clp,
+    formatear_fecha_corta,
+    parsear_monto,
+    rango_de_busqueda,
+)
 from pos.dominio.pagos import (
     DENOMINACIONES_CLP,
     ConteoDenominaciones,
@@ -80,12 +85,11 @@ MOTIVOS_MOVIMIENTO_CAJA = (
     "Ingreso de sencillo",
     "Retiro planificado para deposito bancario",
     "Retiro por resguardo durante la jornada",
-    "Propinas en fechas especiales",
 )
-# O-35 (Excel de hallazgos): cada tipo muestra solo sus motivos. Ingreso: «Ingreso de sencillo» y
-# «Propinas»; retiro: el deposito bancario y el resguardo.
+# O-35 (Excel de hallazgos): cada tipo muestra solo sus motivos. Ingreso: solo «Ingreso de sencillo»
+# (la PO confirmo el 09-11 que no tienen propinas); retiro: el deposito bancario y el resguardo.
 MOTIVOS_POR_TIPO = {
-    TipoMovimientoCaja.INGRESO: (MOTIVOS_MOVIMIENTO_CAJA[0], MOTIVOS_MOVIMIENTO_CAJA[3]),
+    TipoMovimientoCaja.INGRESO: (MOTIVOS_MOVIMIENTO_CAJA[0],),
     TipoMovimientoCaja.RETIRO: (MOTIVOS_MOVIMIENTO_CAJA[1], MOTIVOS_MOVIMIENTO_CAJA[2]),
 }
 
@@ -762,7 +766,7 @@ class VentanaVentas(ttk.Frame):
         modulo, pestana = {
             "alertas": ("F3", "alertas"),
             "existencias": ("F3", "existencias"),
-            "productos": ("F2", ""),
+            "productos": ("F2", "sin_costo"),
             "reportes": ("F6", ""),
         }.get(destino, ("", ""))
         if modulo and hasattr(ventana, "ir_a"):
@@ -1506,15 +1510,25 @@ class VentanaVentas(ttk.Frame):
         dialogo.title("Buscar producto")
         dialogo.transient(self.winfo_toplevel())
         dialogo.grab_set()
-        dialogo.geometry("360x320")
+        # O-38: alto fijo; lo que sobra se desplaza con barra y los botones siempre se ven.
+        dialogo.geometry("420x440")
+        dialogo.minsize(380, 360)
 
         ttk.Label(dialogo, text="Nombre").pack(padx=8, pady=(8, 2), anchor="w")
         entrada = ttk.Entry(dialogo, width=40)
-        entrada.pack(padx=8, pady=2)
+        entrada.pack(padx=8, pady=2, fill="x")
         entrada.focus_set()
 
-        lista = Listbox(dialogo, width=50, height=12)
-        lista.pack(padx=8, pady=8, fill="both", expand=True)
+        # Los botones y el aviso se empacan primero, abajo, para que la lista no los desplace.
+        pie = ttk.Frame(dialogo)
+        pie.pack(side="bottom", fill="x", pady=(0, 8))
+        marco_lista = ttk.Frame(dialogo)
+        marco_lista.pack(padx=8, pady=8, fill="both", expand=True)
+        barra = ttk.Scrollbar(marco_lista, orient="vertical")
+        barra.pack(side="right", fill="y")
+        lista = Listbox(marco_lista, width=50, height=8, yscrollcommand=barra.set)
+        lista.pack(side="left", fill="both", expand=True)
+        barra.configure(command=lista.yview)
 
         productos = self._repo_productos.listar()
 
@@ -1527,17 +1541,28 @@ class VentanaVentas(ttk.Frame):
                 key=lambda p: (rango_de_busqueda(p.nombre, termino), _normalizar(p.nombre))
             )
             for producto in coinciden:
-                lista.insert("end", f"{producto.codigo} - {producto.nombre}")
+                # O-31: un producto desactivado se distingue en la lista (texto y color gris).
+                aviso = "" if producto.activo else " (desactivado)"
+                lista.insert("end", f"{producto.codigo} - {producto.nombre}{aviso}")
+                if not producto.activo:
+                    lista.itemconfig("end", foreground="#999999")
 
         def elegir(_evento: object = None) -> None:
             seleccion = lista.curselection()
             if not seleccion:
                 return
             codigo = lista.get(seleccion[0]).split(" - ", 1)[0]
+            elegido = self._repo_productos.obtener_por_codigo(codigo)
+            if elegido is not None and not elegido.activo:
+                # O-31: el aviso sale al elegirlo, antes de agregar y de pedir cantidad o peso.
+                messagebox.showerror(
+                    "No se pudo agregar el producto",
+                    f"El producto {elegido.nombre} está desactivado",
+                )
+                return
             self._entrada_codigo.delete(0, "end")
             self._entrada_codigo.insert(0, codigo)
             dialogo.destroy()
-            elegido = self._repo_productos.obtener_por_codigo(codigo)
             if elegido is not None and elegido.unidad_venta is UnidadVenta.GRANEL:
                 # O-32: un granel elegido en F10 pide el peso de inmediato y entra al ticket.
                 self._agregar_producto()
@@ -1549,7 +1574,7 @@ class VentanaVentas(ttk.Frame):
                 lista.selection_set(0)  # Enter sin elegir toma el primero de la lista
             elegir()
 
-        boton = ttk.Button(dialogo, text="Seleccionar", command=elegir)
+        boton = ttk.Button(pie, text="Seleccionar", command=elegir)
 
         def rotular_boton(_evento: object = None) -> None:
             # O-32: si lo resaltado es granel, el boton avisa que se pedira el peso.
@@ -1569,11 +1594,11 @@ class VentanaVentas(ttk.Frame):
         refrescar_lista()
 
         ttk.Label(
-            dialogo,
+            pie,
             text="Si el producto es a granel, al aceptar se pide el peso.",
             foreground="#666666",
         ).pack(padx=8)
-        boton.pack(pady=(4, 8))
+        boton.pack(pady=(4, 0))
 
     def _rotular_pestanas(self) -> None:
         """HU-VTA-05: cada pestana muestra el total de su ticket (p. ej. «Ticket 1 · $18.240»)."""
@@ -1659,8 +1684,10 @@ class VentanaVentas(ttk.Frame):
         lote = self._registrar_venta.lote_para(venta, codigo)
         if lote is None:
             return "-"
-        elegido = "* " if venta.lote_elegido.get(codigo) == lote.uuid else ""
-        return f"{elegido}{lote.etiqueta} · vence {lote.fecha_vencimiento.isoformat()}"
+        # O-37: «123 (vence 13-11)»; si se eligio a mano con F11 se dice con una palabra.
+        elegido = " · elegido" if venta.lote_elegido.get(codigo) == lote.uuid else ""
+        vence = formatear_fecha_corta(lote.fecha_vencimiento)
+        return f"{lote.etiqueta} (vence {vence}){elegido}"
 
     def _linea_seleccionada(self) -> str | None:
         seleccion = self._tabla.selection()
