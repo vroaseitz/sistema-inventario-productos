@@ -396,14 +396,14 @@ class VentanaVentas(ttk.Frame):
             "lote",
         )
         anchos = {
-            "codigo": 130,
-            "nombre": 250,
+            "codigo": 110,
+            "nombre": 220,
             "precio": 90,
             "cantidad": 70,
             "descuento": 70,
             "subtotal": 100,
             "existencia": 80,
-            "lote": 170,
+            "lote": 260,  # O-37: «L-B (vence 09-01-2027) · elegido» cabe completo
         }
         self._tabla = ttk.Treeview(tab_venta, columns=columnas, show="headings", height=4)
         for col, titulo in zip(
@@ -1739,7 +1739,9 @@ class VentanaVentas(ttk.Frame):
         lista = Listbox(dialogo, height=min(8, len(lotes)), width=48, exportselection=False)
         for lote in lotes:
             lista.insert(
-                "end", f"{lote.etiqueta} · vence {lote.fecha_vencimiento} · saldo {lote.saldo}"
+                "end",
+                f"{lote.etiqueta} · vence {formatear_fecha_corta(lote.fecha_vencimiento)} "
+                f"· saldo {lote.saldo}",
             )
         lista.selection_set(0)
         lista.pack(padx=12, pady=10)
