@@ -21,6 +21,9 @@ MEDIOS_ABONO = ("efectivo", "transferencia", "tarjeta")
 # El descuento del credito familiar se asienta como un abono sin plata: baja la deuda pero no
 # entra a la caja ni al banco, y no cuenta como «abono» en los reportes.
 MEDIO_DESCUENTO = "descuento"
+# HU-VTA-11: anular una venta a credito revierte su consumo con un abono sin plata (medio
+# «anulacion»): baja la deuda, no entra a la caja y no cuenta como un pago del cliente.
+MEDIO_ANULACION = "anulacion"
 
 
 def detalle_descuento(anio: int, mes: int) -> str:
@@ -143,19 +146,28 @@ def ultimo_consumo(movimientos: list[MovimientoCliente]) -> date | None:
 
 
 def consumos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
-    return sum(
+    """Lo consumido en el ciclo, ya sin las ventas anuladas (la base del descuento del 20 %)."""
+    consumido = sum(
         m.monto
         for m in movimientos
         if m.tipo is TipoMovimientoCliente.CONSUMO and en_ciclo(m, anio, mes)
     )
+    anulado = sum(
+        m.monto
+        for m in movimientos
+        if m.tipo is TipoMovimientoCliente.ABONO
+        and m.medio == MEDIO_ANULACION
+        and en_ciclo(m, anio, mes)
+    )
+    return consumido - anulado
 
 
 def abonos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
-    """Lo que el cliente pago en el ciclo (el descuento asentado no es un pago)."""
+    """Lo que el cliente pago en el ciclo (el descuento y las anulaciones no son un pago)."""
     return sum(
         m.monto
         for m in movimientos
         if m.tipo is TipoMovimientoCliente.ABONO
-        and m.medio != MEDIO_DESCUENTO
+        and m.medio not in (MEDIO_DESCUENTO, MEDIO_ANULACION)
         and en_ciclo(m, anio, mes)
     )

@@ -115,6 +115,27 @@ def test_venta_lleva_nota_y_motivo_del_descuento(pg):
     assert (motivo, descuento) == ("Cortesía", Decimal("400.00"))
 
 
+def test_anular_una_venta_la_deja_marcada_en_el_destino_sin_borrarla(pg):
+    """HU-VTA-11: la venta publicada pasa a anulada con su motivo; no se elimina ni se duplica."""
+    from pos.aplicacion.casos_uso.anular_venta import AnularVenta
+
+    app = App()
+    app.sembrar("A1", "Barra de cereal", 1200, 10)
+    app.abrir.ejecutar(usuario_id=1, fondo_inicial=Dinero(0))
+    venta = app.vender([("A1", 2)], [Pago(medio=MedioPago.EFECTIVO, monto=Dinero(2400))])
+    assert app.sincronizar().fallo_en is None
+    assert _uno(pg, "SELECT estado FROM pos.venta") == "pagada"
+
+    AnularVenta(app.ventas, app.turnos, app.existencias, cola=app.cola).ejecutar(
+        venta.id, "Otro", "Cobro equivocado", "Admin"
+    )
+    assert app.sincronizar().fallo_en is None
+    estado, motivo = _fila(pg, "SELECT estado, motivo_anulacion FROM pos.venta")
+    assert (estado, motivo) == ("anulada", "Otro: Cobro equivocado")
+    assert _uno(pg, "SELECT count(*) FROM pos.venta") == 1  # se conserva, no se duplica
+    assert _uno(pg, "SELECT count(*) FROM pos.venta_detalle") == 1  # con sus lineas
+
+
 def test_lote_llega_con_su_codigo_impreso(pg):
     app = App()
     lotes = RepositorioLotesSQLite(app.productos._con)

@@ -70,7 +70,7 @@ def test_el_periodo_excluye_otras_fechas(entorno):
 def test_no_cuenta_ventas_anuladas(entorno):
     con, _, reporte, vender = entorno
     vender("A", 1, 1000)
-    con.execute("UPDATE ventas SET estado = 'anulada'")
+    con.execute("UPDATE ventas SET estado = 'anulada', motivo_anulacion = 'prueba'")
     hoy = date.today()
     assert reporte.ejecutar(hoy, hoy).cantidad_ventas == 0
 

@@ -19,6 +19,7 @@ from pos.aplicacion.casos_uso.gestionar_clientes import (
 )
 from pos.aplicacion.puertos import RepositorioClientes
 from pos.dominio.clientes import (
+    MEDIO_ANULACION,
     MEDIO_DESCUENTO,
     PORCENTAJE_DESCUENTO_CREDITO,
     Cliente,
@@ -474,7 +475,11 @@ class VentanaClientes(ttk.Frame):
                     _fecha(m.fecha),
                     "Consumo"
                     if es_consumo
-                    else ("Descuento" if m.medio == MEDIO_DESCUENTO else "Abono"),
+                    else (
+                        "Descuento"
+                        if m.medio == MEDIO_DESCUENTO
+                        else ("Anulación" if m.medio == MEDIO_ANULACION else "Abono")
+                    ),
                     m.detalle,
                     formatear_clp(m.monto) if es_consumo else "",
                     "" if es_consumo else formatear_clp(m.monto),

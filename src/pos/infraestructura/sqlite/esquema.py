@@ -208,7 +208,21 @@ CREATE TABLE IF NOT EXISTS ventas (
     creado_en      TEXT NOT NULL DEFAULT (datetime('now')),
     uuid           TEXT,
     nota           TEXT NOT NULL DEFAULT '',
-    FOREIGN KEY (turno_caja_id) REFERENCES turnos_caja(id)
+    motivo_anulacion TEXT NOT NULL DEFAULT '',
+    anulada_por    TEXT NOT NULL DEFAULT '',
+    anulada_en     TEXT,
+    FOREIGN KEY (turno_caja_id) REFERENCES turnos_caja(id),
+    CHECK (estado <> 'anulada' OR motivo_anulacion <> '')
+);
+
+-- De que lote salio lo vendido (HU-VTA-11: al anular, la existencia vuelve al mismo lote).
+CREATE TABLE IF NOT EXISTS venta_lotes (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    venta_id         INTEGER NOT NULL,
+    producto_codigo  TEXT NOT NULL,
+    lote_uuid        TEXT NOT NULL,
+    cantidad         TEXT NOT NULL,
+    FOREIGN KEY (venta_id) REFERENCES ventas(id)
 );
 
 CREATE TABLE IF NOT EXISTS venta_detalles (
@@ -281,6 +295,9 @@ _MIGRACIONES = (
     "ALTER TABLE auditoria ADD COLUMN despues TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE historial_ajustes_inventario ADD COLUMN observacion TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE clientes ADD COLUMN cupo INTEGER",
+    "ALTER TABLE ventas ADD COLUMN motivo_anulacion TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE ventas ADD COLUMN anulada_por TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE ventas ADD COLUMN anulada_en TEXT",
     "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
     "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",

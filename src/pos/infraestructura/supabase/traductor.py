@@ -113,6 +113,12 @@ _SQL_LOTE = (
 
 # --- Clientes, credito, proveedores, facturas de compra y auditoria (migracion 008) ---------
 
+# HU-VTA-11: la venta se conserva en el destino; solo pasa a «anulada» con su motivo.
+_SQL_VENTA_ANULAR = (
+    "UPDATE pos.venta SET estado = 'anulada', motivo_anulacion = %s "
+    "WHERE id_cliente = %s AND estado = 'pagada'"
+)
+
 _SQL_CLIENTE = (
     "INSERT INTO pos.cliente (id_cliente, nombre, tiene_credito, telefono, correo, "
     "observaciones, activo, cupo_credito) VALUES (%s, %s, TRUE, %s, %s, %s, %s, %s) "
@@ -262,6 +268,9 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
 
     if entidad == "categoria_eliminar":
         return [(_SQL_CATEGORIA_ELIMINAR, (d["nombre"],))]
+
+    if entidad == "venta_anular":
+        return [(_SQL_VENTA_ANULAR, (d["motivo"], d["uuid"]))]
 
     if entidad == "cliente":
         return [(_SQL_CLIENTE, _params_cliente(d))]

@@ -158,6 +158,22 @@ def encolar_catalogo(
     return len(productos) + len(existencias)
 
 
+def encolar_anulacion_venta(cola: ColaSincronizacion | None, venta: Venta) -> None:
+    """HU-VTA-11: la venta publicada pasa a anulada con su motivo (no se borra en el destino)."""
+    if cola is None:
+        return
+    cola.encolar(
+        "venta_anular",
+        "update",
+        {
+            "uuid": venta.uuid,
+            "motivo": venta.motivo_anulacion,
+            "anulada_por": venta.anulada_por,
+        },
+        f"venta-anular:{venta.uuid}",
+    )
+
+
 def encolar_lote(cola: ColaSincronizacion | None, lote: Lote) -> None:
     """Un lote cambia de saldo (ingreso, venta), asi que cada cambio es una operacion nueva."""
     if cola is None:

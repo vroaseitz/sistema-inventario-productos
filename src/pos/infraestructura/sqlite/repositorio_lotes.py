@@ -43,6 +43,10 @@ class RepositorioLotesSQLite:
         ).fetchall()
         return [self._a_lote(f) for f in filas]
 
+    def obtener_por_uuid(self, lote_uuid: str) -> Lote | None:
+        fila = self._con.execute("SELECT * FROM lotes WHERE uuid = ?", (lote_uuid,)).fetchone()
+        return self._a_lote(fila) if fila else None
+
     def con_saldo(self) -> list[Lote]:
         filas = self._con.execute(
             "SELECT * FROM lotes WHERE CAST(saldo AS REAL) > 0 ORDER BY fecha_vencimiento, id"

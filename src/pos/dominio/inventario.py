@@ -100,6 +100,7 @@ class TipoMovimiento(StrEnum):
     VENTA = "venta"
     MERMA = "merma"
     AJUSTE = "ajuste"
+    ANULACION = "anulacion"  # HU-VTA-11: lo vendido vuelve a la existencia
 
 
 @dataclass
