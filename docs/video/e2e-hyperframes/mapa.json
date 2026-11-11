@@ -1,0 +1,125 @@
+{
+ "duracion": 235.89,
+ "tramos": [
+  {
+   "rec_ini": 0.0,
+   "rec_fin": 3.0,
+   "vid_ini": 0.0
+  },
+  {
+   "rec_ini": 10.933,
+   "rec_fin": 18.1,
+   "vid_ini": 3.0
+  },
+  {
+   "rec_ini": 23.3,
+   "rec_fin": 28.367,
+   "vid_ini": 10.167
+  },
+  {
+   "rec_ini": 36.7,
+   "rec_fin": 43.1,
+   "vid_ini": 15.233
+  },
+  {
+   "rec_ini": 46.333,
+   "rec_fin": 50.267,
+   "vid_ini": 21.633
+  },
+  {
+   "rec_ini": 56.033,
+   "rec_fin": 59.933,
+   "vid_ini": 25.567
+  },
+  {
+   "rec_ini": 63.2,
+   "rec_fin": 68.667,
+   "vid_ini": 29.467
+  },
+  {
+   "rec_ini": 75.8,
+   "rec_fin": 79.733,
+   "vid_ini": 34.933
+  },
+  {
+   "rec_ini": 88.8,
+   "rec_fin": 89.24,
+   "vid_ini": 38.867
+  },
+  {
+   "rec_ini": 106.99,
+   "rec_fin": 111.533,
+   "vid_ini": 39.307
+  },
+  {
+   "rec_ini": 127.733,
+   "rec_fin": 144.867,
+   "vid_ini": 43.85
+  },
+  {
+   "rec_ini": 159.0,
+   "rec_fin": 162.9,
+   "vid_ini": 60.983
+  },
+  {
+   "rec_ini": 170.567,
+   "rec_fin": 181.467,
+   "vid_ini": 64.883
+  },
+  {
+   "rec_ini": 192.067,
+   "rec_fin": 207.467,
+   "vid_ini": 75.783
+  },
+  {
+   "rec_ini": 218.567,
+   "rec_fin": 229.233,
+   "vid_ini": 91.183
+  },
+  {
+   "rec_ini": 245.567,
+   "rec_fin": 263.6,
+   "vid_ini": 101.85
+  },
+  {
+   "rec_ini": 279.6,
+   "rec_fin": 289.433,
+   "vid_ini": 119.883
+  },
+  {
+   "rec_ini": 302.3,
+   "rec_fin": 313.767,
+   "vid_ini": 129.717
+  },
+  {
+   "rec_ini": 322.533,
+   "rec_fin": 335.3,
+   "vid_ini": 141.183
+  },
+  {
+   "rec_ini": 350.033,
+   "rec_fin": 364.0,
+   "vid_ini": 153.95
+  },
+  {
+   "rec_ini": 375.2,
+   "rec_fin": 389.8,
+   "vid_ini": 167.917
+  },
+  {
+   "rec_ini": 405.4,
+   "rec_fin": 417.1,
+   "vid_ini": 182.517
+  },
+  {
+   "rec_ini": 418.9,
+   "rec_fin": 432.7,
+   "vid_ini": 194.217
+  },
+  {
+   "rec_ini": 443.167,
+   "rec_fin": 471.04,
+   "vid_ini": 208.017
+  }
+ ]
+}

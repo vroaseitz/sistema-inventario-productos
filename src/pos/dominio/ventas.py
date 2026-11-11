@@ -1,0 +1,263 @@
+"""Entidad Venta y sus reglas (HU-VTA-01, HU-VTA-03, HU-VTA-04).
+
+La Venta acumula detalles (lineas de producto) y pagos. El total se redondea a la
+decena solo si alguno de los pagos es en efectivo (HU-VTA-04): tarjeta y
+transferencia conservan el total exacto, sin redondear.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
+from enum import Enum
+from uuid import uuid4
+
+from .errores import ReglaVentaInvalida
+from .formato import formatear_clp
+from .pagos import (
+    ConteoDenominaciones,
+    MedioPago,
+    Pago,
+    calcular_cobro_efectivo,
+    redondear_a_decena,
+)
+from .value_objects import Dinero
+
+
+class EstadoVenta(Enum):
+    """Estado de la venta. Una venta anulada se conserva marcada (HU-VTA-11), nunca se borra."""
+
+    PAGADA = "pagada"
+    ANULADA = "anulada"
+
+
+# HU-VTA-11, respuesta de la PO del 09-11: dos motivos; «Otro» se escribe con sus palabras.
+MOTIVO_MAL_ESTADO = "Producto en mal estado"
+MOTIVO_OTRO = "Otro"
+MOTIVOS_ANULACION = (MOTIVO_MAL_ESTADO, MOTIVO_OTRO)
+
+
+def texto_del_motivo(motivo: str, detalle: str = "") -> str:
+    """El motivo que queda guardado: de la lista, y «Otro» con lo que se escribio."""
+    if motivo not in MOTIVOS_ANULACION:
+        raise ReglaVentaInvalida("Elige un motivo de la lista para anular la venta")
+    if motivo == MOTIVO_OTRO:
+        detalle = " ".join(detalle.split())
+        if not detalle:
+            raise ReglaVentaInvalida("Con el motivo «Otro» escribe cuál fue")
+        return f"{MOTIVO_OTRO}: {detalle}"
+    return motivo
+
+
+@dataclass
+class DetalleVenta:
+    """Una linea de la venta: un producto, su cantidad y el precio/costo vigentes.
+
+    `costo_unitario` es una instantanea (HU-VTA-01/02): calcular el margen de una
+    venta pasada debe usar el costo de ese momento, no el costo actual del producto.
+    """
+
+    producto_codigo: str
+    cantidad: Decimal
+    precio_unitario: Dinero
+    costo_unitario: Dinero | None = None
+    descuento_linea: Dinero = field(default_factory=lambda: Dinero(0))
+    motivo_descuento: str = ""
+
+    def __post_init__(self) -> None:
+        self.cantidad = Decimal(str(self.cantidad))
+        if self.cantidad <= 0:
+            raise ReglaVentaInvalida("La cantidad de una línea debe ser mayor que cero")
+
+    @property
+    def subtotal(self) -> Dinero:
+        bruto = self.precio_unitario.multiplicado_por(self.cantidad)
+        if self.descuento_linea.monto > bruto.monto:
+            raise ReglaVentaInvalida("El descuento de la línea no puede superar su monto bruto")
+        return Dinero(bruto.monto - self.descuento_linea.monto)
+
+
+@dataclass
+class Venta:
+    turno_caja_id: int
+    usuario_id: int
+    cliente_id: int | None = None
+    detalles: list[DetalleVenta] = field(default_factory=list)
+    pagos: list[Pago] = field(default_factory=list)
+    estado: EstadoVenta = EstadoVenta.PAGADA
+    creado_en: datetime = field(default_factory=datetime.now)
+    id: int | None = None
+    uuid: str = field(default_factory=lambda: str(uuid4()))
+    # Lote elegido a mano por producto (F5 Cambiar lote); solo vive durante la venta.
+    lote_elegido: dict[str, str] = field(default_factory=dict, repr=False)
+    # Nota libre de la venta (un cambio de producto, un cobro pendiente...). No se imprime.
+    nota: str = ""
+    # HU-VTA-11: quien la anulo, cuando y por que (la venta anulada se conserva).
+    motivo_anulacion: str = ""
+    anulada_por: str = ""
+    anulada_en: datetime | None = None
+
+    def anular(self, motivo: str, usuario: str, cuando: datetime | None = None) -> None:
+        """Marca la venta como anulada. Exige el motivo ya armado y quien la anula."""
+        if self.estado is EstadoVenta.ANULADA:
+            raise ReglaVentaInvalida("Esta venta ya está anulada: no se puede anular de nuevo")
+        if not motivo.strip():
+            raise ReglaVentaInvalida("La anulación necesita un motivo")
+        if not usuario.strip():
+            raise ReglaVentaInvalida("La anulación necesita quién la hace")
+        self.estado = EstadoVenta.ANULADA
+        self.motivo_anulacion = motivo.strip()
+        self.anulada_por = usuario.strip()
+        self.anulada_en = cuando or datetime.now()
+
+    def agregar_detalle(
+        self,
+        producto_codigo: str,
+        cantidad: Decimal | float,
+        precio_unitario: Dinero,
+        costo_unitario: Dinero | None = None,
+    ) -> DetalleVenta:
+        """Agrega una linea; si el producto ya esta en el ticket, suma la cantidad
+        en vez de duplicar la linea (HU-VTA-01: leer dos veces el mismo producto)."""
+        cantidad_dec = Decimal(str(cantidad))
+        for detalle in self.detalles:
+            if detalle.producto_codigo == producto_codigo:
+                detalle.cantidad += cantidad_dec
+                if detalle.descuento_linea.monto:
+                    # El descuento era de la cantidad anterior: al cambiar la cantidad se retira.
+                    detalle.descuento_linea = Dinero(0)
+                    detalle.motivo_descuento = ""
+                if detalle.cantidad <= 0:
+                    raise ReglaVentaInvalida("La cantidad de una línea debe ser mayor que cero")
+                return detalle
+        detalle = DetalleVenta(
+            producto_codigo=producto_codigo,
+            cantidad=cantidad_dec,
+            precio_unitario=precio_unitario,
+            costo_unitario=costo_unitario,
+        )
+        self.detalles.append(detalle)
+        return detalle
+
+    def aplicar_descuento(self, producto_codigo: str, monto: int, motivo: str) -> DetalleVenta:
+        """Descuento a la linea (prototipo v3): campo propio, con motivo obligatorio.
+
+        No baja el precio del producto: asi el reporte de rentabilidad dice por que hay menos
+        margen. Para liquidar por vencimiento no se usa esto sino el cambio de precio.
+        """
+        detalle = next((d for d in self.detalles if d.producto_codigo == producto_codigo), None)
+        if detalle is None:
+            raise ReglaVentaInvalida("La línea no está en el ticket")
+        if monto < 0:
+            raise ReglaVentaInvalida("El descuento no puede ser negativo")
+        bruto = detalle.precio_unitario.multiplicado_por(detalle.cantidad).monto
+        if monto > bruto:
+            raise ReglaVentaInvalida("El descuento no puede superar el importe de la línea")
+        if monto and not motivo.strip():
+            raise ReglaVentaInvalida("El descuento necesita un motivo")
+        detalle.descuento_linea = Dinero(monto)
+        detalle.motivo_descuento = motivo.strip() if monto else ""
+        return detalle
+
+    def quitar_detalle(self, producto_codigo: str) -> None:
+        """Elimina una linea del ticket antes de cobrar (HU-VTA-01)."""
+        for detalle in self.detalles:
+            if detalle.producto_codigo == producto_codigo:
+                self.detalles.remove(detalle)
+                return
+        raise ReglaVentaInvalida(f"No hay una línea para el producto {producto_codigo}")
+
+    @property
+    def total(self) -> Dinero:
+        """Total exacto de la venta, sin redondeo de efectivo."""
+        return Dinero(sum((d.subtotal.monto for d in self.detalles), 0))
+
+    @property
+    def tiene_pago_en_efectivo(self) -> bool:
+        return any(pago.medio is MedioPago.EFECTIVO for pago in self.pagos)
+
+    @property
+    def total_a_cobrar(self) -> Dinero:
+        """Total que deben sumar los pagos para cerrar la venta.
+
+        Se redondea a la decena solo si hay un pago en efectivo (HU-VTA-04); con
+        solo tarjeta/transferencia/credito, el total se cobra exacto.
+        """
+        if self.tiene_pago_en_efectivo:
+            return Dinero(redondear_a_decena(self.total.monto))
+        return self.total
+
+    def agregar_pago(self, pago: Pago) -> None:
+        # HU-VTA-03: un pago con tarjeta/transferencia/credito que supera lo que
+        # falta por cobrar se rechaza al agregarlo, no recien al cerrar la venta
+        # (antes se aceptaba y la venta quedaba bloqueada con un mensaje confuso).
+        # El efectivo no se restringe aca: su monto ya llega redondeado y validado
+        # por calcular_cobro_efectivo, y un pago parcial en efectivo es valido.
+        if pago.medio is not MedioPago.EFECTIVO:
+            saldo = max(0, self.total_a_cobrar.monto - self.total_pagado.monto)
+            if pago.monto.monto > saldo:
+                raise ReglaVentaInvalida(
+                    f"El pago en {pago.medio.value} ({formatear_clp(pago.monto.monto)}) supera "
+                    f"lo que falta por cobrar ({formatear_clp(saldo)})"
+                )
+        self.pagos.append(pago)
+
+    def quitar_pago(self, indice: int) -> None:
+        """Quita un pago ya agregado, antes de cerrar la venta (HU-VTA-03)."""
+        if indice < 0 or indice >= len(self.pagos):
+            raise ReglaVentaInvalida("No hay un pago en esa posicion")
+        del self.pagos[indice]
+
+    def construir_pago_efectivo(
+        self,
+        monto_entregado: int | None = None,
+        composicion: ConteoDenominaciones | None = None,
+    ) -> Pago:
+        """Arma el pago en efectivo correcto segun si alcanza a cubrir el saldo.
+
+        Hallazgo D-18b: un monto menor al saldo pendiente es un pago PARCIAL
+        legitimo (HU-VTA-03) y se registra tal cual, sin redondeo ni vuelto,
+        porque va a venir otro pago. Solo cuando el efectivo entregado alcanza
+        o supera el saldo se aplica el redondeo a la decena y se calcula el
+        vuelto (HU-VTA-04). Se entrega exactamente uno de los dos parametros,
+        igual que `calcular_cobro_efectivo`.
+        """
+        saldo = Dinero(max(0, self.total_a_cobrar.monto - self.total_pagado.monto))
+        entregado = (
+            Dinero(composicion.total) if composicion is not None else Dinero(monto_entregado or 0)
+        )
+        if entregado.monto < saldo.monto:
+            return Pago(medio=MedioPago.EFECTIVO, monto=entregado)
+        cobro = calcular_cobro_efectivo(
+            saldo,
+            monto_entregado=None if composicion is not None else entregado,
+            composicion=composicion,
+        )
+        return Pago(medio=MedioPago.EFECTIVO, monto=cobro.total_redondeado, cobro_efectivo=cobro)
+
+    @property
+    def total_pagado(self) -> Dinero:
+        return Dinero(sum((pago.monto.monto for pago in self.pagos), 0))
+
+    @property
+    def vuelto_entregado(self) -> Dinero:
+        """Vuelto total entregado en la venta (sale de la gaveta, no es venta)."""
+        total = sum(
+            pago.cobro_efectivo.vuelto.monto
+            for pago in self.pagos
+            if pago.cobro_efectivo is not None
+        )
+        return Dinero(total)
+
+    def validar_cierre(self) -> None:
+        """Valida que la venta pueda cerrarse (HU-VTA-03): no la muta ni cambia su estado."""
+        if not self.detalles:
+            raise ReglaVentaInvalida("No se puede cerrar una venta sin productos")
+        if not self.pagos:
+            raise ReglaVentaInvalida("No se puede cerrar una venta sin pagos registrados")
+        if self.total_pagado.monto != self.total_a_cobrar.monto:
+            raise ReglaVentaInvalida(
+                f"La suma de los pagos ({formatear_clp(self.total_pagado.monto)}) no cubre "
+                f"el total a cobrar ({formatear_clp(self.total_a_cobrar.monto)})"
+            )

@@ -17,5 +17,25 @@ class ReglaInventarioInvalida(ErrorDominio):
     """Operacion de inventario que viola una regla (p. ej. stock negativo)."""
 
 
+class ErrorImpresion(ErrorDominio):
+    """No se pudo imprimir o abrir el cajon (la venta ya quedo registrada)."""
+
+
+class ReglaClienteInvalida(ErrorDominio):
+    """Cliente o movimiento de credito que viola una regla (sin nombre, abono mayor al saldo)."""
+
+
+class ReglaCompraInvalida(ErrorDominio):
+    """Factura de compra que viola una regla (neto distinto del detalle, sin lineas, etc.)."""
+
+
 class DatosProductoInvalidos(ErrorDominio):
     """Los datos para construir un producto no son validos."""
+
+
+class ReglaVentaInvalida(ErrorDominio):
+    """Operacion de venta que viola una regla (pago incompleto, linea invalida, etc.)."""
+
+
+class ReglaCajaInvalida(ErrorDominio):
+    """Operacion de caja que viola una regla (dos turnos abiertos, movimiento sin motivo, etc.)."""

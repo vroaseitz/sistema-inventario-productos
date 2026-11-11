@@ -8,18 +8,53 @@ from __future__ import annotations
 import sqlite3
 
 DDL = """
+-- Categorias de producto (C-02): tabla propia, ya no una lista fija en el codigo.
+CREATE TABLE IF NOT EXISTS categorias (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre  TEXT NOT NULL UNIQUE,
+    activa  INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS productos (
     codigo        TEXT PRIMARY KEY,
     nombre        TEXT NOT NULL,
     precio        INTEGER NOT NULL CHECK (precio >= 0),
     unidad_venta  TEXT NOT NULL DEFAULT 'unidad',
-    categoria_id  INTEGER,
-    activo        INTEGER NOT NULL DEFAULT 1
+    categoria_id  INTEGER NOT NULL,
+    activo        INTEGER NOT NULL DEFAULT 1,
+    costo_neto    INTEGER,
+    perecible     INTEGER NOT NULL DEFAULT 0,
+    dias_aviso    INTEGER,
+    stock_minimo  INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS existencias (
     codigo_producto TEXT PRIMARY KEY,
     cantidad        TEXT NOT NULL DEFAULT '0',
+    FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
+);
+
+CREATE TABLE IF NOT EXISTS historial_precios (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo_producto TEXT NOT NULL,
+    precio_anterior INTEGER NOT NULL,
+    precio_nuevo    INTEGER NOT NULL,
+    usuario         TEXT NOT NULL,
+    fecha           TEXT NOT NULL,
+    motivo          TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
+);
+
+CREATE TABLE IF NOT EXISTS historial_ajustes_inventario (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    codigo_producto    TEXT NOT NULL,
+    cantidad_anterior  TEXT NOT NULL,
+    cantidad_nueva     TEXT NOT NULL,
+    diferencia_conteo  TEXT NOT NULL,
+    motivo             TEXT NOT NULL,
+    usuario            TEXT NOT NULL,
+    fecha              TEXT NOT NULL,
+    observacion        TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
 );
 
@@ -34,8 +69,264 @@ CREATE TABLE IF NOT EXISTS cola_sincronizacion (
     estado     TEXT NOT NULL DEFAULT 'pending',
     creado_en  TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Jornada de caja (HU-CAJ-01). El indice unico sobre cerrado_en IS NULL impide
+-- dos turnos abiertos a la vez, igual que en database/migraciones/ (Postgres).
+-- Usuarios locales para el acceso (HU-USR-01). La clave se guarda solo como hash bcrypt.
+CREATE TABLE IF NOT EXISTS usuarios (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre     TEXT NOT NULL UNIQUE,
+    clave_hash TEXT NOT NULL,
+    rol        TEXT NOT NULL CHECK (rol IN ('admin', 'cajero')),
+    activo     INTEGER NOT NULL DEFAULT 1,
+    ultimo_acceso TEXT
+);
+
+-- Historial de movimientos de inventario (HU-INV-08): nunca se edita ni se borra.
+CREATE TABLE IF NOT EXISTS movimientos_inventario (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha            TEXT NOT NULL,
+    codigo_producto  TEXT NOT NULL,
+    tipo             TEXT NOT NULL,
+    cantidad         TEXT NOT NULL,
+    motivo           TEXT NOT NULL DEFAULT '',
+    usuario          TEXT NOT NULL DEFAULT ''
+);
+
+-- Parametros de operacion editables en F7 Configuracion (clave -> valor).
+CREATE TABLE IF NOT EXISTS configuracion (
+    clave  TEXT PRIMARY KEY,
+    valor  TEXT NOT NULL
+);
+
+-- Tickets abiertos sin cobrar (O-25): solo productos y lote elegido, nunca pagos.
+CREATE TABLE IF NOT EXISTS tickets_en_espera (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    datos_json  TEXT NOT NULL
+);
+
+-- Clientes con credito y su cuenta (HU-CLI-01 a 05). El saldo se calcula, nunca se guarda.
+CREATE TABLE IF NOT EXISTS clientes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre         TEXT NOT NULL,
+    telefono       TEXT NOT NULL DEFAULT '',
+    correo         TEXT NOT NULL DEFAULT '',
+    observaciones  TEXT NOT NULL DEFAULT '',
+    activo         INTEGER NOT NULL DEFAULT 1,
+    cupo           INTEGER CHECK (cupo IS NULL OR cupo >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS movimientos_cliente (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid           TEXT NOT NULL UNIQUE,
+    cliente_id     INTEGER NOT NULL,
+    tipo           TEXT NOT NULL CHECK (tipo IN ('consumo', 'abono')),
+    monto          INTEGER NOT NULL CHECK (monto > 0),
+    fecha          TEXT NOT NULL,
+    detalle        TEXT NOT NULL DEFAULT '',
+    medio          TEXT,
+    venta_uuid     TEXT UNIQUE,
+    turno_caja_id  INTEGER,
+    FOREIGN KEY (cliente_id) REFERENCES clientes(id)
+);
+
+-- Facturas de compra a proveedor (HU-CMP-01/02). Una factura confirmada no se edita.
+CREATE TABLE IF NOT EXISTS facturas_compra (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    proveedor   TEXT NOT NULL,
+    numero      TEXT NOT NULL,
+    fecha       TEXT NOT NULL,
+    neto        INTEGER NOT NULL,
+    impuestos   INTEGER NOT NULL,
+    estado      TEXT NOT NULL,
+    UNIQUE (proveedor, numero)
+);
+
+CREATE TABLE IF NOT EXISTS facturas_compra_lineas (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    factura_id            INTEGER NOT NULL,
+    codigo_producto       TEXT NOT NULL,
+    cantidad              TEXT NOT NULL,
+    costo_unitario_neto   INTEGER NOT NULL,
+    costo_anterior        INTEGER,
+    fecha_vencimiento     TEXT,
+    codigo_lote           TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (factura_id) REFERENCES facturas_compra(id)
+);
+
+-- Proveedores creados a mano (HU-CMP-03). Los que aparecen solo en una factura tambien cuentan.
+CREATE TABLE IF NOT EXISTS proveedores (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre     TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    contacto   TEXT NOT NULL DEFAULT '',
+    creado_en  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Registro de cambios y descartes (HU-USR-03). La pantalla de auditoria (F7) se construye
+-- despues; por ahora se guarda para no perder el rastro (p. ej. tickets descartados al cerrar).
+CREATE TABLE IF NOT EXISTS auditoria (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha      TEXT NOT NULL,
+    usuario    TEXT NOT NULL,
+    accion     TEXT NOT NULL,
+    detalle    TEXT NOT NULL,
+    registro   TEXT NOT NULL DEFAULT '',
+    antes      TEXT NOT NULL DEFAULT '',
+    despues    TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS turnos_caja (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id         INTEGER NOT NULL,
+    fondo_inicial      INTEGER NOT NULL CHECK (fondo_inicial >= 0),
+    composicion_fondo  TEXT,
+    abierto_en         TEXT NOT NULL DEFAULT (datetime('now')),
+    cerrado_en         TEXT,
+    uuid               TEXT
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_un_solo_turno_abierto
+    ON turnos_caja (cerrado_en) WHERE cerrado_en IS NULL;
+
+-- Movimientos de caja que no son una venta: retiros e ingresos (HU-CAJ-04).
+CREATE TABLE IF NOT EXISTS movimientos_caja (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    turno_id   INTEGER NOT NULL,
+    tipo       TEXT NOT NULL CHECK (tipo IN ('retiro', 'ingreso')),
+    monto      INTEGER NOT NULL CHECK (monto > 0),
+    motivo     TEXT NOT NULL,
+    creado_en  TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (turno_id) REFERENCES turnos_caja(id)
+);
+
+CREATE TABLE IF NOT EXISTS ventas (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    turno_caja_id  INTEGER NOT NULL,
+    usuario_id     INTEGER NOT NULL,
+    cliente_id     INTEGER,
+    estado         TEXT NOT NULL DEFAULT 'pagada' CHECK (estado IN ('pagada', 'anulada')),
+    creado_en      TEXT NOT NULL DEFAULT (datetime('now')),
+    uuid           TEXT,
+    nota           TEXT NOT NULL DEFAULT '',
+    motivo_anulacion TEXT NOT NULL DEFAULT '',
+    anulada_por    TEXT NOT NULL DEFAULT '',
+    anulada_en     TEXT,
+    FOREIGN KEY (turno_caja_id) REFERENCES turnos_caja(id),
+    CHECK (estado <> 'anulada' OR motivo_anulacion <> '')
+);
+
+-- De que lote salio lo vendido (HU-VTA-11: al anular, la existencia vuelve al mismo lote).
+CREATE TABLE IF NOT EXISTS venta_lotes (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    venta_id         INTEGER NOT NULL,
+    producto_codigo  TEXT NOT NULL,
+    lote_uuid        TEXT NOT NULL,
+    cantidad         TEXT NOT NULL,
+    FOREIGN KEY (venta_id) REFERENCES ventas(id)
+);
+
+CREATE TABLE IF NOT EXISTS venta_detalles (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    venta_id         INTEGER NOT NULL,
+    producto_codigo  TEXT NOT NULL,
+    cantidad         TEXT NOT NULL,
+    precio_unitario  INTEGER NOT NULL,
+    costo_unitario   INTEGER,
+    descuento_linea  INTEGER NOT NULL DEFAULT 0,
+    motivo_descuento TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (venta_id) REFERENCES ventas(id)
+);
+
+-- medio_pago admite los cuatro de HU-VTA-03; una venta con pago combinado tiene
+-- mas de una fila. monto_entregado/composicion_entregada solo se llenan en efectivo.
+CREATE TABLE IF NOT EXISTS venta_pagos (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    venta_id               INTEGER NOT NULL,
+    medio_pago             TEXT NOT NULL
+        CHECK (medio_pago IN ('efectivo', 'tarjeta', 'transferencia', 'credito_cliente')),
+    monto                  INTEGER NOT NULL,
+    monto_entregado        INTEGER,
+    composicion_entregada  TEXT,
+    FOREIGN KEY (venta_id) REFERENCES ventas(id)
+);
+
+CREATE TABLE IF NOT EXISTS lotes (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    uuid               TEXT NOT NULL UNIQUE,
+    codigo_producto    TEXT NOT NULL,
+    fecha_vencimiento  TEXT NOT NULL,
+    saldo              TEXT NOT NULL,
+    FOREIGN KEY (codigo_producto) REFERENCES productos(codigo)
+);
+
+-- Indices de lectura. SQLite no indexa las claves foraneas por si solo: sin estos, cada reporte
+-- recorre las tablas completas (con un ano de ventas, rentabilidad pasaba de segundos).
+CREATE INDEX IF NOT EXISTS idx_venta_detalles_venta ON venta_detalles (venta_id);
+CREATE INDEX IF NOT EXISTS idx_venta_detalles_producto ON venta_detalles (producto_codigo);
+CREATE INDEX IF NOT EXISTS idx_venta_pagos_venta ON venta_pagos (venta_id);
+CREATE INDEX IF NOT EXISTS idx_ventas_creado_en ON ventas (creado_en);
+CREATE INDEX IF NOT EXISTS idx_ventas_turno ON ventas (turno_caja_id);
+CREATE INDEX IF NOT EXISTS idx_movimientos_inventario_producto
+    ON movimientos_inventario (codigo_producto, fecha);
+CREATE INDEX IF NOT EXISTS idx_movimientos_inventario_fecha ON movimientos_inventario (fecha);
+CREATE INDEX IF NOT EXISTS idx_movimientos_caja_turno ON movimientos_caja (turno_id);
+CREATE INDEX IF NOT EXISTS idx_lotes_producto ON lotes (codigo_producto, fecha_vencimiento);
+CREATE INDEX IF NOT EXISTS idx_facturas_lineas_factura ON facturas_compra_lineas (factura_id);
+CREATE INDEX IF NOT EXISTS idx_movimientos_cliente_cliente
+    ON movimientos_cliente (cliente_id, fecha);
+-- La cola crece sin parar (lo sincronizado no se borra): solo se indexan las pendientes.
+CREATE INDEX IF NOT EXISTS idx_cola_pendientes ON cola_sincronizacion (estado)
+    WHERE estado = 'pending';
 """
+
+
+# Migracion ligera para bases locales creadas con un esquema anterior: `CREATE TABLE IF NOT
+# EXISTS` no agrega columnas a una tabla que ya existe. Cada sentencia se ejecuta aparte y se
+# tolera "duplicate column" (la base ya estaba migrada).
+_MIGRACIONES = (
+    "ALTER TABLE productos ADD COLUMN costo_neto INTEGER",
+    "ALTER TABLE lotes ADD COLUMN codigo_lote TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE usuarios ADD COLUMN ultimo_acceso TEXT",
+    "ALTER TABLE categorias ADD COLUMN activa INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE historial_precios ADD COLUMN motivo TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE productos ADD COLUMN stock_minimo INTEGER",
+    "ALTER TABLE auditoria ADD COLUMN registro TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE auditoria ADD COLUMN antes TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE auditoria ADD COLUMN despues TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE historial_ajustes_inventario ADD COLUMN observacion TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE clientes ADD COLUMN cupo INTEGER",
+    "ALTER TABLE ventas ADD COLUMN motivo_anulacion TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE ventas ADD COLUMN anulada_por TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE ventas ADD COLUMN anulada_en TEXT",
+    "ALTER TABLE productos ADD COLUMN perecible INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE productos ADD COLUMN dias_aviso INTEGER",
+    "ALTER TABLE turnos_caja ADD COLUMN uuid TEXT",
+    "ALTER TABLE ventas ADD COLUMN uuid TEXT",
+    "ALTER TABLE ventas ADD COLUMN nota TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE venta_detalles ADD COLUMN motivo_descuento TEXT NOT NULL DEFAULT ''",
+)
 
 
 def crear_esquema(conexion: sqlite3.Connection) -> None:
     conexion.executescript(DDL)
+    for sentencia in _MIGRACIONES:
+        try:
+            conexion.execute(sentencia)
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
+    _sembrar_categorias(conexion)
+
+
+def _sembrar_categorias(conexion: sqlite3.Connection) -> None:
+    """Deja las 20 categorias validadas por la PO (CA-02) y retira las 4 antiguas.
+
+    Base nueva: quedan con los ids 1 a 20. Base existente: se agregan las que falten y las
+    antiguas sin productos se eliminan (las de frutas/verduras mueven antes sus productos).
+    """
+    from pos.dominio.categorias import CATEGORIAS_INICIALES
+    from pos.infraestructura.sqlite.repositorio_categorias import RepositorioCategoriasSQLite
+
+    repo = RepositorioCategoriasSQLite(conexion)
+    repo.sembrar(CATEGORIAS_INICIALES)
+    repo.depurar_antiguas()

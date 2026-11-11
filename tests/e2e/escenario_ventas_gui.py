@@ -1,0 +1,950 @@
+"""Escenario con la pantalla F1 real (Tk) para O-25, O-30 y O-02b.
+
+Lo ejecuta `test_ventas_gui.py` en un proceso aparte (una sola ventana Tk por proceso). Sale con
+codigo distinto de 0 si algo falla. Solo se reemplazan los cuadros modales (messagebox y el
+conteo de billetes).
+"""
+
+from __future__ import annotations
+
+import sys
+import tempfile
+import time
+from datetime import date
+from decimal import Decimal
+from pathlib import Path
+from tkinter import Listbox, Tk, Toplevel, messagebox, ttk
+
+sys.stdout.reconfigure(encoding="utf-8")  # consola de Windows: cp1252 no codifica todo
+sys.stderr.reconfigure(encoding="utf-8")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
+
+from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja  # noqa: E402
+from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja  # noqa: E402
+from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante  # noqa: E402
+from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja  # noqa: E402
+from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta  # noqa: E402
+from pos.dominio.inventario import Existencia  # noqa: E402
+from pos.dominio.pagos import ConteoDenominaciones  # noqa: E402
+from pos.dominio.productos import Producto, UnidadVenta  # noqa: E402
+from pos.dominio.value_objects import Dinero  # noqa: E402
+from pos.infraestructura.impresion.impresoras import ImpresoraEnArchivo  # noqa: E402
+from pos.infraestructura.sqlite.conexion import crear_conexion  # noqa: E402
+from pos.infraestructura.sqlite.esquema import crear_esquema  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_clientes import RepositorioClientesSQLite  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_existencias import (  # noqa: E402
+    RepositorioExistenciasSQLite,
+)
+from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_tickets_espera import (  # noqa: E402
+    RepositorioTicketsEsperaSQLite,
+)
+from pos.infraestructura.sqlite.repositorio_turnos_caja import (  # noqa: E402
+    RepositorioTurnosCajaSQLite,
+)
+from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite  # noqa: E402
+from pos.interfaz import app_ventas  # noqa: E402
+
+mensajes: list[tuple[str, str]] = []
+respuestas = {"askyesno": True}
+for _nombre in ("showinfo", "showwarning", "showerror"):
+    setattr(messagebox, _nombre, lambda t, m, _n=_nombre, **k: mensajes.append((_n, m)))
+messagebox.askyesno = lambda titulo, texto, **k: (
+    mensajes.append(("askyesno", texto)) or respuestas["askyesno"]
+)
+app_ventas.VentanaVentas._contar_denominaciones_ui = lambda self, titulo: ConteoDenominaciones(
+    {10000: 1}
+)
+
+raiz = Tk()
+ruta = str(Path(tempfile.mkdtemp()) / "ventas.db")
+carpeta_comprobantes = Path(tempfile.mkdtemp())
+impresora = ImpresoraEnArchivo(carpeta_comprobantes)
+
+
+def verificar(condicion: bool, texto: str) -> None:
+    if not condicion:
+        print("FALLO:", texto)
+        sys.exit(1)
+    print("ok:", texto)
+
+
+def construir() -> tuple:
+    """Abre la pantalla F1 sobre la base del archivo, como al iniciar la aplicacion."""
+    con = crear_conexion(ruta)
+    crear_esquema(con)
+    productos, existencias = RepositorioProductosSQLite(con), RepositorioExistenciasSQLite(con)
+    turnos, ventas = RepositorioTurnosCajaSQLite(con), RepositorioVentasSQLite(con)
+    auditoria = RepositorioAuditoriaSQLite(con)
+    clientes = RepositorioClientesSQLite(con)
+    ventana = app_ventas.VentanaVentas(
+        raiz,
+        turnos,
+        productos,
+        ventas,
+        RegistrarVenta(ventas, turnos, productos, existencias, repositorio_clientes=clientes),
+        AbrirTurnoCaja(turnos),
+        CerrarTurnoCaja(turnos, ventas, repositorio_clientes=clientes),
+        RegistrarMovimientoCaja(turnos),
+        repo_tickets=RepositorioTicketsEsperaSQLite(con),
+        auditoria=auditoria,
+        repo_clientes=clientes,
+        imprimir=ImprimirComprobante(lambda: impresora, productos, ventas, cajera=lambda: "ana"),
+    )
+    ventana.pack(fill="both", expand=True)
+    raiz.update()
+    return ventana, productos, existencias, turnos, auditoria
+
+
+def cerrar_con_la_x(ventana) -> None:
+    ventana.destroy()  # la X: no se pregunta ni se guarda nada especial
+    raiz.update()
+
+
+def escribir_y_esperar(ventana, texto: str) -> None:
+    """Teclea el codigo en la caja de codigo (sin Enter) y deja pasar el tiempo del escaneo."""
+    ventana._entrada_codigo.delete(0, "end")
+    ventana._entrada_codigo.insert(0, texto)
+    ventana._al_escribir_codigo(type("E", (), {"keysym": texto[-1]})())
+    fin = time.time() + 0.8
+    while time.time() < fin:
+        raiz.update()
+        time.sleep(0.02)
+
+
+# --- datos: dos productos por unidad (uno con codigo prefijo del otro) y uno a granel -------
+ventana, productos, existencias, turnos, auditoria = construir()
+for codigo, nombre, precio, unidad in (
+    ("7801", "Barra de cereal", 1200, UnidadVenta.UNIDAD),
+    ("78012", "Barra de avena", 1500, UnidadVenta.UNIDAD),
+    ("NUE", "Nueces", 18000, UnidadVenta.GRANEL),
+):
+    productos.guardar(Producto(codigo, nombre, Dinero(precio), unidad, 1))
+    existencias.guardar(Existencia(codigo, Decimal("50")))
+
+ventana._abrir_turno_ui()
+verificar(turnos.obtener_abierto() is not None, "turno abierto")
+
+# --- O-02b: al escanear se agrega solo, con cantidad 1 --------------------------------------
+escribir_y_esperar(ventana, "78012")
+verificar(
+    [(d.producto_codigo, d.cantidad) for d in ventana._venta.detalles] == [("78012", 1)],
+    "O-02b: un codigo completo se agrega solo con cantidad 1",
+)
+escribir_y_esperar(ventana, "7801")
+verificar(
+    len(ventana._venta.detalles) == 1, "O-02b: un codigo que es comienzo de otro espera el Enter"
+)
+ventana._agregar_producto()  # Enter
+verificar(len(ventana._venta.detalles) == 2, "O-02b: con Enter se agrega el codigo ambiguo")
+escribir_y_esperar(ventana, "NOEXISTE")
+verificar(len(ventana._venta.detalles) == 2, "O-02b: un codigo inexistente no agrega nada")
+
+
+# --- O-02b: escribiendo a mano NO se agrega a medias (el «10» de «1050») --------------------
+productos.guardar(Producto("10", "Producto corto", Dinero(500), UnidadVenta.UNIDAD, 1))
+existencias.guardar(Existencia("10", Decimal("50")))
+antes = len(ventana._venta.detalles)
+ventana._entrada_codigo.delete(0, "end")
+for caracter in "1050":  # a ritmo humano: 300 ms entre teclas
+    ventana._entrada_codigo.insert("end", caracter)
+    ventana._al_escribir_codigo(type("E", (), {"keysym": caracter})())
+    fin = time.time() + 0.3
+    while time.time() < fin:
+        raiz.update()
+        time.sleep(0.02)
+verificar(
+    len(ventana._venta.detalles) == antes, "escribiendo a mano no se agrega el «10» de «1050»"
+)
+mensajes.clear()
+ventana._agregar_producto()  # Enter con un codigo que de verdad no existe
+verificar(
+    any("No existe un producto con código 1050" in m for t, m in mensajes if t == "showerror"),
+    "con Enter si avisa que «1050» no existe",
+)
+escribir_y_esperar(ventana, "10")
+verificar(len(ventana._venta.detalles) == antes, "un codigo de 2 caracteres tampoco se agrega solo")
+ventana._entrada_codigo.delete(0, "end")
+
+
+# --- O-02b: a granel se abre el cuadro del peso y muestra el importe ------------------------
+def buscar(raiz_widget, clase):
+    for hijo in raiz_widget.winfo_children():
+        if isinstance(hijo, clase):
+            return hijo
+        encontrado = buscar(hijo, clase)
+        if encontrado is not None:
+            return encontrado
+    return None
+
+
+def todos(raiz_widget, clase, salida):
+    for hijo in raiz_widget.winfo_children():
+        if isinstance(hijo, clase):
+            salida.append(hijo)
+        todos(hijo, clase, salida)
+    return salida
+
+
+estado: dict[str, object] = {}
+
+
+def teclear_peso() -> None:
+    dialogo = next(w for w in ventana.winfo_children() if isinstance(w, Toplevel))
+    entrada = buscar(dialogo, ttk.Entry)
+    dialogo.update()
+    entrada.insert(0, "0,350")
+    entrada.focus_force()
+    entrada.event_generate("<KeyRelease>", keysym="0")
+    dialogo.update()
+    etiquetas = [w.cget("text") for w in todos(dialogo, ttk.Label, [])]
+    estado["importe"] = next(t for t in etiquetas if t.startswith("Importe"))
+    dialogo.event_generate("<Return>")
+
+
+ventana._entrada_codigo.delete(0, "end")
+ventana._entrada_codigo.insert(0, "NUE")
+ventana.after(100, teclear_peso)
+ventana._agregar_producto()  # Enter sobre un producto a granel: pide el peso
+verificar(
+    estado.get("importe") == "Importe: $6.300", f"O-02b: el cuadro muestra el importe {estado}"
+)
+linea = next(d for d in ventana._venta.detalles if d.producto_codigo == "NUE")
+verificar(linea.cantidad == Decimal("0.350"), "O-02b: la linea a granel lleva el peso pedido")
+
+# Esc cancela y no agrega nada
+antes = len(ventana._venta.detalles)
+ventana._entrada_codigo.delete(0, "end")
+ventana._entrada_codigo.insert(0, "NUE")
+
+
+def pulsar_escape() -> None:
+    """Esc sobre el cuadro abierto. Sin gestor de ventanas (el Linux del CI) el cuadro no recibe
+    el foco solo, y una tecla enviada sin foco se pierde: se le da foco antes de pulsarla."""
+    dialogo = next(w for w in ventana.winfo_children() if isinstance(w, Toplevel))
+    dialogo.focus_force()
+    dialogo.update()
+    dialogo.event_generate("<Escape>")
+
+
+ventana.after(100, pulsar_escape)
+ventana._agregar_producto()
+verificar(len(ventana._venta.detalles) == antes, "O-02b/O-29: Esc cancela el peso y no agrega")
+
+# --- O-32: un granel elegido en F10 pide el peso de inmediato y entra al ticket -------------
+antes = len(ventana._venta.detalles)
+ventana._buscar_producto_ui()
+ventana.update()
+buscador = next(w for w in ventana.winfo_children() if isinstance(w, Toplevel))
+campo = buscar(buscador, ttk.Entry)
+# Sin gestor de ventanas (el Linux del CI) una tecla enviada a un cuadro sin foco se pierde:
+# se le da foco antes de teclear.
+buscador.focus_force()
+buscador.update()
+campo.focus_force()
+campo.insert(0, "nueces")
+campo.event_generate("<KeyRelease>", keysym="s")
+buscador.update()
+lista_f10 = buscar(buscador, Listbox)
+posicion = next(i for i in range(lista_f10.size()) if "Nueces" in lista_f10.get(i))
+lista_f10.selection_clear(0, "end")
+lista_f10.selection_set(posicion)  # el granel, elegido por su texto y no por su posicion
+estado.clear()
+ventana.after(150, teclear_peso)
+boton_f10 = next(b for b in todos(buscador, ttk.Button, []) if b.cget("text") == "Seleccionar")
+boton_f10.invoke()
+verificar(
+    estado.get("importe") == "Importe: $6.300",
+    f"O-32: F10 pide el peso al elegir un granel {estado}",
+)
+nueces = next(d for d in ventana._venta.detalles if d.producto_codigo == "NUE")
+verificar(
+    nueces.cantidad == Decimal("0.700"),  # 0,350 del paso anterior + 0,350 pedidos desde F10
+    f"O-32: el granel entra al ticket con el peso, sin apretar Agregar ({nueces.cantidad})",
+)
+
+# --- O-31: un producto desactivado avisa antes de pedir el peso o la cantidad ---------------
+productos.guardar(
+    Producto("DES", "Almendras viejas", Dinero(9000), UnidadVenta.GRANEL, 1, activo=False)
+)
+existencias.guardar(Existencia("DES", Decimal("5")))
+antes = len(ventana._venta.detalles)
+mensajes.clear()
+visto = {}
+
+
+def vigilar() -> None:
+    cuadros = [w for w in ventana.winfo_children() if isinstance(w, Toplevel)]
+    visto["peso"] = bool(cuadros)
+    for cuadro in cuadros:
+        cuadro.destroy()
+
+
+vigia = ventana.after(400, vigilar)
+ventana._entrada_codigo.delete(0, "end")
+ventana._entrada_codigo.insert(0, "DES")
+ventana._agregar_producto()
+ventana.after_cancel(vigia)
+verificar(not visto.get("peso"), "O-31: no se pide el peso de un producto desactivado")
+verificar(
+    any("desactivado" in m for t, m in mensajes if t == "showerror"),
+    "O-31: avisa que el producto esta desactivado",
+)
+verificar(len(ventana._venta.detalles) == antes, "O-31: el desactivado no entra al ticket")
+
+# --- O-35: el movimiento de caja muestra solo los motivos de su tipo ------------------------
+ventana._movimiento_ui()
+ventana.update()
+dialogo_mov = next(w for w in ventana.winfo_children() if isinstance(w, Toplevel))
+combo_tipo, combo_motivo = todos(dialogo_mov, ttk.Combobox, [])[:2]
+for tipo, esperado in (
+    (
+        "retiro",
+        (
+            "Retiro planificado para deposito bancario",
+            "Retiro por resguardo durante la jornada",
+        ),
+    ),
+    ("ingreso", ("Ingreso de sencillo",)),
+):
+    combo_tipo.set(tipo)
+    combo_tipo.event_generate("<<ComboboxSelected>>")
+    ventana.update()
+    verificar(
+        tuple(combo_motivo.cget("values")) == esperado and combo_motivo.get() == esperado[0],
+        f"O-35: un {tipo} ofrece solo sus motivos {combo_motivo.cget('values')}",
+    )
+verificar(
+    str(combo_motivo.cget("state")) == "readonly",
+    "O-35: el motivo no admite texto libre (un retiro no puede decir «Ingreso de sencillo»)",
+)
+dialogo_mov.destroy()
+
+# --- O-25: dos tickets con productos sobreviven a cerrar con la X ----------------------------
+ventana._nuevo_ticket()
+escribir_y_esperar(ventana, "78012")
+ventana._nuevo_ticket()  # un tercer ticket, vacio: no se guarda
+verificar(len(ventana._tickets) == 3, "tres tickets abiertos")
+textos = [ventana._nb_tickets.tab(i, "text") for i in range(3)]
+verificar(
+    textos[0].startswith("Ticket 1 · $") and textos[1].startswith("Ticket 2 · $"),
+    f"pestanas con total {textos}",
+)
+verificar(textos[2] == "Ticket 3", "la pestana vacia no muestra total")
+total1 = ventana._tickets[0].total.monto
+total2 = ventana._tickets[1].total.monto
+
+cerrar_con_la_x(ventana)
+ventana, productos, existencias, turnos, auditoria = construir()  # se vuelve a abrir la app
+verificar(
+    len(ventana._tickets) == 2, f"O-25: vuelven 2 tickets al reabrir ({len(ventana._tickets)})"
+)
+verificar(
+    [v.total.monto for v in ventana._tickets] == [total1, total2],
+    "O-25: los tickets vuelven con sus productos",
+)
+cerrar_con_la_x(ventana)
+ventana, productos, existencias, turnos, auditoria = construir()  # y otra vez
+verificar(len(ventana._tickets) == 2, "O-25: siguen ahi tras reabrir por segunda vez")
+
+# un ticket en espera no descuenta existencias
+verificar(
+    existencias.obtener("78012").cantidad == Decimal("50"), "el ticket en espera no descuenta stock"
+)
+
+# --- O-30: cerrar la jornada avisa, se puede volver o descartar -----------------------------
+respuestas["askyesno"] = False
+ventana._cerrar_turno_ui()
+aviso = [m for tipo, m in mensajes if tipo == "askyesno"][-1]
+verificar(
+    "Quedan 2 tickets sin cobrar" in aviso and "$" in aviso,
+    f"O-30: avisa cuantos y el total: {aviso!r}",
+)
+verificar(
+    turnos.obtener_abierto() is not None and len(ventana._tickets) == 2,
+    "O-30: «No» vuelve a los tickets",
+)
+verificar(auditoria.listar() == [], "O-30: no se registra nada si se vuelve")
+
+respuestas["askyesno"] = True
+ventana._cerrar_turno_ui()
+verificar(turnos.obtener_abierto() is None, "O-30: confirmado, la jornada se cierra")
+verificar(
+    len(ventana._tickets) == 1 and ventana._tickets[0] is None, "O-30: los tickets se descartan"
+)
+registros = auditoria.listar("tickets_descartados_al_cerrar_jornada")
+verificar(len(registros) == 1, "O-30: queda un registro en la auditoria")
+detalle = registros[0]["detalle"]
+verificar(
+    detalle["cantidad"] == 2 and detalle["total"] == total1 + total2,
+    f"auditoria: cantidad y total {detalle}",
+)
+verificar(
+    len(detalle["tickets"]) == 2 and detalle["tickets"][0][0]["codigo"],
+    "auditoria: guarda el contenido",
+)
+verificar(existencias.obtener("78012").cantidad == Decimal("50"), "descartar no ajusta existencias")
+verificar(
+    RepositorioTicketsEsperaSQLite(crear_conexion(ruta)).cargar() == [],
+    "no quedan tickets guardados",
+)
+
+cerrar_con_la_x(ventana)
+ventana, *_ = construir()
+verificar(
+    len(ventana._tickets) == 1 and ventana._tickets[0] is None,
+    "al reabrir no vuelve nada descartado",
+)
+
+
+# --- O-28 / O-07 / «Cambio»: F11 cambia el lote, monto con punto de miles, rotulos del prototipo --
+ventana._abrir_turno_ui()
+verificar(bool(raiz.bind("<F11>")), "O-28: F11 esta asignada a Cambiar lote")
+verificar(not raiz.bind("<F5>"), "O-28: F5 ya no es de Cambiar lote (es el modulo Compras)")
+escribir_y_esperar(ventana, "78012")
+ventana._entrada_codigo.delete(0, "end")
+verificar("Cambio:" in ventana._lbl_resumen.cget("text"), "la barra dice «Pagó con» y «Cambio»")
+verificar(
+    ventana._entrada_monto_pago.get() == "1.500", "O-07: el monto propuesto lleva punto de miles"
+)
+
+# --- I-03 / I-02 en F3 ---------------------------------------------------------------------
+from pos.aplicacion.casos_uso.consultar_alertas_vencimiento import ConsultarAlertasVencimiento  # noqa: E402
+from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_lotes import RepositorioLotesSQLite  # noqa: E402
+from pos.interfaz.app_inventario import VentanaInventario  # noqa: E402
+
+con3 = crear_conexion(ruta)
+lotes3 = RepositorioLotesSQLite(con3)
+productos3 = RepositorioProductosSQLite(con3)
+existencias3 = RepositorioExistenciasSQLite(con3)
+from pos.aplicacion.casos_uso.consultar_inventario import (  # noqa: E402
+    ConsultarExistencias,
+    ConsultarMovimientos,
+    DefinirStockMinimo,
+    ReporteInventario,
+)
+from pos.aplicacion.casos_uso.registrar_merma import RegistrarMerma  # noqa: E402
+from pos.aplicacion.registro_movimientos import RegistroMovimientos  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_existencias import RepositorioAjustesSQLite  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_movimientos import (  # noqa: E402
+    RepositorioMovimientosSQLite,
+)
+from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite as RV  # noqa: E402
+
+repo_movs = RepositorioMovimientosSQLite(con3)
+registro_movs = RegistroMovimientos(repo_movs, lambda: "ana")
+inventario = VentanaInventario(
+    raiz,
+    productos3,
+    IngresarStock(productos3, existencias3, lotes3, movimientos=registro_movs),
+    ConsultarAlertasVencimiento(lotes3, productos3),
+    lotes3,
+    registrar_merma=RegistrarMerma(
+        existencias3, RepositorioAjustesSQLite(con3), lotes3, movimientos=registro_movs
+    ),
+    repo_existencias=existencias3,
+    consultar_existencias=ConsultarExistencias(productos3, existencias3, RV(con3)),
+    definir_minimo=DefinirStockMinimo(productos3),
+    reporte_inventario=ReporteInventario(productos3, existencias3),
+    consultar_movimientos=ConsultarMovimientos(repo_movs, productos3),
+)
+inventario.pack()
+raiz.update()
+
+
+def intentar(codigo, cantidad, vence="", codigo_lote=""):
+    mensajes.clear()
+    inventario._codigo.set(codigo)
+    inventario._cantidad.set(cantidad)
+    inventario._vence.set(vence)
+    inventario._codigo_lote.set(codigo_lote)
+    inventario._registrar()
+    return [m for tipo, m in mensajes if tipo == "showerror"]
+
+
+verificar(intentar("", "5") == ["Falta el código del producto"], "I-03: nombra el codigo faltante")
+verificar(intentar("NUE", "") == ["Falta la cantidad"], "I-03: «Falta la cantidad»")
+verificar(
+    intentar("NUE", "abc") == ["La cantidad debe ser un número, por ejemplo 12"],
+    "I-03: cantidad que no es numero",
+)
+verificar(intentar("NUE", "-2") == ["La cantidad debe ser mayor que cero"], "I-03: cantidad <= 0")
+verificar(
+    intentar("NUE", "5", "31/12/2030") == ["La fecha de vencimiento debe ser AAAA-MM-DD"],
+    "I-03: fecha mal escrita",
+)
+verificar(intentar("NUE", "2", "2031-01-31", "L. 26089 A") == [], "ingreso valido sin errores")
+verificar(
+    [x.etiqueta for x in lotes3.por_producto("NUE")] == ["L. 26089 A"],
+    "I-02: el lote lleva el codigo impreso",
+)
+filas = [
+    inventario._tabla_lotes.item(i, "values")[0] for i in inventario._tabla_lotes.get_children()
+]
+verificar(filas == ["L. 26089 A"], f"I-02: F3 lista el lote por su codigo {filas}")
+
+
+# --- HU-INV-04: registrar merma con motivo obligatorio --------------------------------------
+def merma(codigo, cantidad, motivo=""):
+    mensajes.clear()
+    inventario._merma_codigo.set(codigo)
+    inventario._merma_cantidad.set(cantidad)
+    inventario._merma_motivo.set(motivo)
+    inventario._registrar_merma()
+    return [m for tipo, m in mensajes if tipo == "showerror"]
+
+
+verificar(
+    merma("NUE", "1") == ["Falta el motivo (es obligatorio)"], "HU-INV-04: el motivo es obligatorio"
+)
+verificar(
+    merma("", "1", "Rotura") == ["Falta el código del producto"], "HU-INV-04: falta el codigo"
+)
+verificar(
+    merma("NUE", "", "Rotura") == ["Falta la cantidad a dar de baja"],
+    "HU-INV-04: falta la cantidad",
+)
+verificar(
+    len(merma("NUE", "99", "Rotura")) == 1, "HU-INV-04: no se puede dar de baja mas de lo que hay"
+)
+inventario._merma_codigo.set("NUE")
+inventario._merma_cantidad.set("0,5")
+verificar(
+    inventario._merma_estado.get() == "Existencia actual: 52  ·  Resultante: 51.5",
+    f"HU-INV-04: muestra existencia actual y resultante ({inventario._merma_estado.get()})",
+)
+verificar(merma("NUE", "0,5", "Vencimiento") == [], "HU-INV-04: merma valida")
+verificar(existencias3.obtener("NUE").cantidad == Decimal("51.5"), "HU-INV-04: baja el stock")
+verificar(
+    [x.saldo for x in lotes3.por_producto("NUE")] == [Decimal("1.5")],
+    "HU-INV-04: baja tambien el lote",
+)
+# --- HU-INV-05 / 07 / 08: existencias con minimo, inventario valorizado y movimientos ----------
+inventario.refrescar()
+estados = {f.codigo: f.estado for f in inventario.existencias.consultar()}
+verificar(estados["NUE"] == "Granel", f"HU-INV-05: el granel se muestra aparte {estados}")
+verificar(
+    inventario.existencias.definir_minimo("7801", "70") is True, "HU-INV-05: guarda el minimo"
+)
+estados = {f.codigo: f.estado for f in inventario.existencias.consultar()}
+verificar(
+    estados["7801"] == "Bajo el mínimo", "HU-INV-05: 50 unidades con minimo 70 = bajo el minimo"
+)
+mensajes.clear()
+verificar(
+    inventario.existencias.definir_minimo("7801", "mucho") is False, "HU-INV-05: minimo mal escrito"
+)
+verificar(
+    inventario.existencias.definir_minimo("NUE", "5") is False,
+    "HU-INV-05: el granel no lleva minimo",
+)
+primera = inventario.existencias._tabla.get_children()[0]
+verificar(primera == "7801", f"HU-INV-05: lo urgente va primero ({primera})")
+inventario.reporte.refrescar()
+verificar(
+    "Total valorizado: $0" in inventario.reporte._lbl_total.cget("text"),
+    "HU-INV-07: sin costos el total es $0",
+)
+verificar(
+    "fuera del total" in inventario.reporte._lbl_total.cget("text"),
+    "HU-INV-07: avisa los que quedan fuera",
+)
+movs_pantalla = [
+    inventario.movimientos._tabla.item(i, "values")
+    for i in inventario.movimientos._tabla.get_children()
+]
+tipos = [m[2] for m in movs_pantalla]
+verificar(
+    "Entrada" in tipos and "Merma" in tipos, f"HU-INV-08: entrada y merma en el historial {tipos}"
+)
+verificar(all(m[5] == "ana" for m in movs_pantalla), "HU-INV-08: queda el usuario")
+verificar(
+    any(m[3].startswith("−") for m in movs_pantalla)
+    and any(m[3].startswith("+") for m in movs_pantalla),
+    "HU-INV-08: cantidades con signo",
+)
+inventario.destroy()
+
+# --- R-02: F6 con nombres legibles y al mostrarse se regenera -------------------------------
+from pos.aplicacion.casos_uso.cambiar_estado_producto import CambiarEstadoProducto  # noqa: E402
+from pos.aplicacion.casos_uso.reporte_rentabilidad import (  # noqa: E402
+    ReporteRentabilidad,
+    ReporteRotacion,
+)
+from pos.aplicacion.casos_uso.reporte_ventas import ReporteVentas  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_categorias import (  # noqa: E402
+    RepositorioCategoriasSQLite,
+)
+from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite as RV  # noqa: E402
+from pos.interfaz.app_reportes import VentanaReportes  # noqa: E402
+
+reporte = VentanaReportes(
+    raiz,
+    ReporteVentas(RV(con3), productos3),
+    RepositorioCategoriasSQLite(con3),
+    rentabilidad=ReporteRentabilidad(RV(con3), productos3),
+    rotacion=ReporteRotacion(RV(con3), productos3, existencias3),
+    cambiar_estado=CambiarEstadoProducto(productos3),
+)
+reporte.pack()
+raiz.update()
+ventana._agregar_pago()
+ventana._cerrar_venta()  # una venta pagada con efectivo, despues de armar el reporte
+reporte.al_mostrar()
+categorias = [
+    reporte._por_categoria.item(i, "values")[0] for i in reporte._por_categoria.get_children()
+]
+medios = [reporte._por_medio.item(i, "values")[0] for i in reporte._por_medio.get_children()]
+verificar(categorias == ["Frutos secos y semillas"], f"R-02: categoria con su nombre {categorias}")
+verificar(medios == ["Efectivo"], f"R-02: medio de pago legible {medios}")
+verificar(
+    "1 venta " in reporte._resumen.get(), "R-02: al mostrarse el reporte ya trae la venta nueva"
+)
+# --- HU-REP-03 / HU-REP-04 / HU-PRD-06 ---------------------------------------------------------
+filas_r = reporte.generar_rentabilidad()
+verificar(
+    any(f.codigo == "78012" and f.sin_costo for f in filas_r),
+    "HU-REP-03: la venta sin costo se informa",
+)
+textos = [reporte._tabla_rentab.item(i, "values") for i in reporte._tabla_rentab.get_children()]
+verificar(
+    any(t[3] == "sin costo" and t[4] == "no disponible" for t in textos),
+    f"HU-REP-03: «sin costo» en pantalla {textos}",
+)
+reporte._r_desde.set("2026-13-45")
+mensajes.clear()
+verificar(
+    reporte.generar_rentabilidad() == [] and mensajes[-1][0] == "showerror",
+    "HU-REP-03: fechas mal escritas",
+)
+reporte._r_desde.set(date.today().isoformat())
+rotacion = reporte.generar_rotacion()
+verificar(
+    "10" in {f.codigo for f in rotacion}, "HU-REP-04: un producto que nunca se vendio aparece"
+)
+verificar(reporte.desactivar_productos(["10"]) == 1, "HU-PRD-06: desactiva el producto elegido")
+verificar(
+    "10" not in {f.codigo for f in reporte.generar_rotacion()},
+    "HU-REP-04: ya no esta entre los activos",
+)
+reporte.destroy()
+
+# --- F5 Compras: factura con detalle que actualiza costo y crea el lote ---------------------
+from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_facturas_compra import (  # noqa: E402
+    RepositorioFacturasCompraSQLite,
+)
+from pos.interfaz.app_compras import VentanaCompras  # noqa: E402
+
+facturas = RepositorioFacturasCompraSQLite(con3)
+compras = VentanaCompras(
+    raiz,
+    RegistrarFacturaCompra(facturas, productos3, existencias3, lotes3),
+    facturas,
+    productos3,
+)
+compras.pack()
+raiz.update()
+
+
+def linea(codigo, cantidad, costo, vence=""):
+    mensajes.clear()
+    compras._l_codigo.set(codigo)
+    compras._l_cantidad.set(cantidad)
+    compras._l_costo.set(costo)
+    compras._l_vence.set(vence)
+    compras._agregar_linea()
+    return [m for tipo, m in mensajes if tipo == "showerror"]
+
+
+verificar(linea("", "1", "1000") == ["Falta el código del producto"], "F5: falta el codigo")
+verificar(len(linea("XXX", "1", "1000")) == 1, "F5: producto inexistente")
+verificar(linea("7801", "", "1000") == ["Falta la cantidad"], "F5: falta la cantidad")
+verificar(len(linea("7801", "10", "")) == 1, "F5: falta el costo")
+verificar(linea("7801", "10", "1.000") == [], "F5: linea valida con punto de miles")
+verificar(linea("NUE", "2,5", "11.765") == [], "F5: linea a granel con coma")
+verificar(compras._neto.get() == "39.413", f"F5: el neto sigue a la suma {compras._neto.get()}")
+verificar(compras._impuestos.get() == "7.488", f"F5: IVA 19 % {compras._impuestos.get()}")
+verificar(compras._total.get() == "Total: $46.901", "F5: total neto + impuestos")
+compras._proveedor.set("Distribuidora Andes")
+compras._numero.set("F-4519")
+compras._neto.set("39.000")
+compras._al_editar_neto()
+verificar(
+    compras._diferencia.get() == "Diferencia con el neto: -$413",
+    f"F5: muestra la diferencia {compras._diferencia.get()}",
+)
+mensajes.clear()
+compras._confirmar()
+verificar(
+    any("debe ser cero" in m for tipo, m in mensajes if tipo == "showerror"),
+    "F5: no confirma si el neto no coincide con el detalle",
+)
+verificar(facturas.listar() == [], "F5: nada se guardo")
+compras._neto.set("39.413")
+compras._al_editar_neto()
+mensajes.clear()
+compras._confirmar()
+verificar(not [m for tipo, m in mensajes if tipo == "showerror"], f"F5: confirma {mensajes}")
+verificar(len(facturas.listar()) == 1, "F5: la factura queda registrada")
+verificar(productos3.obtener_por_codigo("7801").costo.neto.monto == 1000, "F5: actualiza el costo")
+verificar(existencias3.obtener("7801").cantidad == Decimal("60"), "F5: ingresa el stock (50 + 10)")
+verificar(len(compras._lista.get_children()) == 1, "F5: aparece en la lista de facturas")
+compras.destroy()
+
+
+# --- HU-VTA-06: cobrar e imprimir, cobrar solo registrando, reimprimir y corte ---------------
+def vender_efectivo(imprimir):
+    ventana._registrar_venta.agregar_producto(ventana._venta, "7801", 1)
+    ventana._refrescar_ticket()
+    ventana._medio.set("efectivo")
+    ventana._entrada_monto_pago.delete(0, "end")
+    ventana._entrada_monto_pago.insert(0, "1.200")
+    ventana._agregar_pago()
+    ventana._cerrar_venta(imprimir)
+
+
+def comprobantes():
+    return sorted(carpeta_comprobantes.glob("comprobante-*.txt"))
+
+
+vender_efectivo(True)
+verificar(len(comprobantes()) == 1, "HU-VTA-06: «Cobrar e imprimir ticket» imprime el comprobante")
+texto = comprobantes()[0].read_text(encoding="utf-8")
+verificar(
+    "COMPROBANTE DE DETALLE" in texto and "Barra de cereal" in texto,
+    "el comprobante lleva el detalle",
+)
+verificar("se abriria el cajon" in texto, "con efectivo se abre el cajon")
+vender_efectivo(False)
+verificar(len(comprobantes()) == 1, "HU-VTA-06: «Cobrar solo registrando» no imprime")
+ventana._reimprimir_ultimo()
+verificar(len(comprobantes()) == 2, "HU-VTA-06: «Reimprimir ultimo» (F8) imprime de nuevo")
+verificar(
+    "cajon" not in comprobantes()[-1].read_text(encoding="utf-8"), "la reimpresion no abre el cajon"
+)
+ventana._imprimir_corte()
+verificar(
+    "CORTE DE CAJA" in comprobantes()[-1].read_text(encoding="utf-8"),
+    "HU-VTA-06: «Imprimir corte» imprime el corte de la jornada",
+)
+verificar(bool(raiz.bind("<F8>")), "F8 esta asignada a imprimir")
+
+# --- Cobro del prototipo: medios, billetes, pago mixto, descuento, nota y tickets en espera ----
+from pos.dominio.pagos import MedioPago  # noqa: E402
+from pos.interfaz.cobro import DialogoDescuento, DialogoEspera  # noqa: E402
+
+ventana._registrar_venta.agregar_producto(ventana._venta, "7801", 5)  # 5 x $1.200 = $6.000
+ventana._refrescar_ticket()
+filas = [ventana._tabla.item(i, "values") for i in ventana._tabla.get_children()]
+verificar(
+    filas[-1][4] == "—" and filas[-1][6].isdigit(), f"la tabla trae Dcto. y Existencia {filas[-1]}"
+)
+
+# Descuento a la linea (F9): porcentaje, con motivo obligatorio
+ventana._tabla.selection_set(ventana._tabla.get_children()[-1])
+desc = ventana._dialogo_descuento()
+verificar(isinstance(desc, DialogoDescuento), "F9 abre el descuento a la linea")
+desc.var_tipo.set("Porcentaje")
+desc.var_valor.set("10")
+verificar(desc.monto() == 600, f"10 % de $6.000 son $600 ({desc.monto()})")
+mensajes.clear()
+verificar(desc.aplicar() is False and "motivo" in mensajes[-1][1], "el descuento exige motivo")
+desc.var_motivo.set("Cortesía")
+verificar(desc.aplicar() is True, "aplica el descuento")
+detalle = ventana._venta.detalles[-1]
+verificar(
+    detalle.descuento_linea.monto == 600 and detalle.subtotal.monto == 5400,
+    "el importe baja a $5.400",
+)
+verificar(
+    ventana._tabla.item(ventana._tabla.get_children()[-1], "values")[4] == "$600", "se ve en Dcto."
+)
+verificar(
+    any(f["accion"] == "Descuento a la línea" for f in RepositorioAuditoriaSQLite(con3).listar()),
+    "el descuento queda en la auditoria",
+)
+
+# Nota de la venta
+nota = ventana._dialogo_nota()
+nota.variables["nota"].set("Cliente pidió el detalle aparte")
+nota.confirmar()
+verificar(ventana._venta.nota == "Cliente pidió el detalle aparte", "guarda la nota de la venta")
+
+# Tickets en espera (Ctrl+E): otro ticket y vuelta al primero
+primero = ventana._indice
+ventana._nuevo_ticket()
+espera = ventana._dialogo_espera()
+verificar(
+    isinstance(espera, DialogoEspera) and len(espera.tabla.get_children()) >= 2,
+    "lista los tickets abiertos",
+)
+espera.tabla.selection_set(str(primero))
+espera.ir()
+verificar(
+    ventana._indice == primero and ventana._venta.detalles,
+    "vuelve al ticket en espera con sus productos",
+)
+
+# Cobro (F12): tarjeta parcial + efectivo con billetes, cambio y cobrar sin imprimir
+cobro = ventana._abrir_cobro()
+verificar(cobro is not None and cobro.medio is MedioPago.EFECTIVO, "F12 abre el cobro con efectivo")
+verificar(cobro._total.cget("text") == "$5.400", f"total a cobrar {cobro._total.cget('text')}")
+cobro.seleccionar_medio(MedioPago.TARJETA)
+cobro.ent_monto.delete(0, "end")
+cobro.ent_monto.insert(0, "2.000")
+verificar(cobro.agregar_pago() is True, "agrega un pago con tarjeta de $2.000")
+verificar(cobro.saldo() == 3400, f"quedan por cobrar $3.400 ({cobro.saldo()})")
+cobro.seleccionar_medio(MedioPago.EFECTIVO)
+cobro.conteo[5000].delete(0, "end")
+cobro.conteo[5000].insert(0, "1")
+cobro._actualizar()
+verificar(
+    "su cambio $1.600" in cobro._resumen.cget("text"),
+    f"cambio con billete de $5.000: {cobro._resumen.cget('text')}",
+)
+verificar(cobro.agregar_pago() is True, "agrega el pago en efectivo")
+filas_pagos = [cobro._tabla.item(i, "values") for i in cobro._tabla.get_children()]
+verificar(  # O-36: la lista muestra lo entregado y el cambio
+    filas_pagos[-1] == ("Efectivo", "$3.400", "$5.000", "$1.600"),
+    f"O-36: el pago en efectivo muestra lo que entrego y el cambio {filas_pagos}",
+)
+verificar(  # O-36: el cambio sigue a la vista despues de agregar el pago
+    "su cambio $1.600" in cobro._resumen.cget("text")
+    and "Pagó con $0" not in cobro._resumen.cget("text"),
+    f"O-36: el cambio no vuelve a $0: {cobro._resumen.cget('text')}",
+)
+mensajes.clear()
+verificar(cobro.cobrar(False) is True, "cobra solo registrando (pago mixto)")
+verificar(
+    any("Cambio a entregar: $1.600" in m for _, m in mensajes),
+    f"O-36: al cerrar la venta se avisa el cambio a entregar {mensajes}",
+)
+verificar(not cobro.winfo_exists(), "el cuadro de cobro se cierra al cobrar")
+ultima = RV(con3).ultima()
+verificar(
+    ultima.total.monto == 5400 and ultima.nota == "Cliente pidió el detalle aparte",
+    "la venta quedo con su nota",
+)
+verificar(
+    [(p.medio.value, p.monto.monto) for p in ultima.pagos]
+    == [("tarjeta", 2000), ("efectivo", 3400)],
+    "pago mixto: tarjeta + efectivo",
+)
+verificar(ultima.vuelto_entregado.monto == 1600, "el cambio entregado es $1.600")
+verificar(ultima.detalles[-1].motivo_descuento == "Cortesía", "el motivo del descuento se guarda")
+ventana._reimprimir_ultimo()  # O-33: la nota sale en el comprobante (se lee de la base)
+texto_comprobante = " ".join(comprobantes()[-1].read_text(encoding="utf-8").split())
+verificar(
+    "Nota: Cliente pidió el detalle aparte" in texto_comprobante,
+    "O-33: el comprobante impreso lleva la nota de la venta",
+)
+
+# --- F4 Clientes: cuenta de credito, venta a credito desde F1, abonos y cierre ---------------
+from pos.aplicacion.casos_uso.gestionar_clientes import (  # noqa: E402
+    GestionarClientes,
+    RegistrarAbono,
+)
+from pos.interfaz.app_clientes import VentanaClientes  # noqa: E402
+
+repo_cli = RepositorioClientesSQLite(con3)
+f4 = VentanaClientes(
+    raiz,
+    GestionarClientes(repo_cli),
+    RegistrarAbono(repo_cli, RepositorioTurnosCajaSQLite(con3)),
+    repo_cli,
+)
+f4.pack()
+raiz.update()
+
+
+def errores():
+    return [m for tipo, m in mensajes if tipo == "showerror"]
+
+
+mensajes.clear()
+verificar(f4.guardar_cliente(None, " ", "1", "", "") is False, "F4: rechaza sin nombre")
+verificar(errores() == ["Falta el nombre del cliente"], f"F4: mensaje del nombre {errores()}")
+mensajes.clear()
+f4.guardar_cliente(None, "Cliente A", "", "", "")
+verificar("medio de contacto" in errores()[0], "F4: exige un medio de contacto")
+verificar(
+    f4.guardar_cliente(None, "Cliente A", "+56 9 0000 0001", "", "") is True, "F4: crea cliente"
+)
+mensajes.clear()
+f4.guardar_cliente(None, "cliente a", "2", "", "")
+verificar("Ya existe" in errores()[0], "F4: no duplica el nombre")
+cli_id = repo_cli.listar()[0].id
+verificar(len(f4._tabla_lista.get_children()) == 1, "F4: el cliente aparece en la lista")
+
+# Venta a credito desde F1: pide el cliente y carga la cuenta
+ventana._elegir_cliente_ui = lambda: cli_id
+ventana._registrar_venta.agregar_producto(ventana._venta, "7801", 1)
+ventana._refrescar_ticket()
+ventana._medio.set("credito_cliente")
+ventana._entrada_monto_pago.delete(0, "end")
+ventana._entrada_monto_pago.insert(0, "1.200")
+ventana._agregar_pago()
+verificar(ventana._venta.cliente_id == cli_id, "HU-CLI-02: la venta queda con el cliente elegido")
+ventana._cerrar_venta()
+verificar(sum(m.efecto for m in repo_cli.movimientos(cli_id)) == 1200, "HU-CLI-02: carga $1.200")
+f4.mostrar_cuenta(cli_id)
+filas = [f4._tabla_cuenta.item(i, "values") for i in f4._tabla_cuenta.get_children()]
+consumos = [f for f in filas if f[1] == "Consumo"]
+verificar(
+    len(consumos) == 1 and consumos[0][3] == "$1.200",
+    f"HU-CLI-03: la cuenta muestra el consumo {filas}",
+)
+verificar(  # CL-02: y debajo, el producto que se llevo
+    filas[-1][1] == "" and "1 × Barra de cereal" in filas[-1][2] and filas[-1][3] == "$1.200",
+    f"CL-02: la pestaña Cuenta lista el producto bajo el consumo {filas}",
+)
+verificar("$1.200" in f4._lbl_saldo.cget("text"), "HU-CLI-03: saldo actual $1.200")
+
+# Abonos: efectivo entra a la gaveta; el saldo no puede quedar negativo
+mensajes.clear()
+verificar(
+    f4.registrar_abono(cli_id, "5.000", date.today().isoformat(), "Transferencia") is False,
+    "abono > saldo",
+)
+verificar("supera el saldo" in errores()[0], f"HU-CLI-03: {errores()}")
+verificar(
+    f4.registrar_abono(cli_id, "500", date.today().isoformat(), "Efectivo") is True,
+    "abono en efectivo",
+)
+verificar(
+    "$700" in f4._lbl_saldo.cget("text"), f"HU-CLI-03: saldo $700 {f4._lbl_saldo.cget('text')}"
+)
+mensajes.clear()
+ventana._cerrar_turno_ui()
+arqueo = [m for tipo, m in mensajes if tipo == "showinfo"][-1]
+verificar(
+    "Abonos de clientes en efectivo: $500" in arqueo,
+    f"HU-CAJ-03: el arqueo muestra el abono {arqueo!r}",
+)
+verificar("Crédito cliente: $1.200" in arqueo, "HU-CAJ-03: el credito va como partida aparte")
+
+# Estado de cuenta y reporte de saldos
+filas_estado = [f4._tabla_estado.item(i, "values") for i in f4._tabla_estado.get_children()]
+verificar(
+    len(filas_estado) == 2 and filas_estado[0][2] == "$1.200" and "×" in filas_estado[1][1],
+    f"HU-CLI-04 / CL-02: el estado lista el consumo y su producto {filas_estado}",
+)
+f4.refrescar()
+saldos = [f4._tabla_saldos.item(i, "values") for i in f4._tabla_saldos.get_children()]
+verificar(
+    saldos[0][4] == "$700" and "$700" in f4._lbl_total_saldos.cget("text"), f"HU-CLI-05: {saldos}"
+)
+
+# Desactivar conserva el historial y saca al cliente de la lista de activos
+f4.cambiar_estado(cli_id)
+verificar(
+    len(f4._tabla_lista.get_children()) == 0, "HU-CLI-01: inactivo sale de la lista de activos"
+)
+verificar(sum(m.efecto for m in repo_cli.movimientos(cli_id)) == 700, "el historial se conserva")
+f4.destroy()
+
+print("TODO OK")
+raiz.destroy()

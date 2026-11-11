@@ -36,7 +36,7 @@ class EscanearCodigo:
         lectura = analizar_codigo(codigo, tipo_valor=self.tipo_valor)
         producto = self.repositorio.obtener_por_codigo(lectura.codigo_producto)
         if producto is None:
-            raise CodigoBarrasInvalido(f"No hay producto para el codigo {lectura.codigo_producto}")
+            raise CodigoBarrasInvalido(f"No hay producto para el código {lectura.codigo_producto}")
         if lectura.es_granel and lectura.peso_kg is not None:
             cantidad = lectura.peso_kg
         elif lectura.es_granel and lectura.precio is not None:

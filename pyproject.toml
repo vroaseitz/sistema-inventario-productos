@@ -19,6 +19,8 @@ dev = [
 target-version = "py311"
 line-length = 100
 src = ["src", "tests"]
+# Scripts y fuente del video de la demo: material de apoyo, no codigo de la aplicacion.
+extend-exclude = ["docs/video"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
