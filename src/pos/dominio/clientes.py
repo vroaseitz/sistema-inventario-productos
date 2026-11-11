@@ -14,12 +14,16 @@ from enum import StrEnum
 from uuid import uuid4
 
 from .errores import ReglaClienteInvalida
+from .formato import formatear_clp
 from .value_objects import _a_pesos
 
 MEDIOS_ABONO = ("efectivo", "transferencia", "tarjeta")
 # El descuento del credito familiar se asienta como un abono sin plata: baja la deuda pero no
 # entra a la caja ni al banco, y no cuenta como «abono» en los reportes.
 MEDIO_DESCUENTO = "descuento"
+# HU-VTA-11: anular una venta a credito revierte su consumo con un abono sin plata (medio
+# «anulacion»): baja la deuda, no entra a la caja y no cuenta como un pago del cliente.
+MEDIO_ANULACION = "anulacion"
 
 
 def detalle_descuento(anio: int, mes: int) -> str:
@@ -40,8 +44,12 @@ class Cliente:
     observaciones: str = ""
     activo: bool = True
     id: int | None = None
+    # CL-01: tope de lo que puede deber. None = sin cupo definido (no se limita); 0 = sin credito.
+    cupo: int | None = None
 
     def __post_init__(self) -> None:
+        if self.cupo is not None and self.cupo < 0:
+            raise ReglaClienteInvalida("El cupo de crédito no puede ser negativo")
         self.nombre = " ".join(self.nombre.split())
         self.telefono = self.telefono.strip()
         self.correo = self.correo.strip()
@@ -106,6 +114,22 @@ def saldo_de(movimientos: list[MovimientoCliente]) -> int:
     return sum(m.efecto for m in movimientos)
 
 
+def aviso_cupo_insuficiente(nombre: str, disponible: int, compra: int) -> str:
+    """Texto unico (venta y cobro) cuando la compra a credito pasa el cupo."""
+    return (
+        f"El cupo de crédito de {nombre} no alcanza: le quedan {formatear_clp(disponible)} "
+        f"y esta venta a crédito es de {formatear_clp(compra)}"
+    )
+
+
+def cupo_disponible(cupo: int | None, saldo: int) -> int | None:
+    """CL-01: lo que aun puede comprar a credito (None si el cliente no tiene cupo definido).
+
+    Pagar, sea todo o un abono, baja el saldo y por eso libera cupo.
+    """
+    return None if cupo is None else max(cupo - saldo, 0)
+
+
 def en_ciclo(movimiento: MovimientoCliente, anio: int, mes: int) -> bool:
     return movimiento.fecha.year == anio and movimiento.fecha.month == mes
 
@@ -122,19 +146,28 @@ def ultimo_consumo(movimientos: list[MovimientoCliente]) -> date | None:
 
 
 def consumos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
-    return sum(
+    """Lo consumido en el ciclo, ya sin las ventas anuladas (la base del descuento del 20 %)."""
+    consumido = sum(
         m.monto
         for m in movimientos
         if m.tipo is TipoMovimientoCliente.CONSUMO and en_ciclo(m, anio, mes)
     )
+    anulado = sum(
+        m.monto
+        for m in movimientos
+        if m.tipo is TipoMovimientoCliente.ABONO
+        and m.medio == MEDIO_ANULACION
+        and en_ciclo(m, anio, mes)
+    )
+    return consumido - anulado
 
 
 def abonos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
-    """Lo que el cliente pago en el ciclo (el descuento asentado no es un pago)."""
+    """Lo que el cliente pago en el ciclo (el descuento y las anulaciones no son un pago)."""
     return sum(
         m.monto
         for m in movimientos
         if m.tipo is TipoMovimientoCliente.ABONO
-        and m.medio != MEDIO_DESCUENTO
+        and m.medio not in (MEDIO_DESCUENTO, MEDIO_ANULACION)
         and en_ciclo(m, anio, mes)
     )

@@ -2,7 +2,7 @@
 
 Tarjetas con la venta de hoy y de la semana, la ganancia y la meta; la venta por medio de pago, lo
 que mas ganancia aporta y lo que necesita atencion. «Configurar meta diaria» guarda las metas de
-ganancia por tipo de dia (HU-REP-05).
+venta por tipo de dia (HU-REP-05).
 """
 
 from __future__ import annotations
@@ -127,13 +127,15 @@ class PanelDelDia(ttk.Frame):
         self._tabla_avisos.tag_configure("urgente", background=ALERTA_FONDO)
         self._tabla_avisos.pack(fill="x")
         self._tabla_avisos.bind("<Double-Button-1>", lambda _e: self._abrir_aviso())
+        # O-39: «Ver →» se presiona con un clic (columna Accion); la fila sigue con doble clic.
+        self._tabla_avisos.bind("<ButtonRelease-1>", self._al_clic_en_aviso)
         self._destinos: dict[str, str] = {}
         self._lbl_resumen_dia = tk.Label(self, text="", bg=PAPEL, fg=TINTA_2)
         self._lbl_resumen_dia.pack(anchor="w", padx=14)
         tk.Label(
             self,
-            text="La meta es de ganancia, no de monto vendido, y depende del tipo de día. Las "
-            "metas reales salen del Excel de punto de equilibrio de la Product Owner.",
+            text="La meta es sobre el monto vendido y depende del tipo de día: lunes a viernes, "
+            "sábado y domingo. Se puede cambiar en «Configurar meta diaria».",
             bg=PAPEL,
             fg=TINTA_2,
             wraplength=900,
@@ -192,6 +194,12 @@ class PanelDelDia(ttk.Frame):
         if self._ir_a is not None:
             self._ir_a(destino)
 
+    def _al_clic_en_aviso(self, evento: tk.Event) -> None:
+        fila = self._tabla_avisos.identify_row(evento.y)
+        if fila and self._tabla_avisos.identify_column(evento.x) == "#3":
+            self._tabla_avisos.selection_set(fila)
+            self._abrir_aviso()
+
     def _abrir_aviso(self) -> None:
         seleccion = self._tabla_avisos.selection()
         if seleccion:
@@ -226,7 +234,7 @@ class PanelDelDia(ttk.Frame):
     def _dialogo_meta(self) -> tk.Toplevel:
         return pedir_formulario(
             self,
-            "Meta diaria de ganancia",
+            "Meta diaria de venta",
             [
                 (
                     clave,
@@ -238,6 +246,6 @@ class PanelDelDia(ttk.Frame):
             ],
             self.guardar_metas,
             "Guardar metas",
-            nota="Sobre ganancia, no sobre monto vendido. 0 = sin meta. Los valores reales salen "
-            "del Excel de punto de equilibrio de la Product Owner (aún no entregado).",
+            nota="Sobre el monto vendido en el día. 0 = sin meta. "
+            "Valores definidos por la Product Owner.",
         )

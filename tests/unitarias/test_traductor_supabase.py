@@ -216,13 +216,15 @@ CLIENTE = {
     "correo": "",
     "observaciones": "Familia",
     "activo": True,
+    "cupo": 150000,
 }
 
 
 def test_cliente_es_upsert_por_su_id_y_tiene_credito():
     ((sql, params),) = traducir_operacion(_op("cliente", CLIENTE))
     assert "INSERT INTO pos.cliente" in sql and "ON CONFLICT (id_cliente) DO UPDATE" in sql
-    assert params == ("cliente:7", "Carolina Muñoz", "+56 9 1111 1111", "", "Familia", True)
+    assert "cupo_credito" in sql  # CL-01: el cupo viaja con el cliente
+    assert params == ("cliente:7", "Carolina Muñoz", "+56 9 1111 1111", "", "Familia", True, 150000)
 
 
 def test_el_consumo_es_un_cargo_y_lleva_al_cliente_por_si_aun_no_llego():
@@ -318,3 +320,14 @@ def test_auditoria_se_guarda_una_vez_por_su_id():
     ((sql, params),) = traducir_operacion(_op("auditoria", datos))
     assert "ON CONFLICT (id_cliente) DO NOTHING" in sql and "to_jsonb" in sql
     assert params[0] == "auditoria:12" and params[2] == "admin" and params[-1] == datos["fecha"]
+
+
+def test_anular_una_venta_la_conserva_en_el_destino_y_solo_cambia_su_estado():
+    """HU-VTA-11: no se borra nada remoto; la venta pasa a anulada con su motivo."""
+    ((sql, params),) = traducir_operacion(
+        _op("venta_anular", {"uuid": "v-1", "motivo": "Otro: cobro equivocado", "anulada_por": "A"})
+    )
+    assert sql.startswith("UPDATE pos.venta SET estado = 'anulada', motivo_anulacion = %s")
+    assert "DELETE" not in sql.upper()
+    assert "estado = 'pagada'" in sql  # reintentar tras un corte no la vuelve a tocar
+    assert params == ("Otro: cobro equivocado", "v-1")

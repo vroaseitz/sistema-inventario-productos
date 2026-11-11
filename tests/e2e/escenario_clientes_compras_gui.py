@@ -59,20 +59,35 @@ cli._nuevo_cliente()
 app.update()
 dlg = ultimo_dialogo(cli)
 entradas = [w for w in dlg.winfo_children() if isinstance(w, ttk.Entry)]
+# CL-01: el formulario trae el campo «Cupo de crédito» y es obligatorio (0 = sin crédito)
+verificar(
+    len(entradas) == 5,
+    f"el formulario tiene nombre, contacto, correo, notas y cupo ({len(entradas)})",
+)
 for entrada, texto in zip(
-    entradas, ("Rosa Prueba", "+56 9 1111 1111", "rosa@ejemplo.cl", "Familia"), strict=True
+    entradas, ("Rosa Prueba", "+56 9 1111 1111", "rosa@ejemplo.cl", "Familia", ""), strict=True
 ):
     entrada.insert(0, texto)
+boton(dlg, "Guardar cliente").invoke()  # sin cupo: no se guarda
+app.update()
+verificar(len(cli._repo.listar()) == 0, "CL-01: sin cupo no se crea el cliente")
+entradas[4].insert(0, "150.000")
 boton(dlg, "Guardar cliente").invoke()
 app.update()
 filas = [cli._tabla_lista.item(i, "values") for i in cli._tabla_lista.get_children()]
 verificar(any("Rosa Prueba" in str(f) for f in filas), "el cliente nuevo aparece en la lista")
+verificar(
+    filas[0][5] == "$150.000" and filas[0][6] == "$150.000",
+    f"CL-01: la lista muestra el cupo y lo disponible {filas[0]}",
+)
 
 # duplicado: no se crea dos veces
 cli._nuevo_cliente()
 app.update()
 dlg = ultimo_dialogo(cli)
-[w for w in dlg.winfo_children() if isinstance(w, ttk.Entry)][0].insert(0, "Rosa Prueba")
+entradas_dup = [w for w in dlg.winfo_children() if isinstance(w, ttk.Entry)]
+entradas_dup[0].insert(0, "Rosa Prueba")
+entradas_dup[4].insert(0, "1000")
 boton(dlg, "Guardar cliente").invoke()
 app.update()
 verificar(len(cli._tabla_lista.get_children()) == 1, "no se duplica el cliente")
@@ -133,9 +148,31 @@ verificar(
 )
 r = cli._lbl_resumen
 verificar(r["consumos"].cget("text") == "$8.990", "consumos del ciclo")
-verificar(r["descuento"].cget("text") == "- $1.798", "descuento del 20 % (8.990 x 0,2)")
+verificar(r["descuento"].cget("text") == "− $1.798", "descuento del 20 % (8.990 x 0,2)")
 verificar(r["total"].cget("text") == "$7.192", "total a pagar = consumos - descuento")
 verificar(r["final"].cget("text") == "$8.990", "saldo final = lo que se debe (sin abonos)")
+
+verificar(
+    "$150.000" in cli._lbl_cupo.cget("text") and "disponible" in cli._lbl_cupo.cget("text"),
+    f"CL-01: la pestaña Cuenta muestra el cupo y lo disponible {cli._lbl_cupo.cget('text')}",
+)
+# CL-04: Cuenta y Estado de cuenta traen su selector de cliente y el ciclo actual elegido
+nombre_cli = cli._repo.listar()[0].nombre
+verificar(len(cli._combos_cliente) == 2, "CL-04: Cuenta y Estado de cuenta tienen selector")
+verificar(
+    list(cli._combos_cliente[0].cget("values")) == [nombre_cli],
+    f"CL-04: el selector lista a los clientes activos {cli._combos_cliente[0].cget('values')}",
+)
+verificar(cli._ciclo.get() != "", f"CL-04: el ciclo actual viene elegido ({cli._ciclo.get()})")
+cli._cliente_id = None
+cli._refrescar_cuenta()
+cli._cliente_nombre.set(nombre_cli)
+cli._al_elegir_cliente()  # como al elegirlo en la lista
+app.update()
+verificar(
+    cli._cliente_id == cliente_id and nombre_cli in cli._lbl_cliente.cget("text"),
+    "CL-04: elegir al cliente en el selector abre su cuenta sin pasar por la lista",
+)
 
 # desactivar
 cli._tabla_lista.selection_set(cli._tabla_lista.get_children()[0])

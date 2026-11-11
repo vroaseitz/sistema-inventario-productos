@@ -371,6 +371,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
     """Arma la app completa: repositorios SQLite, casos de uso, sincronizacion y pantallas."""
     from pos.aplicacion.auditor import Auditor
     from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
+    from pos.aplicacion.casos_uso.anular_venta import AnularVenta
     from pos.aplicacion.casos_uso.autenticar_usuario import AutenticarUsuario, CrearUsuario
     from pos.aplicacion.casos_uso.cambiar_estado_producto import CambiarEstadoProducto
     from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
@@ -501,6 +502,16 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 cola=cola,
                 publicador=publicador,
                 sesion=sesion,
+                anular_venta=AnularVenta(
+                    repo_ventas,
+                    repo_turnos,
+                    repo_existencias,
+                    cola=cola,
+                    repositorio_lotes=repo_lotes,
+                    repositorio_clientes=repo_clientes,
+                    movimientos=movimientos,
+                    auditor=auditor,
+                ),
                 repo_tickets=RepositorioTicketsEsperaSQLite(conexion),
                 auditoria=repo_auditoria,
                 repo_clientes=repo_clientes,

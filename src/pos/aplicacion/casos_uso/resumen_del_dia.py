@@ -4,9 +4,9 @@ Venta de hoy y de la semana, ganancia de hoy, cumplimiento de la meta diaria, ve
 pago, los productos que mas ganancia aportan y lo que necesita atencion (lotes por vencer,
 productos bajo el minimo y productos sin costo cargado).
 
-La meta es de GANANCIA (no de monto vendido) y depende del tipo de dia. Las metas reales salen del
-Excel de punto de equilibrio de la Product Owner, que todavia no se entrega: sin meta cargada el
-cumplimiento no se calcula (no se inventa un valor).
+La meta es sobre el MONTO VENDIDO (no sobre la ganancia) y depende del tipo de dia: $220.000 de
+lunes a viernes, $182.000 el sabado y $88.000 el domingo, segun la Product Owner (06-11-2026).
+Con la meta en 0 el cumplimiento no se calcula (no se inventa un valor).
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ class ResumenDia:
     ganancia_hoy: int
     margen_hoy: float | None
     meta: int
-    cumplimiento: float | None  # ganancia de hoy / meta; None si no hay meta cargada
+    cumplimiento: float | None  # venta de hoy / meta; None si la meta es 0
     por_medio: dict[MedioPago, tuple[int, int]]  # medio -> (monto, cantidad de ventas)
     mayor_ganancia: list[FilaRentabilidad]
     avisos: list[Aviso] = field(default_factory=list)
@@ -89,7 +89,7 @@ class ResumenDelDia:
             ganancia_hoy=rentabilidad.ganancia_total,
             margen_hoy=rentabilidad.margen_total,
             meta=meta,
-            cumplimiento=rentabilidad.ganancia_total / meta if meta else None,
+            cumplimiento=sum(v.total_pagado.monto for v in ventas_hoy) / meta if meta else None,
             por_medio=por_medio,
             mayor_ganancia=[f for f in rentabilidad.filas if f.ganancia is not None][:4],
             avisos=self._avisos(hoy),
@@ -132,10 +132,14 @@ class ResumenDelDia:
         ]
         if sin_costo:
             plural = "s" if len(sin_costo) != 1 else ""
+            # O-39: el aviso dice cuales son (los dos primeros y «y N mas»).
+            nombres = ", ".join(p.nombre for p in sin_costo[:2]) + (
+                f" y {len(sin_costo) - 2} más" if len(sin_costo) > 2 else ""
+            )
             avisos.append(
                 Aviso(
                     f"{len(sin_costo)} producto{plural} sin costo cargado",
-                    "Su margen no se puede calcular",
+                    f"{nombres}: su margen no se puede calcular",
                     "productos",
                 )
             )

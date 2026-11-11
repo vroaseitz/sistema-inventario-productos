@@ -98,6 +98,47 @@ class RepositorioVentasSQLite:
         else:
             self._con.execute("COMMIT")
 
+    def obtener(self, venta_id: int) -> Venta | None:
+        fila = self._con.execute("SELECT * FROM ventas WHERE id = ?", (venta_id,)).fetchone()
+        return self._a_venta(fila) if fila else None
+
+    def marcar_anulada(self, venta: Venta) -> None:
+        """HU-VTA-11: la venta se conserva; solo cambia su estado y queda el motivo y quien fue."""
+        if venta.id is None:
+            raise ValueError("La venta no esta guardada")
+        self._con.execute(
+            "UPDATE ventas SET estado = ?, motivo_anulacion = ?, anulada_por = ?, anulada_en = ? "
+            "WHERE id = ? AND estado = 'pagada'",
+            (
+                venta.estado.value,
+                venta.motivo_anulacion,
+                venta.anulada_por,
+                venta.anulada_en.isoformat(sep=" ") if venta.anulada_en else None,
+                venta.id,
+            ),
+        )
+        self._con.commit()
+
+    def guardar_consumo_lotes(
+        self, venta_id: int, consumos: list[tuple[str, str, Decimal]]
+    ) -> None:
+        """De que lote salio cada cantidad (codigo del producto, uuid del lote, cantidad)."""
+        for codigo, lote_uuid, cantidad in consumos:
+            self._con.execute(
+                "INSERT INTO venta_lotes (venta_id, producto_codigo, lote_uuid, cantidad) "
+                "VALUES (?, ?, ?, ?)",
+                (venta_id, codigo, lote_uuid, str(cantidad)),
+            )
+        self._con.commit()
+
+    def consumo_lotes(self, venta_id: int) -> list[tuple[str, str, Decimal]]:
+        filas = self._con.execute(
+            "SELECT producto_codigo, lote_uuid, cantidad FROM venta_lotes "
+            "WHERE venta_id = ? ORDER BY id",
+            (venta_id,),
+        ).fetchall()
+        return [(f["producto_codigo"], f["lote_uuid"], Decimal(f["cantidad"])) for f in filas]
+
     def obtener_por_turno(self, turno_caja_id: int) -> list[Venta]:
         return self._ventas_donde("v.turno_caja_id = ?", (turno_caja_id,))
 
@@ -218,4 +259,7 @@ class RepositorioVentasSQLite:
             estado=EstadoVenta(fila["estado"]),
             creado_en=datetime.fromisoformat(fila["creado_en"]),
             nota=fila["nota"] or "",
+            motivo_anulacion=fila["motivo_anulacion"] or "",
+            anulada_por=fila["anulada_por"] or "",
+            anulada_en=(datetime.fromisoformat(fila["anulada_en"]) if fila["anulada_en"] else None),
         )

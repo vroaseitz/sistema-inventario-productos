@@ -769,4 +769,13 @@ class VentanaCatalogo(ttk.Frame):
         self.refrescar()
 
     def seleccionar_pestana(self, nombre: str) -> None:
+        if nombre == "sin_costo":
+            # O-39: «Ver» del aviso del resumen deja F2 filtrado con los productos sin costo.
+            self._pestanas.select(0)
+            self._buscar.set("")
+            self._categoria.set(TODAS)
+            self._estado.set("Activos")
+            self._costo.set("Sin costo")
+            self.refrescar()
+            return
         self._pestanas.select(0 if nombre.lower().startswith("prod") else 1)

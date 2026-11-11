@@ -33,6 +33,7 @@ TIPOS = {
     "Venta": TipoMovimiento.VENTA,
     "Merma": TipoMovimiento.MERMA,
     "Ajuste": TipoMovimiento.AJUSTE,
+    "Anulación": TipoMovimiento.ANULACION,
 }
 
 

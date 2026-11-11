@@ -375,17 +375,35 @@ class DialogoCobro(tk.Toplevel):
                 else f"Falta cobrar {formatear_clp(saldo)}"
             )
 
+    def _aviso_de_cupo(self, cliente_id: int, monto: int) -> str:
+        from pos.dominio.clientes import aviso_cupo_insuficiente, cupo_disponible, saldo_de
+
+        cliente = self.host._clientes.obtener(cliente_id) if self.host._clientes else None
+        if cliente is None:
+            return ""
+        disponible = cupo_disponible(
+            cliente.cupo, saldo_de(self.host._clientes.movimientos(cliente_id))
+        )
+        if disponible is not None and monto > disponible:
+            return aviso_cupo_insuficiente(cliente.nombre, disponible, monto)
+        return ""
+
     def _actualizar_saldo_cliente(self) -> None:
         cliente_id = self._clientes.get(self.var_cliente.get())
         if cliente_id is None or not self.host._clientes:
             self._lbl_saldo_cliente.config(text="Elige el cliente al que se carga la venta")
             return
-        from pos.dominio.clientes import saldo_de
+        from pos.dominio.clientes import cupo_disponible, saldo_de
 
         actual = saldo_de(self.host._clientes.movimientos(cliente_id))
+        cliente = self.host._clientes.obtener(cliente_id)
+        disponible = cupo_disponible(cliente.cupo if cliente else None, actual)
+        cupo = (
+            "" if disponible is None else f"  ·  cupo disponible {formatear_clp(disponible)}"
+        )  # CL-01
         self._lbl_saldo_cliente.config(
             text=f"Saldo actual {formatear_clp(actual)}  ·  saldo resultante "
-            f"{formatear_clp(actual + self._monto_escrito())}"
+            f"{formatear_clp(actual + self._monto_escrito())}{cupo}"
         )
 
     # ---------------------------------------------------------------- acciones --
@@ -415,6 +433,9 @@ class DialogoCobro(tk.Toplevel):
                     if cliente_id is None:
                         return self._error("Elige el cliente al que se carga el crédito")
                     self.venta.cliente_id = cliente_id
+                    aviso = self._aviso_de_cupo(cliente_id, monto)
+                    if aviso:  # CL-01: no se carga si pasa el cupo; el aviso dice cuanto queda
+                        return self._error(aviso)
                 pago = Pago(medio=self.medio, monto=Dinero(monto))
             self.host._registrar_venta.agregar_pago(self.venta, pago)
         except ErrorDominio as exc:

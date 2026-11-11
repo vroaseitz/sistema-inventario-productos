@@ -23,27 +23,29 @@ class RepositorioClientesSQLite:
         """Crea el cliente o actualiza sus datos (nunca se borra: se desactiva)."""
         if cliente.id is None:
             cursor = self._con.execute(
-                "INSERT INTO clientes (nombre, telefono, correo, observaciones, activo) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO clientes (nombre, telefono, correo, observaciones, activo, cupo) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
                 (
                     cliente.nombre,
                     cliente.telefono,
                     cliente.correo,
                     cliente.observaciones,
                     int(cliente.activo),
+                    cliente.cupo,
                 ),
             )
             cliente.id = cursor.lastrowid
         else:
             self._con.execute(
                 "UPDATE clientes SET nombre = ?, telefono = ?, correo = ?, observaciones = ?, "
-                "activo = ? WHERE id = ?",
+                "activo = ?, cupo = ? WHERE id = ?",
                 (
                     cliente.nombre,
                     cliente.telefono,
                     cliente.correo,
                     cliente.observaciones,
                     int(cliente.activo),
+                    cliente.cupo,
                     cliente.id,
                 ),
             )
@@ -117,6 +119,7 @@ class RepositorioClientesSQLite:
             observaciones=fila["observaciones"],
             activo=bool(fila["activo"]),
             id=fila["id"],
+            cupo=fila["cupo"],
         )
 
     @staticmethod

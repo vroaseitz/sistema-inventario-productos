@@ -60,6 +60,7 @@ def _rellenar_login(ventana, nombre, clave):
 def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
     from tkinter import messagebox
 
+    from pos.dominio.formato import formatear_fecha_corta
     from pos.dominio.pagos import ConteoDenominaciones
     from pos.interfaz import app_ventas, ventana_principal
 
@@ -146,7 +147,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         # I-03: la linea muestra el lote que vence antes (FEFO)...
         fila_yog = ventas._tabla.get_children()[1]
         assert (
-            "vence " + (date.today() + timedelta(days=2)).isoformat()
+            "vence " + formatear_fecha_corta(date.today() + timedelta(days=2))
             in ventas._tabla.item(fila_yog, "values")[7]
         )
         # ...y F11 "Cambiar lote" permite elegir el otro
@@ -154,9 +155,9 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         segundo = repo_lotes.por_producto("YOG")[1]
         ventas._registrar_venta.elegir_lote(ventas._venta, "YOG", segundo.uuid)
         ventas._refrescar_ticket()
-        assert ventas._tabla.item(ventas._tabla.get_children()[1], "values")[7].startswith(
-            f"* L{segundo.id}"
-        )
+        texto_lote = ventas._tabla.item(ventas._tabla.get_children()[1], "values")[7]
+        # O-37: «L2 (vence 14-11) · elegido», sin asterisco
+        assert texto_lote.startswith(f"L{segundo.id} (vence ") and texto_lote.endswith(" · elegido")
         ventas._medio.set("efectivo")
         ventas._entrada_monto_pago.delete(0, "end")
         ventas._entrada_monto_pago.insert(0, "2000")  # efectivo PARCIAL

@@ -78,14 +78,14 @@ def test_en_pantallas_grandes_conserva_el_tamano_de_diseno():
     assert tamano_de_ventana(1920, 1040) == (1320, 860, 1180, 780)
 
 
-def test_las_propinas_son_un_ingreso_y_el_retiro_solo_ofrece_los_suyos():
-    """O-35 (Excel de hallazgos): ingreso = sencillo y propinas; retiro = deposito y resguardo."""
+def test_el_ingreso_solo_ofrece_sencillo_y_el_retiro_solo_ofrece_los_suyos():
+    """O-35 (QA 09-11): ingreso = solo sencillo (sin propinas); retiro = deposito y resguardo."""
     from pos.dominio.caja import TipoMovimientoCaja
     from pos.interfaz.app_ventas import MOTIVOS_POR_TIPO
 
     ingreso = MOTIVOS_POR_TIPO[TipoMovimientoCaja.INGRESO]
     retiro = MOTIVOS_POR_TIPO[TipoMovimientoCaja.RETIRO]
-    assert ingreso == ("Ingreso de sencillo", "Propinas en fechas especiales")
+    assert ingreso == ("Ingreso de sencillo",)
     assert retiro == (
         "Retiro planificado para deposito bancario",
         "Retiro por resguardo durante la jornada",

@@ -24,6 +24,7 @@ from tkinter import Listbox, Misc, StringVar, Toplevel, messagebox, ttk
 
 from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
+from pos.aplicacion.casos_uso.anular_venta import AnularVenta
 from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
 from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
@@ -45,7 +46,12 @@ from pos.aplicacion.puertos import (
 from pos.dominio.caja import TipoMovimientoCaja, calcular_arqueo
 from pos.dominio.clientes import saldo_de
 from pos.dominio.errores import ErrorDominio, ErrorImpresion
-from pos.dominio.formato import formatear_clp, parsear_monto, rango_de_busqueda
+from pos.dominio.formato import (
+    formatear_clp,
+    formatear_fecha_corta,
+    parsear_monto,
+    rango_de_busqueda,
+)
 from pos.dominio.pagos import (
     DENOMINACIONES_CLP,
     ConteoDenominaciones,
@@ -54,8 +60,9 @@ from pos.dominio.pagos import (
     redondear_a_decena,
 )
 from pos.dominio.productos import UnidadVenta
+from pos.dominio.usuarios import Rol
 from pos.dominio.value_objects import Dinero
-from pos.dominio.ventas import EstadoVenta, Venta
+from pos.dominio.ventas import MOTIVO_OTRO, MOTIVOS_ANULACION, EstadoVenta, Venta
 from pos.interfaz.cobro import DialogoCobro, DialogoDescuento, DialogoEspera
 from pos.interfaz.desplazable import MarcoDesplazable
 from pos.interfaz.dialogo_formulario import pedir_formulario
@@ -80,12 +87,11 @@ MOTIVOS_MOVIMIENTO_CAJA = (
     "Ingreso de sencillo",
     "Retiro planificado para deposito bancario",
     "Retiro por resguardo durante la jornada",
-    "Propinas en fechas especiales",
 )
-# O-35 (Excel de hallazgos): cada tipo muestra solo sus motivos. Ingreso: «Ingreso de sencillo» y
-# «Propinas»; retiro: el deposito bancario y el resguardo.
+# O-35 (Excel de hallazgos): cada tipo muestra solo sus motivos. Ingreso: solo «Ingreso de sencillo»
+# (la PO confirmo el 09-11 que no tienen propinas); retiro: el deposito bancario y el resguardo.
 MOTIVOS_POR_TIPO = {
-    TipoMovimientoCaja.INGRESO: (MOTIVOS_MOVIMIENTO_CAJA[0], MOTIVOS_MOVIMIENTO_CAJA[3]),
+    TipoMovimientoCaja.INGRESO: (MOTIVOS_MOVIMIENTO_CAJA[0],),
     TipoMovimientoCaja.RETIRO: (MOTIVOS_MOVIMIENTO_CAJA[1], MOTIVOS_MOVIMIENTO_CAJA[2]),
 }
 
@@ -130,6 +136,7 @@ class VentanaVentas(ttk.Frame):
         resumen_del_dia: ResumenDelDia | None = None,
         auditor: Auditor | None = None,
         repo_categorias: RepositorioCategorias | None = None,
+        anular_venta: AnularVenta | None = None,
     ) -> None:
         super().__init__(parent)
         self._sesion = sesion or Sesion(USUARIO_DEMO)
@@ -139,6 +146,7 @@ class VentanaVentas(ttk.Frame):
         self._repo_productos = repositorio_productos
         self._repo_ventas = repositorio_ventas
         self._registrar_venta = registrar_venta
+        self._anular_venta = anular_venta
         self._abrir_turno = abrir_turno
         self._cerrar_turno = cerrar_turno
         self._registrar_movimiento = registrar_movimiento
@@ -392,14 +400,14 @@ class VentanaVentas(ttk.Frame):
             "lote",
         )
         anchos = {
-            "codigo": 130,
-            "nombre": 250,
+            "codigo": 110,
+            "nombre": 220,
             "precio": 90,
             "cantidad": 70,
             "descuento": 70,
             "subtotal": 100,
             "existencia": 80,
-            "lote": 170,
+            "lote": 260,  # O-37: «L-B (vence 09-01-2027) · elegido» cabe completo
         }
         self._tabla = ttk.Treeview(tab_venta, columns=columnas, show="headings", height=4)
         for col, titulo in zip(
@@ -516,6 +524,7 @@ class VentanaVentas(ttk.Frame):
         for texto, comando, tecla in (
             ("Abrir jornada", self._abrir_turno_ui, ""),
             ("Movimiento de caja", self._movimiento_ui, ""),
+            ("Anular venta", self._anular_venta_ui, ""),  # HU-VTA-11
             ("Imprimir corte", self._imprimir_corte, "F8"),
         ):
             BotonAccion(interior, texto, comando, tecla, "normal", color, PAPEL).pack(
@@ -557,7 +566,7 @@ class VentanaVentas(ttk.Frame):
         izquierda = ttk.LabelFrame(columnas, text="Venta del turno", padding=8)
         izquierda.pack(side="left", fill="both", expand=True, padx=(0, 10))
         self._tabla_jornada = ttk.Treeview(
-            izquierda, columns=("medio", "monto"), show="headings", height=5
+            izquierda, columns=("medio", "monto"), show="headings", height=6
         )
         self._tabla_jornada.heading("medio", text="Medio de pago")
         self._tabla_jornada.heading("monto", text="Monto")
@@ -636,16 +645,22 @@ class VentanaVentas(ttk.Frame):
             anchor="w", padx=14, pady=(8, 0)
         )
         self._tabla_ventas_turno = ttk.Treeview(
-            padre, columns=("hora", "total", "pago", "nota"), show="headings", height=4
+            padre,
+            columns=("numero", "hora", "total", "pago", "estado", "nota"),
+            show="headings",
+            height=4,
         )
         for col, titulo, ancho in (
+            ("numero", "N°", 50),
             ("hora", "Hora", 70),
             ("total", "Total", 110),
-            ("pago", "Pago", 180),
-            ("nota", "Nota", 360),
+            ("pago", "Pago", 160),
+            ("estado", "Estado", 190),
+            ("nota", "Nota", 260),
         ):
             self._tabla_ventas_turno.heading(col, text=titulo)
             self._tabla_ventas_turno.column(col, width=ancho, anchor="w")
+        self._tabla_ventas_turno.tag_configure("anulada", foreground="#999999")  # HU-VTA-11
         self._tabla_ventas_turno.pack(fill="both", expand=True, padx=12, pady=(4, 12))
 
     def _refrescar_corte(self, turno, ventas) -> None:
@@ -683,6 +698,15 @@ class VentanaVentas(ttk.Frame):
             self._tabla_jornada.insert("", "end", values=(nombre, _formatear_clp(monto.monto)))
             total += monto.monto
         self._tabla_jornada.insert("", "end", values=("Total vendido", _formatear_clp(total)))
+        # HU-VTA-11: lo anulado es una partida propia del corte, no «una venta menos».
+        self._tabla_jornada.insert(
+            "",
+            "end",
+            values=(
+                f"Ventas anuladas ({arqueo.ventas_anuladas})",
+                _formatear_clp(arqueo.monto_anulado.monto),
+            ),
+        )
         movimientos = arqueo.ingresos_caja.monto - arqueo.retiros_caja.monto
         valores = {
             "Fondo inicial": _formatear_clp(turno.fondo_inicial.monto),
@@ -712,19 +736,24 @@ class VentanaVentas(ttk.Frame):
         )
         por_categoria: dict[str, int] = {}
         for venta in ventas:
-            if venta.estado is not EstadoVenta.PAGADA:
-                continue
             medios = ", ".join(sorted({NOMBRES_MEDIO_PAGO[pago.medio] for pago in venta.pagos}))
+            anulada = venta.estado is EstadoVenta.ANULADA
             self._tabla_ventas_turno.insert(
                 "",
                 "end",
+                iid=str(venta.id),
+                tags=("anulada",) if anulada else (),
                 values=(
+                    venta.id,
                     venta.creado_en.strftime("%H:%M"),
                     _formatear_clp(venta.total.monto),
                     medios,
+                    f"Anulada · {venta.motivo_anulacion}" if anulada else "Cobrada",
                     venta.nota or "",
                 ),
             )
+            if anulada:
+                continue  # una venta anulada no suma a las ventas por departamento
             for detalle in venta.detalles:
                 producto = self._repo_productos.obtener_por_codigo(detalle.producto_codigo)
                 nombre = (
@@ -762,7 +791,7 @@ class VentanaVentas(ttk.Frame):
         modulo, pestana = {
             "alertas": ("F3", "alertas"),
             "existencias": ("F3", "existencias"),
-            "productos": ("F2", ""),
+            "productos": ("F2", "sin_costo"),
             "reportes": ("F6", ""),
         }.get(destino, ("", ""))
         if modulo and hasattr(ventana, "ir_a"):
@@ -903,12 +932,138 @@ class VentanaVentas(ttk.Frame):
         messagebox.showinfo(
             "Arqueo de cierre",
             f"{detalle}\n\n"
+            f"Ventas anuladas: {arqueo.ventas_anuladas} por "
+            f"{_formatear_clp(arqueo.monto_anulado.monto)}\n"
             f"Abonos de clientes en efectivo: {_formatear_clp(arqueo.abonos_efectivo.monto)}\n"
             f"Efectivo esperado: {_formatear_clp(arqueo.efectivo_esperado)}\n"
             f"Efectivo contado: {_formatear_clp(arqueo.efectivo_contado.monto)}\n"
             f"Diferencia: {_formatear_clp(arqueo.diferencia)}",
         )
         self._refrescar_turno()
+
+    # ------------------------------------------------------------ Anular venta (HU-VTA-11) --
+
+    def ejecutar_anulacion(self, venta_id: int, motivo: str, detalle: str = "") -> bool:
+        """Anula la venta con el caso de uso; los errores salen como aviso, sin romper nada."""
+        if self._anular_venta is None:
+            return False
+        quien = self._sesion.nombre or f"usuario {self._sesion.usuario_id}"
+        try:
+            self._anular_venta.ejecutar(venta_id, motivo, detalle, quien)
+        except ErrorDominio as exc:
+            messagebox.showerror("No se pudo anular la venta", str(exc))
+            return False
+        self._refrescar_turno()
+        self._refrescar_ticket()  # la existencia de los productos cambio
+        return True
+
+    def _anular_venta_ui(self) -> None:
+        if self._anular_venta is None:
+            return
+        if self._sesion.rol is not None and self._sesion.rol is not Rol.ADMIN:
+            messagebox.showinfo("Anular venta", "Solo la administradora puede anular una venta.")
+            return
+        turno = self._repo_turnos.obtener_abierto()
+        if turno is None:
+            messagebox.showinfo("Anular venta", "No hay una jornada abierta.")
+            return
+        cobradas = [
+            v
+            for v in self._repo_ventas.obtener_por_turno(turno.id)
+            if v.estado is EstadoVenta.PAGADA
+        ]
+        if not cobradas:
+            messagebox.showinfo("Anular venta", "No hay ventas cobradas en esta jornada.")
+            return
+
+        dialogo = Toplevel(self)
+        dialogo.title("Anular venta")
+        dialogo.transient(self.winfo_toplevel())
+        dialogo.grab_set()
+        ttk.Label(
+            dialogo,
+            text="Elige la venta cobrada de esta jornada que se anula. No se borra: queda marcada.",
+        ).grid(row=0, column=0, columnspan=2, padx=12, pady=(10, 4), sticky="w")
+        tabla = ttk.Treeview(
+            dialogo,
+            columns=("numero", "hora", "total", "pago"),
+            show="headings",
+            height=7,
+            selectmode="browse",
+        )
+        for col, titulo, ancho in (
+            ("numero", "N°", 50),
+            ("hora", "Hora", 70),
+            ("total", "Total", 110),
+            ("pago", "Pago", 220),
+        ):
+            tabla.heading(col, text=titulo)
+            tabla.column(col, width=ancho, anchor="w")
+        for venta in reversed(cobradas):  # la mas reciente arriba
+            medios = ", ".join(sorted({NOMBRES_MEDIO_PAGO[p.medio] for p in venta.pagos}))
+            tabla.insert(
+                "",
+                "end",
+                iid=str(venta.id),
+                values=(
+                    venta.id,
+                    venta.creado_en.strftime("%H:%M"),
+                    _formatear_clp(venta.total.monto),
+                    medios,
+                ),
+            )
+        tabla.grid(row=1, column=0, columnspan=2, padx=12, pady=4)
+        tabla.selection_set(tabla.get_children()[0])
+
+        ttk.Label(dialogo, text="Motivo").grid(row=2, column=0, padx=12, pady=6, sticky="w")
+        motivo_var = StringVar(value=MOTIVOS_ANULACION[0])
+        combo = ttk.Combobox(
+            dialogo, textvariable=motivo_var, values=MOTIVOS_ANULACION, state="readonly", width=34
+        )
+        combo.grid(row=2, column=1, padx=12, pady=6, sticky="w")
+        ttk.Label(dialogo, text="Cuál fue (si es «Otro»)").grid(
+            row=3, column=0, padx=12, pady=6, sticky="w"
+        )
+        detalle_var = StringVar()
+        entrada = ttk.Entry(dialogo, textvariable=detalle_var, width=36, state="disabled")
+        entrada.grid(row=3, column=1, padx=12, pady=6, sticky="w")
+
+        def al_cambiar_motivo(_evento: object = None) -> None:
+            otro = motivo_var.get() == MOTIVO_OTRO
+            entrada.config(state="normal" if otro else "disabled")
+            if otro:
+                entrada.focus_set()
+            else:
+                detalle_var.set("")
+
+        combo.bind("<<ComboboxSelected>>", al_cambiar_motivo)
+
+        def confirmar(_evento: object = None) -> None:
+            seleccion = tabla.selection()
+            if not seleccion:
+                messagebox.showwarning(
+                    "Anular venta", "Elige la venta que se anula.", parent=dialogo
+                )
+                return
+            venta_id = int(seleccion[0])
+            total = tabla.item(seleccion[0], "values")[2]
+            if not messagebox.askyesno(
+                "Anular venta",
+                f"Se anula la venta N° {venta_id} por {total}.\n\n"
+                "La existencia de sus productos vuelve al lote del que salió y, si fue a crédito, "
+                "se revierte en la cuenta del cliente. No se puede deshacer.\n\n¿Anular?",
+                parent=dialogo,
+            ):
+                return
+            if self.ejecutar_anulacion(venta_id, motivo_var.get(), detalle_var.get()):
+                dialogo.destroy()
+                messagebox.showinfo("Venta anulada", f"La venta N° {venta_id} quedó anulada.")
+
+        botones = ttk.Frame(dialogo)
+        botones.grid(row=4, column=0, columnspan=2, pady=10)
+        ttk.Button(botones, text="Anular venta", command=confirmar).pack(side="left", padx=6)
+        ttk.Button(botones, text="Cancelar", command=dialogo.destroy).pack(side="left", padx=6)
+        dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
 
     def _movimiento_ui(self) -> None:
         # E-03: un solo dialogo con tipo, motivo de una lista, observacion y monto,
@@ -1506,15 +1661,25 @@ class VentanaVentas(ttk.Frame):
         dialogo.title("Buscar producto")
         dialogo.transient(self.winfo_toplevel())
         dialogo.grab_set()
-        dialogo.geometry("360x320")
+        # O-38: alto fijo; lo que sobra se desplaza con barra y los botones siempre se ven.
+        dialogo.geometry("420x440")
+        dialogo.minsize(380, 360)
 
         ttk.Label(dialogo, text="Nombre").pack(padx=8, pady=(8, 2), anchor="w")
         entrada = ttk.Entry(dialogo, width=40)
-        entrada.pack(padx=8, pady=2)
+        entrada.pack(padx=8, pady=2, fill="x")
         entrada.focus_set()
 
-        lista = Listbox(dialogo, width=50, height=12)
-        lista.pack(padx=8, pady=8, fill="both", expand=True)
+        # Los botones y el aviso se empacan primero, abajo, para que la lista no los desplace.
+        pie = ttk.Frame(dialogo)
+        pie.pack(side="bottom", fill="x", pady=(0, 8))
+        marco_lista = ttk.Frame(dialogo)
+        marco_lista.pack(padx=8, pady=8, fill="both", expand=True)
+        barra = ttk.Scrollbar(marco_lista, orient="vertical")
+        barra.pack(side="right", fill="y")
+        lista = Listbox(marco_lista, width=50, height=8, yscrollcommand=barra.set)
+        lista.pack(side="left", fill="both", expand=True)
+        barra.configure(command=lista.yview)
 
         productos = self._repo_productos.listar()
 
@@ -1527,17 +1692,28 @@ class VentanaVentas(ttk.Frame):
                 key=lambda p: (rango_de_busqueda(p.nombre, termino), _normalizar(p.nombre))
             )
             for producto in coinciden:
-                lista.insert("end", f"{producto.codigo} - {producto.nombre}")
+                # O-31: un producto desactivado se distingue en la lista (texto y color gris).
+                aviso = "" if producto.activo else " (desactivado)"
+                lista.insert("end", f"{producto.codigo} - {producto.nombre}{aviso}")
+                if not producto.activo:
+                    lista.itemconfig("end", foreground="#999999")
 
         def elegir(_evento: object = None) -> None:
             seleccion = lista.curselection()
             if not seleccion:
                 return
             codigo = lista.get(seleccion[0]).split(" - ", 1)[0]
+            elegido = self._repo_productos.obtener_por_codigo(codigo)
+            if elegido is not None and not elegido.activo:
+                # O-31: el aviso sale al elegirlo, antes de agregar y de pedir cantidad o peso.
+                messagebox.showerror(
+                    "No se pudo agregar el producto",
+                    f"El producto {elegido.nombre} está desactivado",
+                )
+                return
             self._entrada_codigo.delete(0, "end")
             self._entrada_codigo.insert(0, codigo)
             dialogo.destroy()
-            elegido = self._repo_productos.obtener_por_codigo(codigo)
             if elegido is not None and elegido.unidad_venta is UnidadVenta.GRANEL:
                 # O-32: un granel elegido en F10 pide el peso de inmediato y entra al ticket.
                 self._agregar_producto()
@@ -1549,7 +1725,7 @@ class VentanaVentas(ttk.Frame):
                 lista.selection_set(0)  # Enter sin elegir toma el primero de la lista
             elegir()
 
-        boton = ttk.Button(dialogo, text="Seleccionar", command=elegir)
+        boton = ttk.Button(pie, text="Seleccionar", command=elegir)
 
         def rotular_boton(_evento: object = None) -> None:
             # O-32: si lo resaltado es granel, el boton avisa que se pedira el peso.
@@ -1569,11 +1745,11 @@ class VentanaVentas(ttk.Frame):
         refrescar_lista()
 
         ttk.Label(
-            dialogo,
+            pie,
             text="Si el producto es a granel, al aceptar se pide el peso.",
             foreground="#666666",
         ).pack(padx=8)
-        boton.pack(pady=(4, 8))
+        boton.pack(pady=(4, 0))
 
     def _rotular_pestanas(self) -> None:
         """HU-VTA-05: cada pestana muestra el total de su ticket (p. ej. «Ticket 1 · $18.240»)."""
@@ -1659,8 +1835,10 @@ class VentanaVentas(ttk.Frame):
         lote = self._registrar_venta.lote_para(venta, codigo)
         if lote is None:
             return "-"
-        elegido = "* " if venta.lote_elegido.get(codigo) == lote.uuid else ""
-        return f"{elegido}{lote.etiqueta} · vence {lote.fecha_vencimiento.isoformat()}"
+        # O-37: «123 (vence 13-11)»; si se eligio a mano con F11 se dice con una palabra.
+        elegido = " · elegido" if venta.lote_elegido.get(codigo) == lote.uuid else ""
+        vence = formatear_fecha_corta(lote.fecha_vencimiento)
+        return f"{lote.etiqueta} (vence {vence}){elegido}"
 
     def _linea_seleccionada(self) -> str | None:
         seleccion = self._tabla.selection()
@@ -1712,7 +1890,9 @@ class VentanaVentas(ttk.Frame):
         lista = Listbox(dialogo, height=min(8, len(lotes)), width=48, exportselection=False)
         for lote in lotes:
             lista.insert(
-                "end", f"{lote.etiqueta} · vence {lote.fecha_vencimiento} · saldo {lote.saldo}"
+                "end",
+                f"{lote.etiqueta} · vence {formatear_fecha_corta(lote.fecha_vencimiento)} "
+                f"· saldo {lote.saldo}",
             )
         lista.selection_set(0)
         lista.pack(padx=12, pady=10)

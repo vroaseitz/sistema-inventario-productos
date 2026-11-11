@@ -26,10 +26,28 @@ from .value_objects import Dinero
 
 
 class EstadoVenta(Enum):
-    """Estado de la venta. La anulacion (HU-VTA-11) queda fuera de este incremento."""
+    """Estado de la venta. Una venta anulada se conserva marcada (HU-VTA-11), nunca se borra."""
 
     PAGADA = "pagada"
     ANULADA = "anulada"
+
+
+# HU-VTA-11, respuesta de la PO del 09-11: dos motivos; «Otro» se escribe con sus palabras.
+MOTIVO_MAL_ESTADO = "Producto en mal estado"
+MOTIVO_OTRO = "Otro"
+MOTIVOS_ANULACION = (MOTIVO_MAL_ESTADO, MOTIVO_OTRO)
+
+
+def texto_del_motivo(motivo: str, detalle: str = "") -> str:
+    """El motivo que queda guardado: de la lista, y «Otro» con lo que se escribio."""
+    if motivo not in MOTIVOS_ANULACION:
+        raise ReglaVentaInvalida("Elige un motivo de la lista para anular la venta")
+    if motivo == MOTIVO_OTRO:
+        detalle = " ".join(detalle.split())
+        if not detalle:
+            raise ReglaVentaInvalida("Con el motivo «Otro» escribe cuál fue")
+        return f"{MOTIVO_OTRO}: {detalle}"
+    return motivo
 
 
 @dataclass
@@ -75,6 +93,23 @@ class Venta:
     lote_elegido: dict[str, str] = field(default_factory=dict, repr=False)
     # Nota libre de la venta (un cambio de producto, un cobro pendiente...). No se imprime.
     nota: str = ""
+    # HU-VTA-11: quien la anulo, cuando y por que (la venta anulada se conserva).
+    motivo_anulacion: str = ""
+    anulada_por: str = ""
+    anulada_en: datetime | None = None
+
+    def anular(self, motivo: str, usuario: str, cuando: datetime | None = None) -> None:
+        """Marca la venta como anulada. Exige el motivo ya armado y quien la anula."""
+        if self.estado is EstadoVenta.ANULADA:
+            raise ReglaVentaInvalida("Esta venta ya está anulada: no se puede anular de nuevo")
+        if not motivo.strip():
+            raise ReglaVentaInvalida("La anulación necesita un motivo")
+        if not usuario.strip():
+            raise ReglaVentaInvalida("La anulación necesita quién la hace")
+        self.estado = EstadoVenta.ANULADA
+        self.motivo_anulacion = motivo.strip()
+        self.anulada_por = usuario.strip()
+        self.anulada_en = cuando or datetime.now()
 
     def agregar_detalle(
         self,

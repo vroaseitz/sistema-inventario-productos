@@ -4,6 +4,7 @@ Funcion unica para toda la aplicacion: pantallas y mensajes de error usan punto 
 """
 
 import unicodedata
+from datetime import date
 
 
 def plano(texto: str) -> str:
@@ -44,3 +45,10 @@ def formatear_cantidad(valor) -> str:
     if "." in texto:
         texto = texto.rstrip("0").rstrip(".")
     return texto.replace(".", ",") or "0"
+
+
+def formatear_fecha_corta(fecha: date, hoy: date | None = None) -> str:
+    """Fecha en dia-mes (13-11); con el anio solo si no es el actual (13-11-2027). O-37."""
+    hoy = hoy or date.today()
+    texto = f"{fecha.day:02d}-{fecha.month:02d}"
+    return texto if fecha.year == hoy.year else f"{texto}-{fecha.year}"
