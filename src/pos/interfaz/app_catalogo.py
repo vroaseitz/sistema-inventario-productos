@@ -24,6 +24,7 @@ from pos.dominio.formato import formatear_clp, parsear_monto
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.value_objects import neto_de_precio
 from pos.interfaz import tema
+from pos.interfaz.avisos import costo_bajo_el_precio_o_confirmado
 from pos.interfaz.combo_filtrable import ComboFiltrable
 from pos.interfaz.dialogo_formulario import pedir_formulario
 from pos.interfaz.exportar import exportar_con_dialogo
@@ -523,16 +524,8 @@ class VentanaCatalogo(ttk.Frame):
         except (ValueError, KeyError) as error:
             messagebox.showerror("No se pudo guardar", str(error) or "Revise los datos.")
             return False
-        if (
-            costo
-            and precio < costo
-            and not messagebox.askyesno(
-                "Precio bajo el costo",
-                f"El precio ({formatear_clp(precio)}) es menor que el costo "
-                f"({formatear_clp(costo)}): "
-                "se vendería con pérdida. ¿Guardar igual?",
-            )
-        ):
+        # CO-08: mismo criterio que el margen (costo neto vs precio sin IVA) y que la factura.
+        if not costo_bajo_el_precio_o_confirmado(v["nombre"].get().strip(), costo, precio):
             return False
         codigo = v["codigo"].get().strip()
         granel = UnidadVenta.GRANEL if v["granel"].get() else UnidadVenta.UNIDAD

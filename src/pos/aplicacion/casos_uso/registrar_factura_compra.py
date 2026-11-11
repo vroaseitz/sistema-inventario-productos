@@ -25,7 +25,11 @@ from pos.aplicacion.registro_movimientos import RegistroMovimientos
 from pos.aplicacion.sincronizacion import encolar_factura_compra, encolar_producto
 from pos.dominio.compras import FacturaCompra
 from pos.dominio.errores import ReglaCompraInvalida
+from pos.dominio.productos import UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
+
+# CO-07: igual que en la venta, un producto por unidad entra en cantidades enteras.
+MENSAJE_CANTIDAD_ENTERA = "Este producto se vende por unidad: la cantidad debe ser un número entero"
 
 
 @dataclass
@@ -50,6 +54,8 @@ class RegistrarFacturaCompra:
             producto = self.repositorio_productos.obtener_por_codigo(linea.codigo_producto)
             if producto is None:
                 raise ReglaCompraInvalida(f"No existe el producto {linea.codigo_producto}")
+            if producto.unidad_venta is UnidadVenta.UNIDAD and linea.cantidad % 1 != 0:
+                raise ReglaCompraInvalida(MENSAJE_CANTIDAD_ENTERA)  # CO-07
             if producto.perecible and linea.fecha_vencimiento is None:
                 raise ReglaCompraInvalida(
                     f"{producto.nombre} es perecible: falta la fecha de vencimiento del lote"

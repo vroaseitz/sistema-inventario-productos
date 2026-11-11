@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import re
 import tkinter as tk
+import unicodedata
 from tkinter import ttk
 
 TINTA = "#1b2220"
@@ -180,6 +181,7 @@ def aplicar_tema(raiz: tk.Misc) -> ttk.Style:
     )
     estilo.map("Treeview.Heading", background=[("active", LINEA_2)])
     instalar_filas_alternadas()  # A-07
+    instalar_columnas_centradas()  # A-09
 
     # Sub-pestanas como «pildoras» (Venta · Caja y corte · Resumen del dia).
     estilo.configure("TNotebook", background=PAPEL, borderwidth=0, tabmargins=(0, 6, 0, 0))
@@ -222,6 +224,39 @@ def _rayar_fila(tabla: ttk.Treeview, item: str) -> None:
     nuevas = etiquetas_de_fila(tabla.index(item), etiquetas, con_fondo)
     if nuevas != etiquetas:
         tabla.item(item, tags=nuevas)
+
+
+COLUMNAS_A_LA_IZQUIERDA = frozenset({"producto", "nombre", "codigo", "categoria", "funcion"})
+
+
+def ancla_de_columna(columna: str) -> str:
+    """A-09: los datos van centrados, salvo nombre del producto, codigo, categoria y la
+    «Funcion» de F7 › Usuarios, que se leen mejor a la izquierda."""
+    # Algunas tablas usan el titulo como id («Categoría»): se compara sin tildes ni mayusculas.
+    clave = "".join(
+        c for c in unicodedata.normalize("NFKD", columna.lower()) if not unicodedata.combining(c)
+    )
+    return "w" if clave in COLUMNAS_A_LA_IZQUIERDA else "center"
+
+
+def instalar_columnas_centradas() -> None:
+    """A-09: aplica `ancla_de_columna` a TODAS las tablas de la app, sin tocar cada pantalla.
+
+    Envuelve `ttk.Treeview.column` una sola vez: cada vez que una pantalla configura una
+    columna (ancho, alineacion...), la alineacion la decide `ancla_de_columna`. Las consultas
+    (`column("x")` o `column("x", "width")`) no se tocan.
+    """
+    if getattr(ttk.Treeview, "_columnas_centradas", False):
+        return
+    original = ttk.Treeview.column
+
+    def column(self: ttk.Treeview, column, option=None, **kw):
+        if option is None and kw and column != "#0":
+            kw["anchor"] = ancla_de_columna(str(column))
+        return original(self, column, option, **kw)
+
+    ttk.Treeview.column = column  # type: ignore[method-assign]
+    ttk.Treeview._columnas_centradas = True  # type: ignore[attr-defined]
 
 
 def instalar_filas_alternadas() -> None:

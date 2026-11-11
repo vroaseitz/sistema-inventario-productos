@@ -8,6 +8,7 @@ reemplazarlo sin tocar el resto de la pantalla.
 from __future__ import annotations
 
 import calendar
+import time
 import tkinter as tk
 from datetime import date, datetime
 from tkinter import ttk
@@ -65,6 +66,7 @@ class CampoFecha(ttk.Frame):
         ttk.Button(self, text="▾", width=2, command=self.alternar).pack(side="left", padx=(2, 0))
         self._entrada.bind("<Button-1>", lambda _e: self.after(1, self.abrir), add="+")
         self._popup: tk.Toplevel | None = None
+        self._cerrado_en = 0.0  # A-10: momento en que se cerro el calendario
         self._mes = (valor or date.today()).replace(day=1)
 
     # -- API como la de un StringVar ------------------------------------------------------
@@ -80,7 +82,11 @@ class CampoFecha(ttk.Frame):
         return self._popup is not None
 
     def alternar(self) -> None:
-        self.cerrar() if self.abierto else self.abrir()
+        if self.abierto:
+            self.cerrar()
+        elif time.monotonic() - self._cerrado_en > 0.3:
+            # Si el clic en ▾ acaba de cerrarlo (A-10: clic fuera), no se vuelve a abrir.
+            self.abrir()
 
     def abrir(self) -> None:
         if self.abierto:
@@ -99,11 +105,32 @@ class CampoFecha(ttk.Frame):
         self._popup = popup
         self._dibujar()
         popup.focus_set()
+        # A-10: se cierra solo al hacer clic fuera y al cambiar de modulo o de pestana.
+        popup.bind("<FocusOut>", lambda _e: self.after(60, self._cerrar_si_perdio_foco), add="+")
+        self._vigilar_visibilidad()
 
     def cerrar(self) -> None:
         if self._popup is not None:
             self._popup.destroy()
             self._popup = None
+            self._cerrado_en = time.monotonic()
+
+    def _cerrar_si_perdio_foco(self) -> None:
+        """A-10: si el foco salio del calendario (clic en otra parte), se cierra."""
+        if self._popup is None:
+            return
+        foco = self._popup.focus_get()
+        if foco is None or not str(foco).startswith(str(self._popup)):
+            self.cerrar()
+
+    def _vigilar_visibilidad(self) -> None:
+        """A-10: si el campo deja de verse (otro modulo o pestana), el calendario se cierra."""
+        if self._popup is None:
+            return
+        if not self.winfo_viewable():
+            self.cerrar()
+            return
+        self.after(200, self._vigilar_visibilidad)
 
     def _mover(self, meses: int) -> None:
         indice = self._mes.year * 12 + (self._mes.month - 1) + meses

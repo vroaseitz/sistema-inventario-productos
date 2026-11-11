@@ -15,13 +15,17 @@ from decimal import Decimal, InvalidOperation
 from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.gestionar_proveedores import GestionarProveedores
-from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra
+from pos.aplicacion.casos_uso.registrar_factura_compra import (
+    MENSAJE_CANTIDAD_ENTERA,
+    RegistrarFacturaCompra,
+)
 from pos.aplicacion.puertos import RepositorioFacturasCompra, RepositorioProductos
 from pos.dominio.compras import FacturaCompra, LineaFactura, iva_de
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_cantidad, formatear_clp, parsear_monto
 from pos.dominio.productos import UnidadVenta
 from pos.interfaz import tema
+from pos.interfaz.avisos import costo_bajo_el_precio_o_confirmado
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.dialogo_formulario import pedir_formulario
 
@@ -274,10 +278,15 @@ class VentanaCompras(ttk.Frame):
         except InvalidOperation:
             messagebox.showerror("Compras", "La cantidad debe ser un número, por ejemplo 10")
             return
+        if producto.unidad_venta is UnidadVenta.UNIDAD and cantidad % 1 != 0:
+            messagebox.showerror("Compras", MENSAJE_CANTIDAD_ENTERA)  # CO-07
+            return
         costo = self._leer_monto(self._l_costo.get())
         if costo is None:
             messagebox.showerror("Compras", "Falta el costo unitario neto (solo números)")
             return
+        if not costo_bajo_el_precio_o_confirmado(producto.nombre, costo, producto.precio.monto):
+            return  # CO-08: la usuaria prefirio corregir el costo
         vence_texto = self._l_vence.get().strip()
         try:
             vence = datetime.strptime(vence_texto, "%Y-%m-%d").date() if vence_texto else None
