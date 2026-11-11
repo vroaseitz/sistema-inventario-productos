@@ -107,7 +107,9 @@ class CampoFecha(ttk.Frame):
         popup.focus_set()
         # A-10: se cierra solo al hacer clic fuera y al cambiar de modulo o de pestana.
         popup.bind("<FocusOut>", lambda _e: self.after(60, self._cerrar_si_perdio_foco), add="+")
-        self._vigilar_visibilidad()
+        # La primera revision espera: abrir desde codigo un campo de otro modulo no lo cierra al
+        # instante (lo hace la prueba e2e); con el usuario, el campo siempre esta a la vista.
+        self.after(200, self._vigilar_visibilidad)
 
     def cerrar(self) -> None:
         if self._popup is not None:

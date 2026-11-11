@@ -89,3 +89,22 @@ def test_si_el_campo_deja_de_verse_el_calendario_se_cierra():
     campo.winfo_viewable = MagicMock(return_value=0)  # otro modulo o pestana
     campo._vigilar_visibilidad()
     assert campo._popup is None
+
+
+def test_abrir_un_campo_que_no_se_ve_no_lo_cierra_al_instante():
+    """CI 11-11: la prueba e2e abre el calendario de F6 estando en F1; debe quedar abierto."""
+    import tkinter as tk
+    from datetime import date
+
+    try:
+        raiz = tk.Tk()
+    except tk.TclError:
+        pytest.skip("sin entorno grafico")
+    try:
+        campo = CampoFecha(raiz)  # sin grid: no se ve
+        campo.abrir()
+        assert campo.abierto
+        campo._elegir(date.today())
+        assert not campo.abierto
+    finally:
+        raiz.destroy()
