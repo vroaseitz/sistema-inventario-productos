@@ -2,13 +2,38 @@
 
 Láminas 4 y 5 + demostración en vivo (4 min). Presentación online, después del primer grupo.
 
+## Datos de acceso y de la demo
+
+Son datos **ficticios**, solo para la base de demostración (`demo/demo.db`). No sirven en el local.
+
+| Dato | Valor |
+|---|---|
+| Usuario | `admin` |
+| Contraseña | `admin-demo-2026` |
+| Perfil | Administradora |
+| Base de datos | `demo/demo.db` (SQLite, sin Supabase) |
+| Proveedor ya creado | Frutos del Sur |
+| Cliente ya creado | Juan Pérez · +56 9 1234 5678 · cupo $20.000 |
+| Producto a granel | `ALM-GR` · Almendras a granel · $14.990/kg · costo $7.900 |
+| Producto por unidad | `MIX-250` · Mix de frutos secos 250 g · $3.990 · stock 20 |
+| Factura | N° `45678` · neto `42500` · impuestos `8075` |
+| Lote | `L2024-001` · vence 07-12-2026 |
+
+Si el doble clic no funciona, desde la Terminal:
+
+```bash
+cd ~/dev/estudio/capstone
+PYTHONPATH=src .venv/bin/python demo/preparar_demo.py        # deja la base como nueva
+PYTHONPATH=src POS_SQLITE_PATH="$PWD/demo/demo.db" SUPABASE_DB_URL= .venv/bin/python -m pos   # abre la app
+```
+
 ## Antes de entrar a la reunión (5 min)
 
 1. Doble clic en `demo/reiniciar_demo.command` → deja la base como nueva
    (proveedor «Frutos del Sur» y cliente «Juan Pérez» ya creados).
 2. Doble clic en `demo/abrir_demo.command` → abre la app.
-3. Si el cuadro de ingreso se ve negro, hacer un clic dentro. Entrar con `admin`
-   (la clave está en el encabezado de `scripts/sembrar_demo_e2e.py`).
+3. Si el cuadro de ingreso se ve negro, hacer un clic dentro. Entrar con `admin` /
+   `admin-demo-2026`.
 4. Dejar la app en **F1 Operación**, con la ventana a la vista y sin otras ventanas encima.
 5. Cerrar WhatsApp y notificaciones. Tener abierto el PPT en la lámina 9 (capturas) por si falla algo.
 6. Al compartir pantalla: compartir **la pantalla completa**, no solo la ventana (los diálogos son
