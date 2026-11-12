@@ -6,7 +6,10 @@ import pytest
 
 from pos.aplicacion.casos_uso.editar_producto import EditarProducto
 from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
+from pos.dominio.categorias import CATEGORIAS_VALIDADAS
 from pos.dominio.errores import DatosProductoInvalidos
+from pos.dominio.productos import Producto, UnidadVenta
+from pos.dominio.value_objects import Dinero
 from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
 from pos.infraestructura.sqlite.conexion import crear_conexion
 from pos.infraestructura.sqlite.esquema import crear_esquema
@@ -23,25 +26,45 @@ def base():
     return con
 
 
-def test_base_nueva_trae_las_cuatro_categorias_con_sus_ids_de_siempre(base):
+def test_base_nueva_trae_las_20_categorias_validadas_en_orden(base):
     repo = RepositorioCategoriasSQLite(base)
-    assert [(c.id, c.nombre) for c in repo.listar()] == [
-        (1, "frutas"),
-        (2, "verduras"),
-        (3, "abarrotes"),
-        (4, "limpieza"),
-    ]
+    nombres = [c.nombre for c in repo.listar()]
+    assert nombres == list(CATEGORIAS_VALIDADAS) and len(nombres) == 20
+    assert [c.id for c in repo.listar()] == list(range(1, 21))
+    assert nombres[6] == "Líquidos" and nombres[12] == "Panadería y repostería"
     crear_esquema(base)  # volver a abrir la base no duplica ni cambia nada
-    assert len(repo.listar()) == 4
+    assert len(repo.listar()) == 20
 
 
-def test_sembrar_agrega_solo_las_que_faltan_y_no_toca_las_existentes(base):
-    repo = RepositorioCategoriasSQLite(base)
-    creadas = repo.sembrar(["Lácteos", "FRUTAS", "  Panadería  ", "lacteos"])
-    assert creadas == 2  # FRUTAS ya existe; 'lacteos' es la misma que 'Lácteos'
-    assert [c.nombre for c in repo.listar()][:4] == ["frutas", "verduras", "abarrotes", "limpieza"]
-    assert repo.nombre_de(5) == "Lácteos" and repo.nombre_de(6) == "Panadería"
-    assert repo.nombre_de(99) is None and repo.nombre_de(None) is None
+def _base_de_la_primera_version():
+    """Una base como la de antes de CA-02: solo las 4 categorias antiguas, ids 1 a 4."""
+    con = crear_conexion(":memory:")
+    crear_esquema(con)
+    con.execute("DELETE FROM categorias")
+    con.execute("DELETE FROM sqlite_sequence WHERE name = 'categorias'")  # los ids vuelven a 1
+    for nombre in ("frutas", "verduras", "abarrotes", "limpieza"):
+        con.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
+    return con
+
+
+def test_base_antigua_pasa_a_las_20_y_mueve_frutas_y_verduras():
+    con = _base_de_la_primera_version()
+    productos = RepositorioProductosSQLite(con)
+    for codigo, categoria_id in (("M1", 1), ("Z1", 2), ("A1", 3)):
+        productos.guardar(Producto(codigo, codigo, Dinero(1000), UnidadVenta.UNIDAD, categoria_id))
+    crear_esquema(con)  # al abrir la base se agregan las 20 y se retiran las antiguas
+    repo = RepositorioCategoriasSQLite(con)
+    nombres = [c.nombre for c in repo.listar()]
+    assert nombres.count("Frutas y verduras") == 1
+    # frutas y verduras no existen mas: sus productos pasaron a "Frutas y verduras"
+    assert "frutas" not in nombres and "verduras" not in nombres and "limpieza" not in nombres
+    assert repo.nombre_de(productos.obtener_por_codigo("M1").categoria_id) == "Frutas y verduras"
+    assert repo.nombre_de(productos.obtener_por_codigo("Z1").categoria_id) == "Frutas y verduras"
+    # 'abarrotes' no tiene equivalente y A1 la usa: no se pierde hasta reasignar el producto
+    assert repo.nombre_de(productos.obtener_por_codigo("A1").categoria_id) == "abarrotes"
+    productos.guardar(Producto("A1", "A1", Dinero(1000), UnidadVenta.UNIDAD, 6))  # 6 = Chocolates
+    crear_esquema(con)
+    assert "abarrotes" not in [c.nombre for c in repo.listar()]
 
 
 def test_categoria_sin_nombre_se_rechaza(base):
@@ -51,24 +74,23 @@ def test_categoria_sin_nombre_se_rechaza(base):
 
 def test_el_nombre_unico_lo_exige_la_base(base):
     with pytest.raises(sqlite3.IntegrityError):
-        base.execute("INSERT INTO categorias (nombre) VALUES ('frutas')")
+        base.execute("INSERT INTO categorias (nombre) VALUES ('Plantas')")
 
 
 def test_registrar_y_editar_producto_encolan_su_categoria_por_nombre(base):
     categorias = RepositorioCategoriasSQLite(base)
-    categorias.sembrar(["Lácteos"])
     productos = RepositorioProductosSQLite(base)
     cola = ColaSincronizacionSQLite(base)
     RegistrarProducto(productos, cola=cola, repositorio_categorias=categorias).ejecutar(
-        "L1", "Leche", 1200, categoria_id=5
+        "L1", "Leche", 1200, categoria_id=9
     )
     EditarProducto(
         productos, RepositorioHistorialSQLite(base), cola=cola, repositorio_categorias=categorias
-    ).ejecutar("L1", "Leche entera", 1300, 5, "ana")  # antes la edicion no sincronizaba
+    ).ejecutar("L1", "Leche entera", 1300, 9, "ana")  # antes la edicion no sincronizaba
     ops = [o for o in cola.pendientes() if o["entidad"] == "producto"]
     assert [(o["datos"]["nombre"], o["datos"]["precio"], o["datos"]["categoria"]) for o in ops] == [
-        ("Leche", 1200, "Lácteos"),
-        ("Leche entera", 1300, "Lácteos"),
+        ("Leche", 1200, "Lácteos y huevos"),
+        ("Leche entera", 1300, "Lácteos y huevos"),
     ]
 
 
@@ -91,3 +113,38 @@ def test_el_traductor_crea_la_categoria_remota_y_enlaza_el_producto():
     assert "categoria_id = EXCLUDED.categoria_id" in sentencias[1][0]
     sin = traducir_operacion({**op, "datos": {**op["datos"], "categoria": None}})
     assert len(sin) == 1 and "Sin categoria" in sin[0][0]  # compatibilidad con lo ya encolado
+
+
+def test_eliminar_categoria_solo_si_no_tiene_productos_y_queda_en_la_auditoria(base):
+    """CA-17: con productos no se elimina (se pide fusionar); sin productos se borra y se audita."""
+    from pos.aplicacion.auditor import Auditor
+    from pos.aplicacion.casos_uso.gestionar_categorias import GestionarCategorias
+    from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite
+
+    repo = RepositorioCategoriasSQLite(base)
+    productos = RepositorioProductosSQLite(base)
+    cola = ColaSincronizacionSQLite(base)
+    auditoria = RepositorioAuditoriaSQLite(base)
+    gestion = GestionarCategorias(
+        repo, productos, cola=cola, auditor=Auditor(auditoria, lambda: "admin")
+    )
+    ocupada = gestion.crear("Con productos")
+    vacia = gestion.crear("Sin productos")
+    productos.guardar(Producto("P1", "Uno", Dinero(1000), UnidadVenta.UNIDAD, ocupada.id))
+
+    with pytest.raises(DatosProductoInvalidos, match="1 producto: usa «Fusionar»"):
+        gestion.eliminar(ocupada.id)
+    assert repo.obtener(ocupada.id) is not None  # sigue ahi
+
+    gestion.eliminar(vacia.id)
+    assert repo.obtener(vacia.id) is None
+    assert any(
+        f["accion"] == "Eliminación de categoría" and f["registro"] == "Sin productos"
+        for f in auditoria.listar()
+    )
+    assert any(
+        p["entidad"] == "categoria_eliminar" and p["datos"]["nombre"] == "Sin productos"
+        for p in cola.pendientes()
+    )
+    with pytest.raises(DatosProductoInvalidos, match="no existe"):
+        gestion.eliminar(vacia.id)  # ya no esta

@@ -87,6 +87,9 @@ class Arqueo:
     efectivo_contado: Dinero
     efectivo_esperado: int
     diferencia: int
+    # HU-VTA-11: las ventas anuladas son una partida propia del cierre; no restan «una venta».
+    ventas_anuladas: int = 0
+    monto_anulado: Dinero = Dinero(0)
 
 
 def calcular_arqueo(
@@ -98,15 +101,20 @@ def calcular_arqueo(
 ) -> Arqueo:
     """Calcula el arqueo de cierre de una jornada.
 
-    Solo se consideran las ventas con estado PAGADA: una venta anulada no aporta
-    al total vendido ni al efectivo esperado (HU-VTA-11, fuera de este incremento
-    pero la regla ya se respeta aqui).
+    Solo se consideran las ventas con estado PAGADA: una venta anulada no aporta al total
+    vendido ni al efectivo esperado, pero se cuenta aparte (`ventas_anuladas`, `monto_anulado`)
+    para que el cierre la muestre como partida propia (HU-VTA-11).
     """
     abonos = abonos_efectivo if abonos_efectivo is not None else Dinero(0)
     totales_por_medio: dict[MedioPago, int] = dict.fromkeys(MedioPago, 0)
     efectivo_entregado_total = 0
     vuelto_total = 0
+    anuladas = 0
+    monto_anulado = 0
     for venta in ventas:
+        if venta.estado is EstadoVenta.ANULADA:
+            anuladas += 1
+            monto_anulado += venta.total.monto
         if venta.estado is not EstadoVenta.PAGADA:
             continue
         for pago in venta.pagos:
@@ -145,4 +153,6 @@ def calcular_arqueo(
         efectivo_contado=efectivo_contado,
         efectivo_esperado=efectivo_esperado,
         diferencia=efectivo_contado.monto - efectivo_esperado,
+        ventas_anuladas=anuladas,
+        monto_anulado=Dinero(monto_anulado),
     )

@@ -9,7 +9,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from pos.aplicacion.puertos import RepositorioLotes, RepositorioProductos
+from pos.aplicacion.puertos import (
+    RepositorioConfiguracion,
+    RepositorioLotes,
+    RepositorioProductos,
+)
 from pos.dominio.lotes import AlertaVencimiento, PoliticaDescuento
 
 DIAS_AVISO_POR_DEFECTO = 7
@@ -20,16 +24,22 @@ class ConsultarAlertasVencimiento:
     repositorio_lotes: RepositorioLotes
     repositorio_productos: RepositorioProductos
     politica: PoliticaDescuento = field(default_factory=PoliticaDescuento)
+    configuracion: RepositorioConfiguracion | None = None
 
     def ejecutar(self, hoy: date | None = None) -> list[AlertaVencimiento]:
         hoy = hoy or date.today()
+        aviso_defecto = (
+            self.configuracion.obtener("aviso_defecto_dias")
+            if self.configuracion is not None
+            else DIAS_AVISO_POR_DEFECTO
+        )
         alertas: list[AlertaVencimiento] = []
         for lote in self.repositorio_lotes.con_saldo():
             producto = self.repositorio_productos.obtener_por_codigo(lote.codigo_producto)
             if producto is None:
                 continue
             dias = lote.dias_para_vencer(hoy)
-            aviso = producto.dias_aviso if producto.dias_aviso else DIAS_AVISO_POR_DEFECTO
+            aviso = producto.dias_aviso if producto.dias_aviso else aviso_defecto
             if dias > aviso:
                 continue  # todavia lejos de vencer
             alertas.append(

@@ -1,0 +1,7 @@
+-- Pegar completo en Supabase > SQL Editor y ejecutar (rol postgres). Es idempotente.
+SET search_path TO pos;
+
+ALTER TABLE cliente ADD COLUMN IF NOT EXISTS cupo_credito NUMERIC(14, 2)
+    CHECK (cupo_credito IS NULL OR cupo_credito >= 0);
+
+SELECT pos.aplicar_permisos_pos_app();

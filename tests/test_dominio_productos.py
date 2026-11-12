@@ -37,7 +37,7 @@ class TestCategoriaObligatoria:
     def test_producto_sin_categoria_levanta_excepcion(self):
         with pytest.raises(DatosProductoInvalidos) as excinfo:
             _producto_base(categoria_id=None)
-        assert "categoria" in str(excinfo.value).lower()
+        assert "categoría" in str(excinfo.value).lower()
 
     @pytest.mark.parametrize("categoria_id", [1, 2, 3, 99])
     def test_producto_con_categoria_valida_se_instancia(self, categoria_id):

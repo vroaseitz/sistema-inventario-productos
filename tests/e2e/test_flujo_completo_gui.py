@@ -60,6 +60,7 @@ def _rellenar_login(ventana, nombre, clave):
 def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
     from tkinter import messagebox
 
+    from pos.dominio.formato import formatear_fecha_corta
     from pos.dominio.pagos import ConteoDenominaciones
     from pos.interfaz import app_ventas, ventana_principal
 
@@ -141,22 +142,22 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         # O-04: con la linea seleccionada, "-" resta 1 (3 -> 2 = $3.000)
         ventas._tabla.selection_set(ventas._tabla.get_children()[0])
         ventas._ajustar_cantidad(-1)
-        assert ventas._tabla.item(ventas._tabla.get_children()[0], "values")[2] == "2"
+        assert ventas._tabla.item(ventas._tabla.get_children()[0], "values")[3] == "2"
         agregar("YOG", "1")  # 2.000  -> total 5.000
         # I-03: la linea muestra el lote que vence antes (FEFO)...
         fila_yog = ventas._tabla.get_children()[1]
         assert (
-            "vence " + (date.today() + timedelta(days=2)).isoformat()
-            in ventas._tabla.item(fila_yog, "values")[5]
+            "vence " + formatear_fecha_corta(date.today() + timedelta(days=2))
+            in ventas._tabla.item(fila_yog, "values")[7]
         )
-        # ...y F5 "Cambiar lote" permite elegir el otro
+        # ...y F11 "Cambiar lote" permite elegir el otro
         repo_lotes = ventas._registrar_venta.repositorio_lotes
         segundo = repo_lotes.por_producto("YOG")[1]
         ventas._registrar_venta.elegir_lote(ventas._venta, "YOG", segundo.uuid)
         ventas._refrescar_ticket()
-        assert ventas._tabla.item(ventas._tabla.get_children()[1], "values")[5].startswith(
-            f"* L{segundo.id}"
-        )
+        texto_lote = ventas._tabla.item(ventas._tabla.get_children()[1], "values")[7]
+        # O-37: «L2 (vence 14-11) · elegido», sin asterisco
+        assert texto_lote.startswith(f"L{segundo.id} (vence ") and texto_lote.endswith(" · elegido")
         ventas._medio.set("efectivo")
         ventas._entrada_monto_pago.delete(0, "end")
         ventas._entrada_monto_pago.insert(0, "2000")  # efectivo PARCIAL
@@ -167,7 +168,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         ventas._entrada_monto_pago.insert(0, "3000")
         ventas._agregar_pago()
         ventas._cerrar_venta()
-        assert any("registrada con exito" in m[2] for m in mensajes)
+        assert any("registrada con éxito" in m[2] for m in mensajes)
 
         # --- 4b) O-27: con efectivo el total se ve redondeado desde el inicio ------------------
         assert [ventas._subpestanas.tab(i, "text") for i in (0, 1, 2)] == [
@@ -177,7 +178,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         ]
         agregar("CAF", "1")  # $15.296 -> a la decena: $15.300
         assert ventas._lbl_a_cobrar.cget("text") == "A cobrar: $15.300"
-        assert ventas._entrada_monto_pago.get() == "15300"
+        assert ventas._entrada_monto_pago.get() == "15.300"  # O-07: con punto de miles
         ventas._entrada_monto_pago.delete(0, "end")
         ventas._entrada_monto_pago.insert(0, "15.300")  # con punto de miles tambien
         ventas._agregar_pago()

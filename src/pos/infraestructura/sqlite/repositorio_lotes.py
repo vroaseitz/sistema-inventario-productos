@@ -17,13 +17,20 @@ class RepositorioLotesSQLite:
         """Inserta el lote o actualiza su saldo/vencimiento (clave: uuid)."""
         self._con.execute(
             """
-            INSERT INTO lotes (uuid, codigo_producto, fecha_vencimiento, saldo)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO lotes (uuid, codigo_producto, fecha_vencimiento, saldo, codigo_lote)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(uuid) DO UPDATE SET
                 fecha_vencimiento = excluded.fecha_vencimiento,
-                saldo = excluded.saldo
+                saldo = excluded.saldo,
+                codigo_lote = excluded.codigo_lote
             """,
-            (lote.uuid, lote.codigo_producto, lote.fecha_vencimiento.isoformat(), str(lote.saldo)),
+            (
+                lote.uuid,
+                lote.codigo_producto,
+                lote.fecha_vencimiento.isoformat(),
+                str(lote.saldo),
+                lote.codigo_lote,
+            ),
         )
         if lote.id is None:
             fila = self._con.execute("SELECT id FROM lotes WHERE uuid = ?", (lote.uuid,)).fetchone()
@@ -35,6 +42,10 @@ class RepositorioLotesSQLite:
             (codigo_producto,),
         ).fetchall()
         return [self._a_lote(f) for f in filas]
+
+    def obtener_por_uuid(self, lote_uuid: str) -> Lote | None:
+        fila = self._con.execute("SELECT * FROM lotes WHERE uuid = ?", (lote_uuid,)).fetchone()
+        return self._a_lote(fila) if fila else None
 
     def con_saldo(self) -> list[Lote]:
         filas = self._con.execute(
@@ -50,4 +61,5 @@ class RepositorioLotesSQLite:
             codigo_producto=fila["codigo_producto"],
             fecha_vencimiento=date.fromisoformat(fila["fecha_vencimiento"]),
             saldo=Decimal(fila["saldo"]),
+            codigo_lote=fila["codigo_lote"] or "",
         )

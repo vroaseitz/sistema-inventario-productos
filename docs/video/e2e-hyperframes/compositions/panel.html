@@ -1,0 +1,105 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; font-family: "Inter", sans-serif; color: #f3f5f4; }
+    #pn-all { position: absolute; inset: 0; }
+    #pn-fondo { position: absolute; left: 1530px; top: 40px; width: 370px; height: 1000px; background: #232b28; border-radius: 10px; }
+    #pn-titulo { position: absolute; left: 1556px; top: 62px; width: 330px; font-size: 32px; font-weight: 800; line-height: 1.1; }
+    #pn-sub { position: absolute; left: 1556px; top: 140px; width: 330px; font-size: 20px; color: #b4bdb7; }
+    .row { position: absolute; left: 1544px; width: 344px; height: 62px; opacity: 0.5; }
+    .hl { position: absolute; inset: 0; background: #2f6b45; border-radius: 10px; opacity: 0; }
+    .num { position: absolute; left: 14px; top: 15px; width: 32px; height: 32px; border-radius: 16px; background: #46524d; text-align: center; font-size: 19px; line-height: 32px; font-weight: 800; }
+    .nom { position: absolute; left: 62px; top: 14px; font-size: 26px; font-weight: 700; white-space: nowrap; }
+    #pn-prog-fondo { position: absolute; left: 1556px; top: 690px; width: 318px; height: 8px; border-radius: 4px; background: #3a4541; }
+    #pn-prog { position: absolute; left: 1556px; top: 690px; width: 318px; height: 8px; border-radius: 4px; background: #7fe3a0; transform-origin: left center; }
+    #pn-lbl { position: absolute; left: 1556px; top: 722px; font-size: 18px; font-weight: 800; letter-spacing: 0.14em; color: #7fe3a0; }
+    .detalle { position: absolute; left: 1556px; top: 760px; width: 322px; font-size: 38px; font-weight: 800; line-height: 1.15; color: #ffffff; letter-spacing: -0.01em; }
+    #pn-nota { position: absolute; left: 1556px; top: 968px; width: 322px; font-size: 17px; line-height: 1.3; color: #b4bdb7; }
+  </style>
+  <div id="root" data-composition-id="panel" data-width="1920" data-height="1080">
+    <div id="pn-all">
+      <div id="pn-fondo"></div>
+      <h2 id="pn-titulo">Guía E2E en 7 escenas</h2>
+      <p id="pn-sub">Emporio NaturalSur · POS e Inventario</p>
+      <div id="pn-row1" class="row" style="top:190px">
+        <div id="pn-hl1" class="hl"></div>
+        <span class="num">1</span><span class="nom">Ingreso y vendedora</span>
+      </div>
+      <div id="pn-row2" class="row" style="top:260px">
+        <div id="pn-hl2" class="hl"></div>
+        <span class="num">2</span><span class="nom">Proveedor y factura</span>
+      </div>
+      <div id="pn-row3" class="row" style="top:330px">
+        <div id="pn-hl3" class="hl"></div>
+        <span class="num">3</span><span class="nom">Stock, alerta y merma</span>
+      </div>
+      <div id="pn-row4" class="row" style="top:400px">
+        <div id="pn-hl4" class="hl"></div>
+        <span class="num">4</span><span class="nom">Cliente con crédito</span>
+      </div>
+      <div id="pn-row5" class="row" style="top:470px">
+        <div id="pn-hl5" class="hl"></div>
+        <span class="num">5</span><span class="nom">Venta completa</span>
+      </div>
+      <div id="pn-row6" class="row" style="top:540px">
+        <div id="pn-hl6" class="hl"></div>
+        <span class="num">6</span><span class="nom">Cuenta y abono</span>
+      </div>
+      <div id="pn-row7" class="row" style="top:610px">
+        <div id="pn-hl7" class="hl"></div>
+        <span class="num">7</span><span class="nom">Reportes y auditoría</span>
+      </div>
+      <div id="pn-prog-fondo"></div>
+      <div id="pn-prog"></div>
+      <p id="pn-lbl">QUÉ SE COMPRUEBA</p>
+      <p id="pn-d1" class="clip detalle" data-start="0.0" data-duration="44.27" data-track-index="2">María solo ve F1 Operación</p>
+      <p id="pn-d2" class="clip detalle" data-start="44.27" data-duration="31.96" data-track-index="2">El costo sube de $7.900 a $8.500</p>
+      <p id="pn-d3" class="clip detalle" data-start="76.23" data-duration="26.05" data-track-index="2">Alerta de 10 % y merma de 0,1 kg</p>
+      <p id="pn-d4" class="clip detalle" data-start="102.28" data-duration="9.82" data-track-index="2">Juan Pérez, cliente familiar</p>
+      <p id="pn-d5" class="clip detalle" data-start="112.1" data-duration="71.13" data-track-index="2">Vuelto $15.540 y $7.980 a crédito</p>
+      <p id="pn-d6" class="clip detalle" data-start="183.23" data-duration="25.22" data-track-index="2">Total a pagar: $6.384</p>
+      <p id="pn-d7" class="clip detalle" data-start="208.45" data-duration="27.44" data-track-index="2">Margen 29,5 % y 5 cambios auditados</p>
+      <p id="pn-nota">App real con datos de prueba. El círculo amarillo es el cursor.</p>
+    </div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#pn-all", { opacity: 0, x: 40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.8, ease: "expo.out" }, 0);
+    tl.fromTo("#pn-prog", { scaleX: 0 }, { scaleX: 1, duration: 235.39, ease: "none" }, 0);
+    tl.fromTo("#pn-hl1", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 0.0);
+    tl.fromTo("#pn-row1", { opacity: 0.45 }, { opacity: 1, duration: 0.3 }, 0.0);
+    tl.fromTo("#pn-hl1", { opacity: 1 }, { opacity: 0, duration: 0.3, immediateRender: false }, 43.97);
+    tl.fromTo("#pn-row1", { opacity: 1 }, { opacity: 0.45, duration: 0.3, immediateRender: false }, 43.97);
+    tl.fromTo("#pn-d1", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 0.2);
+    tl.fromTo("#pn-hl2", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 44.27);
+    tl.fromTo("#pn-row2", { opacity: 0.45 }, { opacity: 1, duration: 0.3 }, 44.27);
+    tl.fromTo("#pn-hl2", { opacity: 1 }, { opacity: 0, duration: 0.3, immediateRender: false }, 75.93);
+    tl.fromTo("#pn-row2", { opacity: 1 }, { opacity: 0.45, duration: 0.3, immediateRender: false }, 75.93);
+    tl.fromTo("#pn-d2", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 44.47);
+    tl.fromTo("#pn-hl3", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 76.23);
+    tl.fromTo("#pn-row3", { opacity: 0.45 }, { opacity: 1, duration: 0.3 }, 76.23);
+    tl.fromTo("#pn-hl3", { opacity: 1 }, { opacity: 0, duration: 0.3, immediateRender: false }, 101.98);
+    tl.fromTo("#pn-row3", { opacity: 1 }, { opacity: 0.45, duration: 0.3, immediateRender: false }, 101.98);
+    tl.fromTo("#pn-d3", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 76.43);
+    tl.fromTo("#pn-hl4", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 102.28);
+    tl.fromTo("#pn-row4", { opacity: 0.45 }, { opacity: 1, duration: 0.3 }, 102.28);
+    tl.fromTo("#pn-hl4", { opacity: 1 }, { opacity: 0, duration: 0.3, immediateRender: false }, 111.8);
+    tl.fromTo("#pn-row4", { opacity: 1 }, { opacity: 0.45, duration: 0.3, immediateRender: false }, 111.8);
+    tl.fromTo("#pn-d4", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 102.48);
+    tl.fromTo("#pn-hl5", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 112.1);
+    tl.fromTo("#pn-row5", { opacity: 0.45 }, { opacity: 1, duration: 0.3 }, 112.1);
+    tl.fromTo("#pn-hl5", { opacity: 1 }, { opacity: 0, duration: 0.3, immediateRender: false }, 182.93);
+    tl.fromTo("#pn-row5", { opacity: 1 }, { opacity: 0.45, duration: 0.3, immediateRender: false }, 182.93);
+    tl.fromTo("#pn-d5", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 112.3);
+    tl.fromTo("#pn-hl6", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 183.23);
+    tl.fromTo("#pn-row6", { opacity: 0.45 }, { opacity: 1, duration: 0.3 }, 183.23);
+    tl.fromTo("#pn-hl6", { opacity: 1 }, { opacity: 0, duration: 0.3, immediateRender: false }, 208.15);
+    tl.fromTo("#pn-row6", { opacity: 1 }, { opacity: 0.45, duration: 0.3, immediateRender: false }, 208.15);
+    tl.fromTo("#pn-d6", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 183.43);
+    tl.fromTo("#pn-hl7", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 208.45);
+    tl.fromTo("#pn-row7", { opacity: 0.45 }, { opacity: 1, duration: 0.3 }, 208.45);
+    tl.fromTo("#pn-hl7", { opacity: 1 }, { opacity: 0, duration: 0.3, immediateRender: false }, 235.59);
+    tl.fromTo("#pn-row7", { opacity: 1 }, { opacity: 0.45, duration: 0.3, immediateRender: false }, 235.59);
+    tl.fromTo("#pn-d7", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" }, 208.65);
+    window.__timelines["panel"] = tl;
+  </script>
+</template>

@@ -13,16 +13,31 @@ from decimal import Decimal
 
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
+    RepositorioClientes,
     RepositorioExistencias,
     RepositorioLotes,
     RepositorioProductos,
     RepositorioTurnosCaja,
     RepositorioVentas,
 )
-from pos.aplicacion.sincronizacion import encolar_existencia, encolar_lote, encolar_venta
+from pos.aplicacion.registro_movimientos import RegistroMovimientos
+from pos.aplicacion.sincronizacion import (
+    encolar_existencia,
+    encolar_lote,
+    encolar_movimiento_cliente,
+    encolar_venta,
+)
+from pos.dominio.clientes import (
+    MovimientoCliente,
+    TipoMovimientoCliente,
+    aviso_cupo_insuficiente,
+    cupo_disponible,
+    saldo_de,
+)
 from pos.dominio.errores import DatosProductoInvalidos, ReglaCajaInvalida, ReglaVentaInvalida
+from pos.dominio.inventario import TipoMovimiento
 from pos.dominio.lotes import Lote, consumir_fefo, proponer_lote
-from pos.dominio.pagos import Pago
+from pos.dominio.pagos import MedioPago, Pago
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.ventas import DetalleVenta, Venta
 
@@ -35,6 +50,8 @@ class RegistrarVenta:
     repositorio_existencias: RepositorioExistencias
     cola: ColaSincronizacion | None = None
     repositorio_lotes: RepositorioLotes | None = None
+    repositorio_clientes: RepositorioClientes | None = None
+    movimientos: RegistroMovimientos | None = None
 
     def iniciar(self, usuario_id: int, cliente_id: int | None = None) -> Venta:
         turno = self.repositorio_turnos.obtener_abierto()
@@ -49,8 +66,10 @@ class RegistrarVenta:
     ) -> DetalleVenta:
         producto = self.repositorio_productos.obtener_por_codigo(codigo_producto)
         if producto is None:
-            raise DatosProductoInvalidos(f"No existe un producto con codigo {codigo_producto}")
+            raise DatosProductoInvalidos(f"No existe un producto con código {codigo_producto}")
 
+        if not producto.activo:
+            raise DatosProductoInvalidos(f"El producto {producto.nombre} está desactivado")
         cantidad_dec = Decimal(str(cantidad))
         if producto.unidad_venta is UnidadVenta.UNIDAD and cantidad_dec % 1 != 0:
             raise DatosProductoInvalidos(
@@ -83,6 +102,7 @@ class RegistrarVenta:
     def cerrar(self, venta: Venta) -> Venta:
         """Valida stock y pagos, descuenta existencias y persiste la venta completa."""
         venta.validar_cierre()
+        credito = self._credito_de(venta)
 
         faltantes = []
         for detalle in venta.detalles:
@@ -95,22 +115,73 @@ class RegistrarVenta:
         if faltantes:
             raise ReglaVentaInvalida(f"Stock insuficiente: {', '.join(faltantes)}")
 
+        consumos_lotes: list[tuple[str, str, Decimal]] = []
         for detalle in venta.detalles:
             existencia = self.repositorio_existencias.obtener(detalle.producto_codigo)
             existencia.descontar(detalle.cantidad)
             self.repositorio_existencias.guardar(existencia)
             encolar_existencia(self.cola, existencia)
-            self._consumir_lotes(
+            consumos_lotes += self._consumir_lotes(
                 detalle.producto_codigo,
                 detalle.cantidad,
                 venta.lote_elegido.get(detalle.producto_codigo),
             )
 
         self.repositorio_ventas.guardar(venta)
+        if consumos_lotes:
+            self.repositorio_ventas.guardar_consumo_lotes(venta.id, consumos_lotes)
+        if credito:
+            self._cargar_a_la_cuenta(venta, credito)
+        if self.movimientos is not None:
+            for detalle in venta.detalles:
+                self.movimientos.registrar(
+                    detalle.producto_codigo,
+                    TipoMovimiento.VENTA,
+                    -detalle.cantidad,
+                    f"Ticket {venta.id}",
+                )
         turno = self.repositorio_turnos.obtener_abierto()
         if turno is not None:
             encolar_venta(self.cola, venta, turno.uuid)
         return venta
+
+    def _credito_de(self, venta: Venta) -> int:
+        """Monto pagado con credito de cliente (HU-CLI-02); exige un cliente activo."""
+        credito = sum(p.monto.monto for p in venta.pagos if p.medio is MedioPago.CREDITO_CLIENTE)
+        if not credito:
+            return 0
+        cliente = (
+            self.repositorio_clientes.obtener(venta.cliente_id)
+            if self.repositorio_clientes is not None and venta.cliente_id is not None
+            else None
+        )
+        if cliente is None:
+            raise ReglaVentaInvalida("Elige el cliente al que se carga el credito")
+        if not cliente.activo:
+            raise ReglaVentaInvalida(f"El cliente {cliente.nombre} esta inactivo")
+        # CL-01: si lo que ya debe mas esta compra supera el cupo, no se vende a credito.
+        disponible = cupo_disponible(
+            cliente.cupo, saldo_de(self.repositorio_clientes.movimientos(cliente.id))
+        )
+        if disponible is not None and credito > disponible:
+            raise ReglaVentaInvalida(aviso_cupo_insuficiente(cliente.nombre, disponible, credito))
+        return credito
+
+    def _cargar_a_la_cuenta(self, venta: Venta, credito: int) -> None:
+        productos = len(venta.detalles)
+        plural = "s" if productos != 1 else ""
+        movimiento = MovimientoCliente(
+            cliente_id=venta.cliente_id,
+            tipo=TipoMovimientoCliente.CONSUMO,
+            monto=credito,
+            fecha=venta.creado_en.date(),
+            detalle=f"Venta N° {venta.id} · {productos} producto{plural}",
+            venta_uuid=venta.uuid,
+        )
+        self.repositorio_clientes.agregar_movimiento(movimiento)
+        cliente = self.repositorio_clientes.obtener(venta.cliente_id)
+        if cliente is not None:
+            encolar_movimiento_cliente(self.cola, cliente, movimiento)
 
     def lotes_de(self, codigo: str) -> list[Lote]:
         """Lotes con saldo del producto, el que vence antes primero."""
@@ -128,14 +199,23 @@ class RegistrarVenta:
             raise ReglaVentaInvalida("Ese lote no tiene saldo para este producto")
         venta.lote_elegido[codigo] = lote_uuid
 
-    def _consumir_lotes(self, codigo: str, cantidad: Decimal, preferido: str | None = None) -> None:
-        """Descuenta de los lotes primero el que vence antes (FEFO) y sincroniza lo cambiado."""
+    def _consumir_lotes(
+        self, codigo: str, cantidad: Decimal, preferido: str | None = None
+    ) -> list[tuple[str, str, Decimal]]:
+        """Descuenta de los lotes primero el que vence antes (FEFO) y sincroniza lo cambiado.
+
+        Devuelve de que lote salio cada parte (codigo, uuid del lote, cantidad): al anular la
+        venta (HU-VTA-11) la existencia vuelve a esos mismos lotes.
+        """
         if self.repositorio_lotes is None:
-            return
+            return []
         lotes = [lote for lote in self.repositorio_lotes.por_producto(codigo) if lote.saldo > 0]
         antes = {lote.uuid: lote.saldo for lote in lotes}
         consumir_fefo(lotes, cantidad, preferido)
+        consumos = []
         for lote in lotes:
             if lote.saldo != antes[lote.uuid]:
                 self.repositorio_lotes.guardar(lote)
                 encolar_lote(self.cola, lote)
+                consumos.append((codigo, lote.uuid, antes[lote.uuid] - lote.saldo))
+        return consumos

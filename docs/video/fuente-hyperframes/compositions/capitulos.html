@@ -1,0 +1,47 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; font-family: "Inter", sans-serif; color: #f3f5f4; }
+    .chip { position: absolute; left: 56px; top: 68px; height: 60px; padding: 0 26px 0 20px; border-radius: 12px; background: rgba(15,16,22,.92); backdrop-filter: blur(22px); border-left: 6px solid #7fbf95; white-space: nowrap; }
+    .ch-n { font-size: 16px; font-weight: 800; letter-spacing: 0.16em; color: #7fbf95; line-height: 60px; margin-right: 16px; }
+    .ch-t { font-size: 28px; font-weight: 700; line-height: 60px; }
+  </style>
+  <div id="root" data-composition-id="capitulos" data-width="1920" data-height="1080">
+    <div id="ch-1" class="clip chip" data-start="0.4" data-duration="2.4" data-track-index="3"><span class="ch-n">PASO 1</span><span class="ch-t">Ingreso</span></div>
+    <div id="ch-2" class="clip chip" data-start="4.9" data-duration="2.4" data-track-index="4"><span class="ch-n">PASO 2</span><span class="ch-t">Abrir la jornada</span></div>
+    <div id="ch-3" class="clip chip" data-start="12.4" data-duration="2.4" data-track-index="5"><span class="ch-n">PASO 3</span><span class="ch-t">Vender</span></div>
+    <div id="ch-4" class="clip chip" data-start="21.4" data-duration="2.4" data-track-index="6"><span class="ch-n">PASO 4</span><span class="ch-t">Cobro mixto</span></div>
+    <div id="ch-5" class="clip chip" data-start="29.4" data-duration="2.4" data-track-index="7"><span class="ch-n">PASO 5</span><span class="ch-t">Descuento a la línea</span></div>
+    <div id="ch-6" class="clip chip" data-start="48.4" data-duration="2.4" data-track-index="8"><span class="ch-n">PASO 6</span><span class="ch-t">Catálogo</span></div>
+    <div id="ch-7" class="clip chip" data-start="72.4" data-duration="2.4" data-track-index="9"><span class="ch-n">PASO 7</span><span class="ch-t">Inventario</span></div>
+    <div id="ch-8" class="clip chip" data-start="89.4" data-duration="2.4" data-track-index="10"><span class="ch-n">PASO 8</span><span class="ch-t">Clientes</span></div>
+    <div id="ch-9" class="clip chip" data-start="97.4" data-duration="2.4" data-track-index="11"><span class="ch-n">PASO 9</span><span class="ch-t">Corte de caja</span></div>
+    <div id="ch-10" class="clip chip" data-start="112.4" data-duration="2.4" data-track-index="12"><span class="ch-n">PASO 10</span><span class="ch-t">Compras</span></div>
+    <div id="ch-11" class="clip chip" data-start="137.4" data-duration="2.4" data-track-index="13"><span class="ch-n">PASO 11</span><span class="ch-t">Reportes</span></div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#ch-1", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 0.4);
+    tl.fromTo("#ch-1", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 2.5);
+    tl.fromTo("#ch-2", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 4.9);
+    tl.fromTo("#ch-2", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 7.0);
+    tl.fromTo("#ch-3", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 12.4);
+    tl.fromTo("#ch-3", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 14.5);
+    tl.fromTo("#ch-4", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 21.4);
+    tl.fromTo("#ch-4", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 23.5);
+    tl.fromTo("#ch-5", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 29.4);
+    tl.fromTo("#ch-5", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 31.5);
+    tl.fromTo("#ch-6", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 48.4);
+    tl.fromTo("#ch-6", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 50.5);
+    tl.fromTo("#ch-7", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 72.4);
+    tl.fromTo("#ch-7", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 74.5);
+    tl.fromTo("#ch-8", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 89.4);
+    tl.fromTo("#ch-8", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 91.5);
+    tl.fromTo("#ch-9", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 97.4);
+    tl.fromTo("#ch-9", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 99.5);
+    tl.fromTo("#ch-10", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 112.4);
+    tl.fromTo("#ch-10", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 114.5);
+    tl.fromTo("#ch-11", { opacity: 0, x: -40, filter: "blur(8px)" }, { opacity: 1, x: 0, filter: "blur(0px)", duration: 0.5, ease: "expo.out" }, 137.4);
+    tl.fromTo("#ch-11", { opacity: 1, x: 0 }, { opacity: 0, x: -20, duration: 0.3, ease: "power2.in", immediateRender: false }, 139.5);
+    window.__timelines["capitulos"] = tl;
+  </script>
+</template>

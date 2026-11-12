@@ -8,7 +8,11 @@ import pytest
 
 pytest.importorskip("tkinter")  # entornos sin Tk (p. ej. algunos Python de Homebrew)
 
-from pos.interfaz.ventana_principal import MODULOS, construir_aplicacion  # noqa: E402
+from pos.interfaz.ventana_principal import (  # noqa: E402
+    MODULOS,
+    construir_aplicacion,
+    tamano_de_ventana,
+)
 
 
 def test_hay_siete_modulos_con_atajo_y_color_del_prototipo():
@@ -17,9 +21,17 @@ def test_hay_siete_modulos_con_atajo_y_color_del_prototipo():
     assert len({m.color for m in MODULOS}) == 7  # cada modulo con su franja
 
 
-def test_solo_operacion_catalogo_inventario_y_reportes_se_declaran_implementados():
+def test_solo_los_modulos_con_pantalla_se_declaran_implementados():
     # Honestidad: los demas modulos son marcadores, no pantallas (ver informe final).
-    assert {m.clave for m in MODULOS if m.implementado} == {"F1", "F2", "F3", "F6"}
+    assert {m.clave for m in MODULOS if m.implementado} == {
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+    }
 
 
 def _hay_pantalla() -> bool:
@@ -36,7 +48,7 @@ def test_la_ventana_unica_monta_venta_y_productos_y_cambia_de_modulo(tmp_path, m
     ventana = construir_aplicacion()  # no sincroniza: solo arma el publicador si hay URL
     try:
         assert type(ventana._marcos["F1"]).__name__ == "VentanaVentas"
-        assert type(ventana._marcos["F2"]).__name__ == "VentanaProductos"
+        assert type(ventana._marcos["F2"]).__name__ == "VentanaCatalogo"
         assert ventana.modulo_activo == "F1"
 
         assert type(ventana._marcos["F3"]).__name__ == "VentanaInventario"
@@ -53,3 +65,30 @@ def test_la_ventana_unica_monta_venta_y_productos_y_cambia_de_modulo(tmp_path, m
         assert ventana.modulo_activo == "F1"
     finally:
         ventana.destroy()
+
+
+def test_la_ventana_cabe_en_el_area_util_de_pantallas_pequenas():
+    # Caso real de la demo: area util 1280x752 (1920x1200 al 150 %) con el diseno de 1320x860.
+    ancho, alto, min_ancho, min_alto = tamano_de_ventana(1280, 752)
+    assert ancho <= 1280 and alto + 40 <= 752  # cabe con su barra de titulo
+    assert (min_ancho, min_alto) == (min(1180, ancho), min(780, alto))
+
+
+def test_en_pantallas_grandes_conserva_el_tamano_de_diseno():
+    assert tamano_de_ventana(1920, 1040) == (1320, 860, 1180, 780)
+
+
+def test_el_ingreso_solo_ofrece_sencillo_y_el_retiro_solo_ofrece_los_suyos():
+    """O-35 (QA 09-11): ingreso = solo sencillo (sin propinas); retiro = deposito y resguardo."""
+    from pos.dominio.caja import TipoMovimientoCaja
+    from pos.interfaz.app_ventas import MOTIVOS_POR_TIPO
+
+    ingreso = MOTIVOS_POR_TIPO[TipoMovimientoCaja.INGRESO]
+    retiro = MOTIVOS_POR_TIPO[TipoMovimientoCaja.RETIRO]
+    assert ingreso == ("Ingreso de sencillo",)
+    assert retiro == (
+        "Retiro planificado para deposito bancario",
+        "Retiro por resguardo durante la jornada",
+    )
+    assert "Ingreso de sencillo" not in retiro  # O-35: un retiro no acepta «Ingreso de sencillo»
+    assert not set(ingreso) & set(retiro)  # cada motivo pertenece a un solo tipo

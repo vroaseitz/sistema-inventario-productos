@@ -1,0 +1,10 @@
+-- Pegar completo en Supabase > SQL Editor y ejecutar (rol postgres). Es idempotente.
+SET search_path TO pos;
+
+ALTER TABLE producto       ADD COLUMN IF NOT EXISTS stock_minimo INTEGER CHECK (stock_minimo >= 0);
+ALTER TABLE categoria      ADD COLUMN IF NOT EXISTS activa BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE venta          ADD COLUMN IF NOT EXISTS nota TEXT;
+ALTER TABLE venta_detalle  ADD COLUMN IF NOT EXISTS motivo_descuento TEXT;
+ALTER TABLE lote           ADD COLUMN IF NOT EXISTS codigo_lote TEXT;
+
+SELECT pos.aplicar_permisos_pos_app();
