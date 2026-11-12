@@ -30,12 +30,12 @@
 
 ## 3. Pruebas y calidad
 
-- ✅ 405 pruebas automáticas pasan (22,7 s).
+- ✅ 459 pruebas automáticas pasan en `develop` (21,8 s), incluidos los 7 flujos E2E de interfaz.
 - ✅ 87 de 90 defectos corregidos: 50 cerrados por QA y 37 esperando su re-prueba.
-- ⚠️ Abiertos: R-05, A-09 y A-10 (Eduardo).
+- ⚠️ R-05, A-09 y A-10: Eduardo subió su corrección el 11-11 (commits `bd14e43` y `221c2eb`); falta la re-prueba de QA y actualizar el registro de defectos.
 
 ## 4. Integración y cierre
 
-- ⚠️ Decidir la integración a `main` (PR #19 o la cadena de PR #7–#18).
+- ⚠️ Todas las ramas están unificadas en `develop`; falta el PR `develop → main`.
 - ⚠️ Confirmar la fecha de presentación (campus: 30-11, 14:30–19:00; antes se anotó 27-11) y el ensayo del 16-11.
 - ⚠️ Cada PR lo debe aprobar el otro desarrollador.

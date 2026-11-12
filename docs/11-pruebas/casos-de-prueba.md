@@ -42,6 +42,8 @@ Las 375 funciones se expanden a 405 casos porque varias pruebas están parametri
 Los 7 archivos de interfaz (E2E) cuentan 1 caso cada uno en `pytest`, pero cada escenario ejecuta muchas
 verificaciones con la ventana real: 285 en total (`anular_venta: 19, catalogo: 40, clientes_compras: 43, sesion: 33, ventas: 150`).
 
+**Rama unificada `develop` (11-11-2026):** con las correcciones de Eduardo integradas, la suite completa dio **459 pasadas, 0 fallidas y 0 omitidas en 21,8 s** (con PostgreSQL en Docker), incluidos los 7 escenarios de interfaz. Las cifras por archivo de este documento corresponden a `feat/diseno-prototipo` antes de esa unión.
+
 **Windows 8.1 (VM, 08-11-2026):** la misma suite pasó allí (337 pasadas, 23 omitidas por no tener
 PostgreSQL en la VM, 0 fallidas) y el `.exe` compilado arrancó (ver CP-W-01).
 
