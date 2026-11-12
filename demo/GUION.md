@@ -1,6 +1,34 @@
 # Guion de la presentación del 13-11 — Fernando
 
-Láminas 4 y 5 + demostración en vivo (4 min). Presentación online, después del primer grupo.
+**Me toca:** lámina 4, lámina 5 y la demostración en vivo. **Tiempo total mío: unos 6 minutos.**
+Presentación online, después del primer grupo.
+
+| Momento | Quién | Tiempo |
+|---|---|---|
+| Láminas 1, 2 y 3 | Victoria | 2:30 |
+| **Lámina 4 · Stack** | **Fernando** | **0:45** |
+| **Lámina 5 · Arquitectura** | **Fernando** | **1:00** |
+| Láminas 6 y 7 | Eduardo | 1:30 |
+| **Demostración en vivo** | **Fernando** | **4:00** |
+
+---
+
+## Hoja de ruta (para tener a la vista mientras presento)
+
+```
+LÁMINA 4   Windows 8.1 manda → Python 3.11 → PyInstaller → SQLite + Supabase
+LÁMINA 5   Capas → vende sin internet → cola sin duplicar → migración pendiente → "le paso a Eduardo"
+
+DEMO  1  F5  factura 45678 · 42500 · 8075 · ALM-GR 5 × 8500 · L2024-001 · 7 dic   → costo 7.900 → 8.500
+      2  F3  Alertas (10 % → $13.491) · merma ALM-GR 0,1 Rotura                    → 4,9 kg
+      3  F1  jornada 2×20.000 + 1×10.000 · ALM-GR 0,350 · dcto 15 % · paga 20.000  → $4.460 · vuelto $15.540
+      4  F1  Juan Pérez · MIX-250 ×2 · Crédito   → $7.980
+         F4  abono 5000 · Estado de cuenta       → a pagar $6.384 · saldo $2.980
+      5  F6  2 ventas $12.440 · margen 29,5 %    F7 Auditoría
+CIERRE     "de punta a punta y sin internet" → Victoria
+```
+
+---
 
 ## Datos de acceso y de la demo
 
@@ -27,147 +55,192 @@ PYTHONPATH=src .venv/bin/python demo/preparar_demo.py        # deja la base como
 PYTHONPATH=src POS_SQLITE_PATH="$PWD/demo/demo.db" SUPABASE_DB_URL= .venv/bin/python -m pos   # abre la app
 ```
 
-## Antes de entrar a la reunión (5 min)
+---
 
-1. Doble clic en `demo/reiniciar_demo.command` → deja la base como nueva
-   (proveedor «Frutos del Sur» y cliente «Juan Pérez» ya creados).
-2. Doble clic en `demo/abrir_demo.command` → abre la app.
-3. Si el cuadro de ingreso se ve negro, hacer un clic dentro. Entrar con `admin` /
-   `admin-demo-2026`.
-4. Dejar la app en **F1 Operación**, con la ventana a la vista y sin otras ventanas encima.
-5. Cerrar WhatsApp y notificaciones. Tener abierto el PPT en la lámina 9 (capturas) por si falla algo.
-6. Al compartir pantalla: compartir **la pantalla completa**, no solo la ventana (los diálogos son
-   ventanas aparte y no se verían).
+## Preparación (10 minutos antes)
+
+- [ ] Doble clic en `demo/reiniciar_demo.command` (deja la base como nueva).
+- [ ] Doble clic en `demo/abrir_demo.command` (abre la app). Si el cuadro de ingreso se ve negro, un clic dentro.
+- [ ] Entrar con `admin` / `admin-demo-2026`. Dejar la app en **F1 Operación**.
+- [ ] Cerrar WhatsApp, correo y notificaciones (modo No molestar).
+- [ ] PPT abierto en la lámina 9 (capturas) y el video de 4 minutos a mano, por si falla algo.
+- [ ] Este guion abierto en el celular o en otra pantalla.
+- [ ] Al compartir: **pantalla completa**, no solo la ventana. Los cuadros de peso, cobro y calendario
+      son ventanas aparte y no se verían.
 
 ---
 
-## Lámina 4 · Stack tecnológico (45 s)
+## Lámina 4 · Stack tecnológico — 45 segundos
 
-> «El stack lo definió una restricción: el computador del local tiene Windows 8.1.
-> Python 3.11 es la última versión que lo soporta. Docker no corre ahí, así que empaquetamos con
-> PyInstaller, con autorización de la docente. La interfaz es Tkinter, que viene con Python.
-> SQLite es la base de trabajo en el local y Supabase es la copia en la nube.
-> Para la calidad usamos pytest, ruff y GitHub Actions.»
+**Idea central:** no elegimos el stack por gusto; lo definió el computador del local.
 
-## Lámina 5 · Arquitectura e integración (1 min)
+> «Gracias, Victoria. El stack no lo elegimos por gusto: lo definió una restricción.
+> El computador del local tiene **Windows 8.1**, que ya no tiene soporte, y el sistema tiene que
+> funcionar ahí.
+>
+> Por eso usamos **Python 3.11**, que es la última versión compatible con ese Windows, y **Tkinter**
+> para la interfaz, que viene incluido.
+>
+> **Docker no corre** en ese equipo, así que entregamos un ejecutable hecho con **PyInstaller**, con
+> autorización de la docente.
+>
+> Los datos se guardan en **SQLite** dentro del computador, y **Supabase** es la copia en la nube.
+> Y para la calidad: pytest, ruff y GitHub Actions.»
 
-> «La arquitectura es por capas: interfaz, casos de uso y dominio. El dominio tiene las reglas del
-> negocio y no depende ni de la pantalla ni de la base de datos.
-> La aplicación trabaja sobre SQLite local, así que si se cae internet se sigue vendiendo.
-> Cada operación entra a una cola con un identificador único y, cuando vuelve la conexión, se publica
-> en Supabase. Si un envío se corta y se reintenta, no se duplica.
-> La migración desde el sistema antiguo es un proceso aparte que todavía no implementamos.
-> Le paso a Eduardo.»
+## Lámina 5 · Arquitectura e integración — 1 minuto
 
-*(Eduardo: láminas 6 y 7. Después vuelve a ti para la demo.)*
+**Idea central:** el local nunca deja de vender, aunque se caiga internet.
+
+> «La aplicación está armada en **tres capas**: la interfaz, los casos de uso y el dominio.
+> El dominio tiene las reglas del negocio —cómo se calcula un margen, cuándo se rechaza un crédito— y
+> no depende ni de la pantalla ni de la base de datos. Eso nos permite probarlo por separado.
+>
+> Lo más importante para el local: la aplicación trabaja sobre la base **local**. Si se cae internet,
+> **se sigue vendiendo** igual.
+>
+> Cada operación queda en una **cola** con un identificador único. Cuando vuelve la conexión, la cola
+> se publica en Supabase, y si un envío se corta a la mitad y se repite, **no se duplica**.
+>
+> Lo que todavía no implementamos es la **migración** de los datos del sistema antiguo; es un proceso
+> aparte.
+>
+> Le paso a Eduardo, que les muestra los resultados de las pruebas.»
+
+*(Eduardo presenta las láminas 6 y 7 y me devuelve la palabra. Mientras tanto: app al frente, en F1.)*
 
 ---
 
-## Demostración en vivo (4 min)
+## Demostración en vivo — 4 minutos
 
-**Frase de entrada:** «Les muestro el sistema funcionando, con una base de prueba y datos ficticios.»
+**Regla de oro:** hablar mientras escribo. Si me quedo en silencio tecleando, el tiempo se siente
+el doble. Y decir en voz alta **el número** que aparece en pantalla.
 
-### Paso 1 · F5 Compras (45 s)
+### Entrada (10 s)
 
-| # | Qué hago | Qué escribo |
-|---|---|---|
-| 1 | Clic en **F5 Compras** → pestaña **Registrar factura** | |
-| 2 | Proveedor | elegir `Frutos del Sur` |
-| 3 | Número de documento | `45678` |
-| 4 | Monto neto | `42500` |
-| 5 | Impuestos | `8075` → Total **$50.575** |
-| 6 | Código de producto | `ALM-GR` |
-| 7 | Cantidad | `5` |
-| 8 | Costo unitario neto | `8500` |
-| 9 | Código de lote | `L2024-001` |
-| 10 | Botón **▾** de «Vence» → flecha **›** (diciembre) → día **7** | comprobar que quedó `2026-12-07` |
-| 11 | **Agregar línea** | Diferencia con el neto **$0** · costo anterior **$7.900** |
-| 12 | **Confirmar factura** | mensaje «Factura 45678 confirmada» |
+> «Les voy a mostrar el sistema funcionando, con una base de prueba y datos ficticios. Vamos a seguir
+> un producto desde que **llega** al local hasta que aparece en un **reporte**.»
 
-> «Registro la factura de un proveedor. Al confirmarla entran 5 kilos al stock, se crea el lote con su
-> fecha de vencimiento y el costo de las almendras sube de $7.900 a $8.500.»
+### 1 · Llega mercadería — F5 Compras (45 s)
 
-### Paso 2 · F3 Inventario (35 s)
+| Hago | Escribo |
+|---|---|
+| **F5 Compras** → pestaña **Registrar factura** | |
+| Proveedor | `Frutos del Sur` |
+| Número de documento · Monto neto · Impuestos | `45678` · `42500` · `8075` |
+| Código · Cantidad · Costo unitario neto | `ALM-GR` · `5` · `8500` |
+| Código de lote | `L2024-001` |
+| Botón **▾** de «Vence» → **›** → día **7** | debe quedar `2026-12-07` |
+| **Agregar línea** → **Confirmar factura** | «Factura 45678 confirmada» |
 
-| # | Qué hago | Qué escribo |
-|---|---|---|
-| 1 | Clic en **F3 Inventario** → pestaña **Alertas** | se ve: 24 días · 10 % · precio sugerido **$13.491** |
-| 2 | Botón **Ajustes y mermas** | |
-| 3 | Código de producto | `ALM-GR` |
-| 4 | Cantidad a dar de baja | `0,1` |
-| 5 | Motivo | `Rotura` → abajo dice «Resultante: 4.9» |
-| 6 | **Registrar merma** | la alerta pasa a **4,9 kg** |
+> *(mientras escribo)* «Llega una factura del proveedor: 5 kilos de almendras a $8.500 el kilo. Como es
+> un producto perecible, el sistema **exige** la fecha de vencimiento y el lote.»
+>
+> *(al agregar la línea)* «Fíjense aquí: el costo anterior era **$7.900**.»
+>
+> *(al confirmar)* «Con un clic pasaron tres cosas: entraron 5 kilos al stock, se creó el lote y el
+> costo se actualizó a **$8.500**. En el sistema antiguo, esto no existía.»
 
-> «El sistema avisa que este lote vence pronto y sugiere un 10 % de descuento. Es una sugerencia: no
-> cambia el precio solo. Registro una merma de 100 gramos, con motivo obligatorio, y el stock baja a
-> 4,9 kilos.»
+### 2 · El sistema cuida lo que vence — F3 Inventario (35 s)
 
-### Paso 3 · F1 Venta en efectivo (70 s)
+| Hago | Escribo |
+|---|---|
+| **F3 Inventario** → pestaña **Alertas** | se ve 10 % y **$13.491** |
+| **Ajustes y mermas** | `ALM-GR` · `0,1` · motivo `Rotura` |
+| **Registrar merma** | la alerta pasa a **4,9 kg** |
 
-| # | Qué hago | Qué escribo |
-|---|---|---|
-| 1 | **F1 Operación** → pestaña **Caja y corte** → **Abrir jornada** | $20.000: `2` · $10.000: `1` → Total **$50.000** → **Confirmar** |
-| 2 | Pestaña **Venta** → Código del producto | `ALM-GR` + Enter |
-| 3 | Peso (kg) | `0,350` + Enter → importe **$5.247** |
-| 4 | Clic en la línea → **Descuento a la línea** | Valor `15` · Motivo `Cliente frecuente` → importe final **$4.460** → **Aplicar descuento** |
-| 5 | **F12 Cobrar** → en $20.000 | `1` → «Pagó con $20.000 · su cambio **$15.540**» |
-| 6 | **Agregar pago** → **Cobrar solo registrando la venta** | «Venta #1 registrada. Cambio a entregar: $15.540» → **OK** |
+> «El lote que acabo de ingresar ya aparece en **alertas**: vence en menos de un mes y el sistema
+> sugiere venderlo con **10 % de descuento**, a $13.491. Es una sugerencia: la decisión es de la dueña.
+>
+> Y si se rompe una bolsa, se registra la **merma** con su motivo, que es obligatorio. El stock baja a
+> **4,9 kilos** y queda registrado quién lo hizo.»
 
-> «Abro la jornada contando el fondo: $50.000. Vendo almendras a granel: el sistema pide el peso y
-> calcula $5.247. Aplico 15 % de descuento con su motivo y queda en $4.460. La clienta paga con
-> $20.000 y el sistema indica el vuelto: $15.540.»
+### 3 · Una venta en efectivo — F1 Operación (70 s)
 
-### Paso 4 · Venta a crédito y cuenta del cliente (60 s)
+| Hago | Escribo |
+|---|---|
+| **F1** → **Caja y corte** → **Abrir jornada** | $20.000: `2` · $10.000: `1` → **Confirmar** |
+| Pestaña **Venta** → Código del producto | `ALM-GR` + Enter |
+| Peso (kg) | `0,350` + Enter → **$5.247** |
+| Clic en la línea → **Descuento a la línea** | `15` · `Cliente frecuente` → **Aplicar descuento** |
+| **F12 Cobrar** → casilla de $20.000 | `1` |
+| **Agregar pago** → **Cobrar solo registrando la venta** | **OK** |
 
-| # | Qué hago | Qué escribo |
-|---|---|---|
-| 1 | **Cliente de la venta** | elegir `Juan Pérez` |
-| 2 | Código del producto | `MIX-250` + Enter |
-| 3 | Clic en la línea → botón **+** | cantidad **2** → **$7.980** |
-| 4 | **F12 Cobrar** → **Crédito cliente** | se ve «cupo disponible $20.000» |
-| 5 | **Agregar pago** → **Cobrar solo registrando la venta** | «Venta #2 registrada» → **OK** |
-| 6 | **F4 Clientes** | Juan: deuda **$7.980** · disponible **$12.020** |
-| 7 | Clic en Juan → **Registrar abono** | Monto `5000` → saldo resultante **$2.980** → **Registrar abono** |
-| 8 | Pestaña **Estado de cuenta** → Cliente | elegir `Juan Pérez` |
+> *(al abrir la jornada)* «Antes de vender, la cajera abre la jornada **contando los billetes**: aquí,
+> $50.000 de fondo. Así el cierre de caja cuadra, que era uno de los problemas del sistema antiguo.»
+>
+> *(al pesar)* «Vendo almendras a granel: el sistema pide el **peso** y calcula solo: 350 gramos,
+> **$5.247**.»
+>
+> *(al descontar)* «Le hago 15 % de descuento. El motivo es **obligatorio**, y queda en auditoría.
+> Total: **$4.460**.»
+>
+> *(al cobrar)* «Paga con un billete de $20.000 y el sistema le dice a la cajera el vuelto:
+> **$15.540**.»
 
-> «La segunda venta va a la cuenta de un cliente con crédito: $7.980, y el sistema controla su cupo.
-> Después registro un abono de $5.000. El estado de cuenta del mes aplica el 20 % de descuento del
-> crédito familiar: total a pagar $6.384 y saldo final $2.980.»
+### 4 · Una venta a crédito y la cuenta del cliente — F1 y F4 (60 s)
 
-### Paso 5 · F6 Reportes y F7 Auditoría (30 s)
+| Hago | Escribo |
+|---|---|
+| **Cliente de la venta** | `Juan Pérez` |
+| Código del producto | `MIX-250` + Enter |
+| Clic en la línea → botón **+** | cantidad **2** → **$7.980** |
+| **F12 Cobrar** → **Crédito cliente** | se ve «cupo disponible $20.000» |
+| **Agregar pago** → **Cobrar solo registrando la venta** | **OK** |
+| **F4 Clientes** → clic en Juan → **Registrar abono** | `5000` → **Registrar abono** |
+| Pestaña **Estado de cuenta** → Cliente | `Juan Pérez` |
 
-| # | Qué hago | Qué se ve |
-|---|---|---|
-| 1 | **F6 Reportes** (pestaña Ventas) | 2 ventas · total **$12.440** · ticket promedio $6.220 |
-| 2 | Pestaña **Rentabilidad** | ganancia **$3.079** sobre $10.454 netos · margen **29,5 %** |
-| 3 | **F7 Administración** → pestaña **Auditoría** | descuento, merma, factura y proveedor, con antes y después |
+> *(al cobrar)* «Esta venta va a la **cuenta de un cliente**. El sistema muestra su cupo disponible y, si
+> la venta lo supera, **no la deja pasar**. Son $7.980.»
+>
+> *(en F4)* «En Clientes ya aparece su deuda. Registro un **abono** de $5.000.»
+>
+> *(en el estado de cuenta)* «Y este es su estado de cuenta del mes: el sistema aplica solo el **20 % de
+> descuento** del crédito familiar. Total a pagar **$6.384**, saldo final **$2.980**. Antes, esto se
+> llevaba en un cuaderno.»
 
-> «En reportes quedan las dos ventas, $12.440, y la rentabilidad real: 29,5 % de margen, calculada
-> con el costo que tenía el producto al venderse. Y en auditoría queda cada cambio sensible, con quién
-> lo hizo y el valor de antes y de después. Es de solo lectura.»
+### 5 · Todo queda registrado — F6 y F7 (30 s)
 
-**Cierre:** «Eso es el sistema de punta a punta, y todo funcionó sin internet. Le devuelvo la palabra a Victoria.»
+| Hago | Se ve |
+|---|---|
+| **F6 Reportes** | 2 ventas · **$12.440** |
+| Pestaña **Rentabilidad** | ganancia $3.079 · margen **29,5 %** |
+| **F7 Administración** → **Auditoría** | descuento, merma, factura, proveedor |
+
+> «Las dos ventas ya están en el reporte: **$12.440**. Y aquí está lo que más le importaba a las dueñas:
+> la **rentabilidad real**, 29,5 % de margen, calculada con el costo que tenía el producto cuando se
+> vendió.
+>
+> Por último, la **auditoría**: cada descuento, cada merma y cada factura, con quién lo hizo y el valor
+> de antes y de después. No se puede editar ni borrar.»
+
+### Cierre (10 s)
+
+> «Eso fue el sistema de punta a punta: compra, inventario, venta, crédito y reportes. Y todo lo que
+> vieron funcionó **sin conexión a internet**. Le devuelvo la palabra a Victoria.»
 
 ---
 
 ## Si algo sale mal
 
-| Problema | Qué hacer |
+| Problema | Qué hago | Qué digo |
+|---|---|---|
+| Un botón o un día del calendario no responde | Clic de nuevo | *(nada, sigo hablando)* |
+| Aviso «falta la fecha de vencimiento» | OK → elegir el día otra vez → Agregar línea | «El sistema no deja ingresar un perecible sin su vencimiento» |
+| Un cuadro se ve negro | Un clic dentro | *(nada)* |
+| El Mix queda en 1 | Clic en la línea → **+** | «Subo la cantidad a dos» |
+| Me equivoco en un número | Seguir con el número que salió | «Los montos cambian, pero el flujo es el mismo» |
+| Voy atrasado (más de 2:30 al terminar el paso 3) | Saltar el abono: ir directo a F6 | «El abono y el estado de cuenta están en el video» |
+| La app se cierra | Lámina 9 (capturas) o el video | «Les muestro el mismo recorrido grabado» |
+
+## Preguntas probables y respuestas cortas
+
+| Pregunta | Respuesta |
 |---|---|
-| Un botón o un día del calendario no responde | Hacer clic de nuevo (el primer clic a veces solo activa la ventana) |
-| Aviso «falta la fecha de vencimiento» | OK → elegir el día en el calendario otra vez → Agregar línea |
-| Un diálogo se ve negro | Un clic dentro de él |
-| El Mix queda en 1 | Seleccionar la línea y apretar **+** |
-| Se acaba el tiempo | Saltar el paso 2 (mermas) y decir: «la alerta y la merma están en el video» |
-| La app se cierra | Mostrar la lámina 9 (capturas) o el video de 4 minutos |
-| Preguntan por el texto naranja del descuento | «Es una nota interna: el descuento por línea está pendiente de validación final con la dueña» |
-
-## Preguntas probables
-
-- **¿Por qué no Docker?** El PC del local tiene Windows 8.1 y Docker no corre ahí; por eso un
-  ejecutable con PyInstaller (ADR 0003, autorizado por la docente).
-- **¿Qué pasa sin internet?** Se vende igual sobre SQLite; la cola guarda los pendientes y los publica
-  al volver la conexión, sin duplicar.
-- **¿Qué falta?** La migración de datos desde el sistema antiguo y probar la impresora real.
-- **¿Cómo se prueba?** 459 pruebas automáticas, 7 de ellas con la aplicación real de punta a punta, más
-  el QA manual de Victoria (94 hallazgos registrados, ninguno abierto).
+| ¿Por qué no usaron Docker? | El PC del local tiene Windows 8.1 y Docker no corre ahí. Entregamos un ejecutable con PyInstaller, autorizado por la docente. |
+| ¿Por qué Tkinter y no una web? | Tiene que funcionar sin internet y en un equipo antiguo. Tkinter viene con Python y no necesita navegador ni servidor. |
+| ¿Qué pasa si se corta internet? | Se vende igual. Las operaciones quedan en una cola local y se envían solas al volver la conexión, sin duplicarse. |
+| ¿Y si se corta la luz a mitad de una venta? | La venta se guarda en una sola transacción: o queda completa o no queda. |
+| ¿Cómo aseguran la calidad? | 459 pruebas automáticas, 7 de ellas con la aplicación real de punta a punta, más el QA manual de Victoria: 94 hallazgos, ninguno abierto. |
+| ¿Qué falta? | Migrar los datos del sistema antiguo y probar la impresora y el cajón reales en el local. |
+| ¿Qué es el texto naranja del descuento? | Una nota interna: el descuento por línea está pendiente de validación final con la dueña. |
+| ¿Quién puede anular una venta? | Solo la administradora, con motivo, y solo en la jornada abierta. La venta no se borra: queda marcada. |
