@@ -10,7 +10,7 @@
 | Casos de prueba | ✅ | `docs/11-pruebas/casos-de-prueba.md` |
 | Registro de defectos por ciclos | ✅ | `docs/11-pruebas/registro-de-defectos.md` |
 | Manual de implementación | ✅ | `docs/12-despliegue/manual-de-implementacion.md` |
-| Manual de usuario final | ⚠️ Pendiente | por escribir, con capturas |
+| Manual de usuario final | ✅ | `docs/manual-usuario/manual-de-usuario.md` (sin capturas de Catálogo, cupo ni anulación) |
 | Video demostrativo (≤ 5 min) | ✅ | `docs/video/e2e-hyperframes/` (4:09; la licencia de la música no está confirmada, entregar la versión sin música) |
 | Guía E2E de la demo | ✅ | `docs/11-pruebas/guia-e2e-demo.md` |
 | Presentación final (PPT, 13 contenidos, oral en inglés) | ⚠️ Pendiente | falta el formato del campus |
