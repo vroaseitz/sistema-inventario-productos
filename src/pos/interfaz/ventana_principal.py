@@ -582,6 +582,10 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 repo_facturas,
                 repo_productos,
                 GestionarProveedores(repo_proveedores, repo_facturas, auditor, cola=cola),
+                # CO-01: «Crear producto» desde la factura abre la ficha de F2 sin salir de F5.
+                crear_producto=lambda codigo, al_guardar, p=padre: (
+                    p.winfo_toplevel()._marcos["F2"].crear_producto(codigo, al_guardar)
+                ),
             ),
             "F6": lambda padre: VentanaReportes(
                 padre,

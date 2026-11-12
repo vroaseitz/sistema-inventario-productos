@@ -7,8 +7,11 @@ Cubre el hallazgo:
 
 from __future__ import annotations
 
+import sqlite3
+
 import pytest
 
+from pos.dominio.categorias import CATEGORIAS_VALIDADAS
 from pos.dominio.productos import Producto
 from pos.dominio.value_objects import Costo, Dinero
 from pos.infraestructura.sqlite.conexion import crear_conexion
@@ -52,6 +55,30 @@ def conexion_memoria():
 @pytest.fixture
 def repositorio(conexion_memoria):
     return RepositorioProductosSQLite(conexion_memoria)
+
+
+class TestCategoriasDesdeBD:
+    def test_esquema_crea_tabla_categorias_con_seed(self, conexion_memoria):
+        """La tabla categorias viene sembrada con las 20 validadas por la PO (CA-02)."""
+        filas = conexion_memoria.execute("SELECT nombre FROM categorias ORDER BY id").fetchall()
+        assert [f["nombre"] for f in filas] == list(CATEGORIAS_VALIDADAS)
+
+    def test_listar_categorias_desde_bd(self, repositorio):
+        # La PO podra agregar una categoria en BD y la GUI la verá sin cambiar codigo.
+        repositorio._con.execute("INSERT INTO categorias (nombre) VALUES ('panaderia')")
+
+        nombres = [c.nombre for c in repositorio.listar_categorias()]
+
+        assert nombres == [*CATEGORIAS_VALIDADAS, "panaderia"]
+
+    def test_crear_categoria(self, repositorio):
+        repositorio.crear_categoria("panaderia")
+
+        nombres = [c.nombre for c in repositorio.listar_categorias()]
+        assert "panaderia" in nombres
+        # Idempotente: crear dos veces la misma no duplica.
+        with pytest.raises(sqlite3.IntegrityError):
+            repositorio.crear_categoria("panaderia")
 
 
 class TestGuardadoCompletoProducto:

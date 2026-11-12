@@ -135,3 +135,28 @@ def test_lineas_invalidas():
     with pytest.raises(ReglaCompraInvalida):
         LineaFactura("CAS", 1, 0)
     assert LineaFactura("CAS", Decimal("0.350"), 18000).subtotal == 6300  # granel
+
+
+# --- QA 10-11 CO-07: un producto por unidad entra en cantidades enteras ----------------------
+
+
+def test_co07_producto_por_unidad_rechaza_cantidad_con_decimales(app):
+    factura = _factura([LineaFactura("CAS", Decimal("2.5"), 9000)])
+    with pytest.raises(ReglaCompraInvalida, match="cantidad debe ser un número entero"):
+        app.caso.confirmar(factura)
+    assert app.existencias.obtener("CAS") is None or app.existencias.obtener("CAS").cantidad == 0
+
+
+def test_co07_producto_por_unidad_acepta_cantidad_entera(app):
+    app.caso.confirmar(_factura([LineaFactura("CAS", Decimal("3"), 9000)]))
+    assert app.existencias.obtener("CAS").cantidad == 3
+
+
+def test_co07_granel_sigue_aceptando_decimales(app):
+    from pos.dominio.productos import UnidadVenta
+
+    app.productos.guardar(
+        Producto("AVE", "Avena granel", Dinero(3000), UnidadVenta.GRANEL, categoria_id=1)
+    )
+    app.caso.confirmar(_factura([LineaFactura("AVE", Decimal("5.5"), 1500)]))
+    assert app.existencias.obtener("AVE").cantidad == Decimal("5.5")

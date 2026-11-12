@@ -18,6 +18,7 @@ import pytest
 
 pytest.importorskip("tkinter", reason="Tkinter no disponible en este entorno")
 
+from pos.dominio.categorias import Categoria
 from pos.interfaz.app_tkinter import VentanaProductos, _normalizar
 
 
@@ -123,6 +124,26 @@ class TestColumnaCategoria:
         assert not isinstance(valores[4], int)
 
 
+class TestComboboxCategoriasDinamicas:
+    """C-02/C-04: el combobox de categorias se alimenta de la BD, no de una tupla fijada."""
+
+    def test_combo_se_llena_desde_bd(self, vista):
+        # La GUI pide listar_categorias() al repositorio (contrato nuevo).
+        vista._repo.listar_categorias.return_value = [
+            Categoria(id=1, nombre="frutas"),
+            Categoria(id=2, nombre="verduras"),
+            Categoria(id=9, nombre="panaderia"),
+        ]
+
+        # Reproducimos la carga de categorias tal como la hace _construir.
+        from pos.interfaz.app_tkinter import _cargar_nombres_categorias
+
+        nombres = _cargar_nombres_categorias(vista._repo)
+
+        assert nombres == ["frutas", "verduras", "panaderia"]
+        vista._repo.listar_categorias.assert_called_once()
+
+
 # --- QA C-08a/b: busqueda normalizada y disparada con Enter --------------------
 
 
@@ -147,6 +168,24 @@ class TestBusqueda:
         vista._tabla.insert.assert_called_once()
         valores = vista._tabla.insert.call_args.kwargs["values"]
         assert valores[1] == "Café de grano"
+
+    def test_busqueda_prioriza_los_que_empiezan_con_lo_escrito(self, vista):
+        """QA CA-15: «te» muestra «Té verde» antes que «Aceite de coco» y «Pan integral»."""
+        from pos.dominio.productos import Producto
+        from pos.dominio.value_objects import Dinero
+
+        vista._repo.listar.return_value = [
+            Producto(codigo="A-1", nombre="Aceite de coco", precio=Dinero(5000), categoria_id=1),
+            Producto(codigo="P-1", nombre="Pan integral", precio=Dinero(2000), categoria_id=1),
+            Producto(codigo="T-1", nombre="Té verde", precio=Dinero(1500), categoria_id=1),
+        ]
+        vista._tabla.get_children.return_value = []
+        vista._entrada_busqueda.get.return_value = "te"
+
+        vista._ejecutar_busqueda()
+
+        nombres = [c.kwargs["values"][1] for c in vista._tabla.insert.call_args_list]
+        assert nombres == ["Té verde", "Aceite de coco", "Pan integral"]
 
     def test_busqueda_por_codigo_exacto(self, vista):
         from pos.dominio.productos import Producto

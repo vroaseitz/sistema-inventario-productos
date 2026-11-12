@@ -10,6 +10,7 @@ from __future__ import annotations
 import contextlib
 import re
 import tkinter as tk
+import unicodedata
 from tkinter import ttk
 
 TINTA = "#1b2220"
@@ -162,10 +163,12 @@ def aplicar_tema(raiz: tk.Misc) -> ttk.Style:
         borderwidth=1,
         relief="solid",
     )
+    # La seleccion solo cambia el fondo: el color del texto lo deja a cada fila, asi una fila
+    # «Inactivo» (roja) o desactivada (gris) conserva su color aunque este seleccionada.
     estilo.map(
         "Treeview",
         background=[("selected", MODULOS_COLOR["F1"][1])],
-        foreground=[("selected", TINTA)],
+        foreground=[],
     )
     estilo.configure(
         "Treeview.Heading",
@@ -177,6 +180,8 @@ def aplicar_tema(raiz: tk.Misc) -> ttk.Style:
         bordercolor=LINEA,
     )
     estilo.map("Treeview.Heading", background=[("active", LINEA_2)])
+    instalar_filas_alternadas()  # A-07
+    instalar_columnas_centradas()  # A-09
 
     # Sub-pestanas como «pildoras» (Venta · Caja y corte · Resumen del dia).
     estilo.configure("TNotebook", background=PAPEL, borderwidth=0, tabmargins=(0, 6, 0, 0))
@@ -198,6 +203,82 @@ def aplicar_tema(raiz: tk.Misc) -> ttk.Style:
     return estilo
 
 
+FILA_ALTERNA = "#f1f4f2"  # A-07: gris muy claro para las filas pares
+_ETIQUETA_ALTERNA = "fila_alterna"
+
+
+def etiquetas_de_fila(posicion: int, etiquetas: tuple, con_fondo: set[str]) -> tuple:
+    """A-07: agrega la franja a las filas impares (1, 3, 5...), salvo que la fila ya tenga un
+    fondo propio (p. ej. «revisar» o «sin costo»): ese aviso no se tapa."""
+    if posicion % 2 == 0 or any(t in con_fondo for t in etiquetas):
+        return etiquetas
+    return (*etiquetas, _ETIQUETA_ALTERNA)
+
+
+def _rayar_fila(tabla: ttk.Treeview, item: str) -> None:
+    tabla.tag_configure(_ETIQUETA_ALTERNA, background=FILA_ALTERNA)
+    etiquetas = tuple(tabla.item(item, "tags") or ())
+    con_fondo = {
+        t for t in etiquetas if t != _ETIQUETA_ALTERNA and tabla.tag_configure(t, "background")
+    }
+    nuevas = etiquetas_de_fila(tabla.index(item), etiquetas, con_fondo)
+    if nuevas != etiquetas:
+        tabla.item(item, tags=nuevas)
+
+
+COLUMNAS_A_LA_IZQUIERDA = frozenset({"producto", "nombre", "codigo", "categoria", "funcion"})
+
+
+def ancla_de_columna(columna: str) -> str:
+    """A-09: los datos van centrados, salvo nombre del producto, codigo, categoria y la
+    «Funcion» de F7 › Usuarios, que se leen mejor a la izquierda."""
+    # Algunas tablas usan el titulo como id («Categoría»): se compara sin tildes ni mayusculas.
+    clave = "".join(
+        c for c in unicodedata.normalize("NFKD", columna.lower()) if not unicodedata.combining(c)
+    )
+    return "w" if clave in COLUMNAS_A_LA_IZQUIERDA else "center"
+
+
+def instalar_columnas_centradas() -> None:
+    """A-09: aplica `ancla_de_columna` a TODAS las tablas de la app, sin tocar cada pantalla.
+
+    Envuelve `ttk.Treeview.column` una sola vez: cada vez que una pantalla configura una
+    columna (ancho, alineacion...), la alineacion la decide `ancla_de_columna`. Las consultas
+    (`column("x")` o `column("x", "width")`) no se tocan.
+    """
+    if getattr(ttk.Treeview, "_columnas_centradas", False):
+        return
+    original = ttk.Treeview.column
+
+    def column(self: ttk.Treeview, column, option=None, **kw):
+        if option is None and kw and column != "#0":
+            kw["anchor"] = ancla_de_columna(str(column))
+        return original(self, column, option, **kw)
+
+    ttk.Treeview.column = column  # type: ignore[method-assign]
+    ttk.Treeview._columnas_centradas = True  # type: ignore[attr-defined]
+
+
+def instalar_filas_alternadas() -> None:
+    """A-07: filas alternadas en TODAS las tablas de la app, sin tocar cada pantalla.
+
+    Envuelve `ttk.Treeview.insert` una sola vez: cada fila nueva sale con franja si le toca.
+    ttk no dibuja lineas de cuadricula, por eso se usan franjas (como en el prototipo v3).
+    """
+    if getattr(ttk.Treeview, "_filas_alternadas", False):
+        return
+    original = ttk.Treeview.insert
+
+    def insert(self: ttk.Treeview, parent: str, index: int | str, iid=None, **kw):
+        item = original(self, parent, index, iid, **kw)
+        with contextlib.suppress(tk.TclError):
+            _rayar_fila(self, item)
+        return item
+
+    ttk.Treeview.insert = insert  # type: ignore[method-assign]
+    ttk.Treeview._filas_alternadas = True  # type: ignore[attr-defined]
+
+
 def colorear_modulo(estilo: ttk.Style, clave: str) -> None:
     """Pinta lo que cambia con el modulo: pildora activa, seleccion de tabla y boton primario."""
     color, claro = MODULOS_COLOR[clave]
@@ -207,7 +288,7 @@ def colorear_modulo(estilo: ttk.Style, clave: str) -> None:
         foreground=[("selected", "#ffffff")],
         bordercolor=[("selected", color)],
     )
-    estilo.map("Treeview", background=[("selected", claro)], foreground=[("selected", TINTA)])
+    estilo.map("Treeview", background=[("selected", claro)], foreground=[])  # ver aplicar_tema
     estilo.configure(
         "Primario.TButton",
         background=color,

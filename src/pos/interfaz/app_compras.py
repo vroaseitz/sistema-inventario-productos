@@ -9,18 +9,23 @@ from __future__ import annotations
 
 import re
 import tkinter as tk
+from collections.abc import Callable
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.gestionar_proveedores import GestionarProveedores
-from pos.aplicacion.casos_uso.registrar_factura_compra import RegistrarFacturaCompra
+from pos.aplicacion.casos_uso.registrar_factura_compra import (
+    MENSAJE_CANTIDAD_ENTERA,
+    RegistrarFacturaCompra,
+)
 from pos.aplicacion.puertos import RepositorioFacturasCompra, RepositorioProductos
 from pos.dominio.compras import FacturaCompra, LineaFactura, iva_de
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_cantidad, formatear_clp, parsear_monto
 from pos.dominio.productos import UnidadVenta
 from pos.interfaz import tema
+from pos.interfaz.avisos import costo_bajo_el_precio_o_confirmado
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.dialogo_formulario import pedir_formulario
 
@@ -33,9 +38,12 @@ class VentanaCompras(ttk.Frame):
         repo_facturas: RepositorioFacturasCompra,
         repo_productos: RepositorioProductos,
         gestion_proveedores: GestionarProveedores | None = None,
+        crear_producto: Callable[[str, Callable[[str], None]], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self._gestion_proveedores = gestion_proveedores
+        # CO-01: abre la ficha de F2 con el codigo escrito; al guardarla se vuelve a la linea.
+        self._crear_producto = crear_producto
         self._registrar = registrar
         self._facturas = repo_facturas
         self._productos = repo_productos
@@ -100,7 +108,7 @@ class VentanaCompras(ttk.Frame):
             row=1, column=1, padx=4, pady=(2, 0), sticky="w"
         )
         ttk.Label(datos, text="Fecha").grid(row=0, column=2, sticky="w", padx=4)
-        self._fecha = CampoFecha(datos, date.today(), width=14)
+        self._fecha = CampoFecha(datos, date.today(), width=14, modulo="F5")
         self._fecha.grid(row=1, column=2, padx=4, pady=(2, 0), sticky="w")
         ttk.Label(datos, text="Monto neto").grid(row=0, column=3, sticky="w", padx=4)
         entrada_neto = ttk.Entry(datos, textvariable=self._neto, width=14)
@@ -119,7 +127,7 @@ class VentanaCompras(ttk.Frame):
             self._tab_registrar, text="Detalle de productos adquiridos", padding=10
         )
         linea.pack(fill="x", pady=(8, 0))
-        self._l_vence = CampoFecha(linea, width=14)
+        self._l_vence = CampoFecha(linea, width=14, modulo="F5")
         campos = (
             ("Código de producto", ttk.Entry(linea, textvariable=self._l_codigo, width=18)),
             ("Cantidad", ttk.Entry(linea, textvariable=self._l_cantidad, width=10)),
@@ -135,6 +143,8 @@ class VentanaCompras(ttk.Frame):
             widget.grid(row=1, column=columna, padx=4, pady=(2, 0), sticky="w")
             if isinstance(widget, ttk.Entry):
                 widget.bind("<Return>", lambda _e: self._agregar_linea())
+            if titulo == "Cantidad":
+                self._entrada_cantidad = widget
         self._l_codigo.trace_add("write", self._actualizar_unidad)  # CO-05
         ttk.Button(linea, text="Agregar línea", command=self._agregar_linea).grid(
             row=1, column=len(campos), padx=8
@@ -255,7 +265,7 @@ class VentanaCompras(ttk.Frame):
             return
         producto = self._productos.obtener_por_codigo(codigo)
         if producto is None:
-            messagebox.showerror("Compras", f"No existe un producto con código {codigo}")
+            self._ofrecer_crear_producto(codigo)
             return
         texto = self._l_cantidad.get().strip().replace(",", ".")
         if not texto:
@@ -268,10 +278,15 @@ class VentanaCompras(ttk.Frame):
         except InvalidOperation:
             messagebox.showerror("Compras", "La cantidad debe ser un número, por ejemplo 10")
             return
+        if producto.unidad_venta is UnidadVenta.UNIDAD and cantidad % 1 != 0:
+            messagebox.showerror("Compras", MENSAJE_CANTIDAD_ENTERA)  # CO-07
+            return
         costo = self._leer_monto(self._l_costo.get())
         if costo is None:
             messagebox.showerror("Compras", "Falta el costo unitario neto (solo números)")
             return
+        if not costo_bajo_el_precio_o_confirmado(producto.nombre, costo, producto.precio.monto):
+            return  # CO-08: la usuaria prefirio corregir el costo
         vence_texto = self._l_vence.get().strip()
         try:
             vence = datetime.strptime(vence_texto, "%Y-%m-%d").date() if vence_texto else None
@@ -308,6 +323,27 @@ class VentanaCompras(ttk.Frame):
         self._l_lote.set(linea.codigo_lote)
         self._refrescar_lineas()
         self._mensaje.set("Corrige la línea y vuelve a agregarla.")
+
+    def _ofrecer_crear_producto(self, codigo: str) -> None:
+        """CO-01: un producto nuevo suele llegar con su factura: se ofrece crearlo aqui mismo."""
+        if self._crear_producto is None:
+            messagebox.showerror("Compras", f"No existe un producto con código {codigo}")
+            return
+        if messagebox.askyesno(
+            "Producto nuevo",
+            f"No existe un producto con código {codigo}.\n\n"
+            "¿Crearlo ahora? Se abre la ficha con el código ya escrito y, al guardarla, "
+            "vuelves a esta línea de la factura.",
+        ):
+            self._crear_producto(codigo, self._producto_creado)
+
+    def _producto_creado(self, codigo: str) -> None:
+        """CO-01: de vuelta en la factura, con el producto recien creado en la linea."""
+        self._l_codigo.set(codigo)
+        self._mensaje.set(f"Producto {codigo} creado. Completa la cantidad y el costo y agrégalo.")
+        entrada = getattr(self, "_entrada_cantidad", None)
+        if entrada is not None:
+            entrada.focus_set()
 
     def _actualizar_unidad(self, *_args: object) -> None:
         """CO-05: junto a la cantidad se ve la unidad del producto (kg si es a granel)."""

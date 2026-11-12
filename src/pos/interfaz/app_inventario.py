@@ -27,7 +27,9 @@ from pos.aplicacion.puertos import (
     RepositorioProductos,
 )
 from pos.dominio.errores import ErrorDominio
+from pos.dominio.formato import formatear_cantidad
 from pos.dominio.inventario import MotivoAjuste
+from pos.dominio.productos import Producto, UnidadVenta
 from pos.interfaz.app_inventario_consultas import (
     PanelExistencias,
     PanelMovimientos,
@@ -50,6 +52,15 @@ MOTIVOS_MERMA = {
     "Consumo interno": MotivoAjuste.CONSUMO_INTERNO,
     "Devolución": MotivoAjuste.DEVOLUCION,
 }
+
+
+def texto_cantidad_lote(cantidad: Decimal, producto: Producto | None) -> str:
+    """I-07: como en Existencias. Granel en kg con coma decimal («5,5 kg»; «5.500» se leia
+    como cinco mil quinientos) y por unidad como entero («12»)."""
+    texto = formatear_cantidad(cantidad)
+    if producto is not None and producto.unidad_venta is UnidadVenta.GRANEL:
+        return f"{texto} kg"
+    return texto
 
 
 class PanelEntradaYAlertas:
@@ -100,7 +111,7 @@ class PanelEntradaYAlertas:
             ("producto", "Producto", 260),
             ("vence", "Vence", 100),
             ("dias", "Días", 70),
-            ("saldo", "Saldo", 70),
+            ("saldo", "Cantidad disponible", 140),  # I-07
             ("precio", "Precio", 90),
             ("descuento", "Descuento", 90),
             ("sugerido", "Precio sugerido", 130),
@@ -126,7 +137,7 @@ class PanelEntradaYAlertas:
                 ("lote", "Lote", 100),
                 ("producto", "Producto", 320),
                 ("vence", "Vence", 120),
-                ("saldo", "Saldo", 90),
+                ("saldo", "Cantidad disponible", 140),  # I-07
             ):
                 self._tabla_lotes.heading(clave, text=titulo)
                 self._tabla_lotes.column(clave, width=ancho, anchor="w")
@@ -179,7 +190,7 @@ class PanelEntradaYAlertas:
         marco = ttk.Frame(self.dlg_entrada, padding=14)
         marco.pack(fill="both", expand=True)
         # R-01: "Vence" tiene calendario desplegable (tambien se puede escribir AAAA-MM-DD).
-        self._vence = CampoFecha(marco, width=14)
+        self._vence = CampoFecha(marco, width=14, modulo="F3")
         campos = (
             ("Código de producto", self._codigo),
             ("Cantidad", self._cantidad),
@@ -364,8 +375,8 @@ class PanelEntradaYAlertas:
                 values=(
                     lote.etiqueta,
                     producto.nombre if producto else lote.codigo_producto,
-                    lote.fecha_vencimiento.isoformat(),
-                    lote.saldo,
+                    lote.fecha_vencimiento.strftime("%d-%m-%Y"),  # I-07
+                    texto_cantidad_lote(lote.saldo, producto),
                 ),
             )
 
@@ -379,9 +390,12 @@ class PanelEntradaYAlertas:
                 tags=("vencido",) if alerta.vencido else (),
                 values=(
                     alerta.nombre_producto,
-                    alerta.lote.fecha_vencimiento.isoformat(),
+                    alerta.lote.fecha_vencimiento.strftime("%d-%m-%Y"),  # I-07
                     "VENCIDO" if alerta.vencido else alerta.dias_restantes,
-                    alerta.lote.saldo,
+                    texto_cantidad_lote(
+                        alerta.lote.saldo,
+                        self._productos.obtener_por_codigo(alerta.lote.codigo_producto),
+                    ),
                     _clp(alerta.precio_actual.monto),
                     f"{alerta.descuento_pct}%",
                     _clp(alerta.precio_sugerido.monto),

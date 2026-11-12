@@ -9,6 +9,7 @@ de precios. Categorias (CA-16): nueva, renombrar, fusionar y desactivar. Es un a
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import messagebox, ttk
 
 from pos.aplicacion.casos_uso.cambiar_estado_producto import CambiarEstadoProducto
@@ -23,6 +24,7 @@ from pos.dominio.formato import formatear_clp, parsear_monto
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.value_objects import neto_de_precio
 from pos.interfaz import tema
+from pos.interfaz.avisos import costo_bajo_el_precio_o_confirmado
 from pos.interfaz.combo_filtrable import ComboFiltrable
 from pos.interfaz.dialogo_formulario import pedir_formulario
 from pos.interfaz.exportar import exportar_con_dialogo
@@ -327,7 +329,18 @@ class VentanaCatalogo(ttk.Frame):
 
     # ---------------------------------------------------------------------- ficha --
 
-    def _abrir_ficha(self, codigo: str | None, duplicar_de: str | None = None) -> None:
+    def crear_producto(self, codigo: str, al_guardar: Callable[[str], None] | None = None) -> None:
+        """CO-01: abre la ficha de un producto nuevo con el codigo ya escrito (desde otra
+        pantalla, p. ej. la factura de compra). `al_guardar(codigo)` se llama al guardarla."""
+        self._abrir_ficha(None, codigo_inicial=codigo, al_guardar=al_guardar)
+
+    def _abrir_ficha(
+        self,
+        codigo: str | None,
+        duplicar_de: str | None = None,
+        codigo_inicial: str = "",
+        al_guardar: Callable[[str], None] | None = None,
+    ) -> None:
         """Ficha del producto: Producto · Costo · Precio y ganancia. `codigo` None = nuevo."""
         if self.ficha is not None and self.ficha.winfo_exists():
             self.ficha.destroy()
@@ -371,6 +384,9 @@ class VentanaCatalogo(ttk.Frame):
         ventana.v = v  # type: ignore[attr-defined]
         ventana.categorias = categorias  # type: ignore[attr-defined]
         ventana.codigo_original = base.codigo if editando and base else ""  # type: ignore[attr-defined]
+        ventana.al_guardar = al_guardar  # type: ignore[attr-defined]
+        if codigo_inicial and not editando:
+            v["codigo"].set(codigo_inicial)  # CO-01: llega desde la factura de compra
 
         def seccion(titulo: str) -> ttk.LabelFrame:
             marco = ttk.LabelFrame(ventana, text=titulo, padding=8)
@@ -508,16 +524,8 @@ class VentanaCatalogo(ttk.Frame):
         except (ValueError, KeyError) as error:
             messagebox.showerror("No se pudo guardar", str(error) or "Revise los datos.")
             return False
-        if (
-            costo
-            and precio < costo
-            and not messagebox.askyesno(
-                "Precio bajo el costo",
-                f"El precio ({formatear_clp(precio)}) es menor que el costo "
-                f"({formatear_clp(costo)}): "
-                "se vendería con pérdida. ¿Guardar igual?",
-            )
-        ):
+        # CO-08: mismo criterio que el margen (costo neto vs precio sin IVA) y que la factura.
+        if not costo_bajo_el_precio_o_confirmado(v["nombre"].get().strip(), costo, precio):
             return False
         codigo = v["codigo"].get().strip()
         granel = UnidadVenta.GRANEL if v["granel"].get() else UnidadVenta.UNIDAD
@@ -556,9 +564,12 @@ class VentanaCatalogo(ttk.Frame):
         self._mensaje.set(
             f"Producto {codigo} {'actualizado' if editando else 'creado'} en «{nombre_categoria}»."
         )
+        al_guardar = getattr(ventana, "al_guardar", None)
         ventana.destroy()
         self.refrescar()
         self.destacar_producto(codigo)  # queda elegido en la lista, con su categoría a la vista
+        if callable(al_guardar):
+            al_guardar(codigo)  # CO-01: vuelve a la pantalla que pidio crear el producto
         return True
 
     # ----------------------------------------------------------------- categorias --

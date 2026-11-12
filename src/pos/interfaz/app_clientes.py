@@ -115,7 +115,7 @@ class VentanaClientes(ttk.Frame):
         self._ciclo_saldos = tk.StringVar(value=_ultimos_ciclos(1)[0])
         self._buscar = tk.StringVar()
         self._estado = tk.StringVar(value="Activos")
-        self._orden = tk.StringVar(value="Mayor saldo")
+        self._orden = tk.StringVar(value="Mayor deuda")  # CL-07
         self._mensaje = tk.StringVar()
 
         self._pestanas = ttk.Notebook(self)
@@ -198,7 +198,7 @@ class VentanaClientes(ttk.Frame):
         combo_orden = ttk.Combobox(
             filtros,
             textvariable=self._orden,
-            values=["Mayor saldo", "Nombre"],
+            values=["Mayor deuda", "Nombre"],
             state="readonly",
             width=14,
         )
@@ -232,7 +232,7 @@ class VentanaClientes(ttk.Frame):
                 ("cliente", "Cliente", 220, "w"),
                 ("contacto", "Contacto", 200, "w"),
                 ("ultimo", "Último consumo", 120, "w"),
-                ("saldo", "Saldo", 100, "e"),
+                ("saldo", "Deuda", 100, "e"),  # CL-07: lo que el cliente debe
                 ("cupo", "Cupo", 100, "e"),  # CL-01
                 ("disponible", "Disponible", 100, "e"),
                 ("estado", "Estado", 90, "w"),
@@ -255,7 +255,7 @@ class VentanaClientes(ttk.Frame):
             cab, text="Elige un cliente en la lista de arriba", font=("", 12, "bold")
         )
         self._lbl_cliente.grid(row=1, column=0, columnspan=3, sticky="w", padx=4, pady=(6, 0))
-        self._lbl_saldo = ttk.Label(cab, text="Saldo actual: -", font=("", 12, "bold"))
+        self._lbl_saldo = ttk.Label(cab, text="Deuda actual: -", font=("", 12, "bold"))
         self._lbl_saldo.grid(row=1, column=3, columnspan=2, sticky="w", padx=4, pady=(6, 0))
         self._lbl_cupo = ttk.Label(cab, text="Cupo de crédito: -", font=("", 11))
         self._lbl_cupo.grid(row=2, column=0, columnspan=5, sticky="w", padx=4, pady=(2, 0))
@@ -267,15 +267,16 @@ class VentanaClientes(ttk.Frame):
                 ("detalle", "Detalle", 280, "w"),
                 ("cargo", "Cargo", 100, "e"),
                 ("abono", "Abono", 100, "e"),
-                ("saldo", "Saldo", 110, "e"),
+                ("saldo", "Deuda", 110, "e"),  # CL-07
             ),
         )
         self._tabla_cuenta.tag_configure("linea", foreground="#555")
         self._tabla_cuenta.pack(fill="both", expand=True, pady=8)
         ttk.Label(
             marco,
-            text="El saldo no se guarda: se calcula sumando los movimientos. Un movimiento "
-            "registrado no se edita; un error se corrige con otro movimiento.",
+            text="Deuda: lo que el cliente debe, ANTES del descuento del 20 % (se aplica al cerrar "
+            "el ciclo, en el estado de cuenta). No se guarda: se calcula sumando los movimientos. "
+            "Un movimiento registrado no se edita; un error se corrige con otro movimiento.",
             foreground="#666",
         ).pack(anchor="w")
 
@@ -444,7 +445,9 @@ class VentanaClientes(ttk.Frame):
         anio, mes = _ciclo_de(self._ciclo.get())
         self._lbl_cliente.config(text=f"{cliente.nombre} · {cliente.contacto}")
         saldo_actual = saldo_de(movs)
-        self._lbl_saldo.config(text=f"Saldo actual: {formatear_clp(saldo_actual)}")
+        self._lbl_saldo.config(
+            text=f"Deuda actual: {formatear_clp(saldo_actual)} (antes del descuento del 20 %)"
+        )
         self._lbl_cupo.config(  # CL-01: cupo y lo que aun puede comprar a credito
             text="Cupo de crédito: sin definir"
             if cliente.cupo is None
@@ -788,7 +791,7 @@ class VentanaClientes(ttk.Frame):
         entrada.grid(row=1, column=1, padx=12, pady=4, sticky="w")
         entrada.focus_set()
         ttk.Label(ventana, text="Fecha").grid(row=2, column=0, sticky="w", padx=12, pady=4)
-        fecha = CampoFecha(ventana, date.today(), width=14)
+        fecha = CampoFecha(ventana, date.today(), width=14, modulo="F4")
         fecha.grid(row=2, column=1, padx=12, pady=4, sticky="w")
         ttk.Label(ventana, text="Medio de pago").grid(row=3, column=0, sticky="w", padx=12, pady=4)
         ttk.Combobox(

@@ -69,8 +69,8 @@ class VentanaReportes(ttk.Frame):
             self._marco_ventas, text="Ventas por período y categoría", padding=10
         )
         filtros.pack(fill="x")
-        self._desde = CampoFecha(filtros, date.today(), width=14)
-        self._hasta = CampoFecha(filtros, date.today(), width=14)
+        self._desde = CampoFecha(filtros, date.today(), width=14, modulo="F6")
+        self._hasta = CampoFecha(filtros, date.today(), width=14, modulo="F6")
         for columna, (texto, campo) in enumerate((("Desde", self._desde), ("Hasta", self._hasta))):
             ttk.Label(filtros, text=texto).grid(row=0, column=columna, sticky="w", padx=4)
             campo.grid(row=1, column=columna, padx=4, sticky="w")
@@ -130,6 +130,7 @@ class VentanaReportes(ttk.Frame):
         tabla = ttk.Treeview(self._marco_ventas, columns=columnas, show="headings", height=6)
         for columna in columnas:
             tabla.heading(columna, text=columna)
+            tabla.column(columna, anchor=tema.ancla_de_columna(columna))  # A-09
         tabla.pack(fill="x", pady=(0, 8))
         return tabla
 
@@ -192,8 +193,8 @@ class VentanaReportes(ttk.Frame):
         self._pestanas.add(marco, text="Rentabilidad")
         filtros = ttk.Frame(marco)
         filtros.pack(fill="x")
-        self._r_desde = CampoFecha(filtros, date.today().replace(day=1), width=12)
-        self._r_hasta = CampoFecha(filtros, date.today(), width=12)
+        self._r_desde = CampoFecha(filtros, date.today().replace(day=1), width=12, modulo="F6")
+        self._r_hasta = CampoFecha(filtros, date.today(), width=12, modulo="F6")
         self._r_categoria = tk.StringVar(value="Todas")
         self._r_orden = tk.StringVar(value=ORDENES_RENTABILIDAD[0])
         for columna, (texto, widget) in enumerate(
@@ -350,7 +351,7 @@ class VentanaReportes(ttk.Frame):
             color=tema.MODULOS_COLOR["F6"][0],
             fondo=tema.PAPEL,
         ).grid(row=1, column=3, padx=8)
-        tema.BotonAccion(
+        self._boton_desactivar = tema.BotonAccion(
             filtros,
             "Desactivar seleccionados",
             self._desactivar_seleccionados,
@@ -358,7 +359,22 @@ class VentanaReportes(ttk.Frame):
             "peligro",
             color=tema.MODULOS_COLOR["F6"][0],
             fondo=tema.PAPEL,
-        ).grid(row=1, column=4, padx=4)
+        )
+        self._boton_desactivar.grid(row=1, column=4, padx=4)
+        # R-05: con el filtro «Inactivos», «Reactivar» ocupa el LUGAR de «Desactivar» (que ahi
+        # no sirve). Antes iba despues de «Exportar» y en una pantalla de 1366 px quedaba cortado.
+        self._boton_reactivar = tema.BotonAccion(
+            filtros,
+            "Reactivar seleccionados",
+            self._reactivar_seleccionados,
+            "",
+            "normal",
+            color=tema.MODULOS_COLOR["F6"][0],
+            fondo=tema.PAPEL,
+        )
+        self._boton_reactivar.grid(row=1, column=4, padx=4)
+        self._rot_estado.trace_add("write", lambda *_: self._mostrar_boton_reactivar())
+        self._mostrar_boton_reactivar()
         tema.BotonAccion(
             filtros,
             "Exportar",
@@ -381,6 +397,8 @@ class VentanaReportes(ttk.Frame):
         ):
             self._tabla_rotacion.heading(clave, text=titulo)
             self._tabla_rotacion.column(clave, width=ancho, anchor=ancla)
+        # R-04: «Inactivo» en rojo para distinguirlo de «Activo».
+        self._tabla_rotacion.tag_configure("inactivo", foreground=tema.PELIGRO)
         self._tabla_rotacion.pack(fill="both", expand=True, pady=8)
         ttk.Label(
             marco,
@@ -411,22 +429,51 @@ class VentanaReportes(ttk.Frame):
                     formatear_cantidad(fila.existencia),
                     "Activo" if fila.activo else "Inactivo",
                 ),
+                tags=() if fila.activo else ("inactivo",),
             )
         return filas
 
     def desactivar_productos(self, codigos: list[str]) -> int:
         """HU-PRD-06: desactiva los productos elegidos; devuelve cuantos."""
+        return self._cambiar_estado_productos(codigos, False)
+
+    def reactivar_productos(self, codigos: list[str]) -> int:
+        """R-05: reactiva los productos elegidos; devuelve cuantos."""
+        return self._cambiar_estado_productos(codigos, True)
+
+    def _cambiar_estado_productos(self, codigos: list[str], activo: bool) -> int:
         if self._cambiar_estado is None:
             return 0
         hechos = 0
         for codigo in codigos:
             try:
-                self._cambiar_estado.ejecutar(codigo, False)
+                self._cambiar_estado.ejecutar(codigo, activo)
                 hechos += 1
             except ErrorDominio as error:
                 messagebox.showerror("Rotación", str(error))
         self.generar_rotacion()
         return hechos
+
+    def _mostrar_boton_reactivar(self) -> None:
+        """R-05: «Inactivos» muestra Reactivar; «Activos» y «Todos», Desactivar (mismo lugar)."""
+        if self._rot_estado.get() == "Inactivos":
+            self._boton_desactivar.grid_remove()
+            self._boton_reactivar.grid()
+        else:
+            self._boton_reactivar.grid_remove()
+            self._boton_desactivar.grid()
+
+    def _reactivar_seleccionados(self) -> None:
+        codigos = list(self._tabla_rotacion.selection())
+        if not codigos:
+            messagebox.showwarning("Rotación", "Elige uno o más productos de la lista")
+            return
+        if not messagebox.askyesno(
+            "Reactivar productos",
+            f"¿Reactivar {len(codigos)} producto(s)? Vuelven a estar disponibles para la venta.",
+        ):
+            return
+        self.reactivar_productos(codigos)
 
     def _desactivar_seleccionados(self) -> None:
         codigos = list(self._tabla_rotacion.selection())
