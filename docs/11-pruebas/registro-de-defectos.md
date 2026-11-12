@@ -1,6 +1,6 @@
 # Registro de defectos por ciclos de prueba — Emporio NaturalSur
 
-**Versión:** 1.1 · **Fecha:** 11-11-2026 · **Responsable QA:** Victoria Roa · **Desarrollo:** Silva, Guzmán
+**Versión:** 1.2 · **Fecha:** 11-11-2026 · **Responsable QA:** Victoria Roa · **Desarrollo:** Silva, Guzmán
 
 Este registro reúne **todos los defectos y hallazgos** que el QA (Victoria Roa) reportó en las seis rondas
 de prueba, con su prioridad, quién los corrige, el estado actual y cómo se corrigieron. La fuente es el
@@ -45,15 +45,16 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
 | Ciclo 4 · QA del 04-11 | 04-11-2026 | 15 |
 | Ciclo 5 · QA del 05-11 | 05-11-2026 | 14 |
 | Ciclo 6 · QA del 09-11 (re-prueba de 38 hallazgos y 6 nuevos) | 09-11-2026 | 6 |
+| Ciclo 7 · QA del 10-11 | 10-11-2026 | 4 |
 
-**Total de defectos registrados: 90** (en 7 módulos).
+**Total de defectos registrados: 94** (en 7 módulos).
 
 ### 2.1 Estado actual
 
 | Estado | Cantidad | % |
 |---|---|---|
-| Cerrado | 50 | 56 % |
-| Corregido | 40 | 44 % |
+| Cerrado | 50 | 53 % |
+| Corregido | 44 | 47 % |
 | Abierto | 0 | 0 % |
 
 ### 2.2 Por prioridad
@@ -63,6 +64,7 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
 | Alta | 27 | 0 |
 | Media | 34 | 0 |
 | Baja | 29 | 0 |
+| Por confirmar (ciclo 7) | 4 | 0 |
 
 ### 2.3 Por clasificación
 
@@ -77,6 +79,7 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
 | Validación | 5 |
 | Calidad de código | 3 |
 | Configuración | 1 |
+| Por confirmar (ciclo 7) | 4 |
 
 ### 2.4 Por módulo
 
@@ -84,9 +87,9 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
 |---|---|---|
 | F1 Operación | 43 | 0 |
 | F2 Catálogo | 16 | 0 |
-| F3 Inventario | 6 | 0 |
-| F4 Clientes | 4 | 0 |
-| F5 Compras | 6 | 0 |
+| F3 Inventario | 7 | 0 |
+| F4 Clientes | 5 | 0 |
+| F5 Compras | 8 | 0 |
 | F6 Reportes | 5 | 0 |
 | F7 Administración | 10 | 0 |
 
@@ -95,7 +98,7 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
 | Responsable | Defectos | Abiertos |
 |---|---|---|
 | Fernando Silva | 70 | 0 |
-| Eduardo Guzmán | 16 | 0 |
+| Eduardo Guzmán | 20 | 0 |
 | Equipo | 2 | 0 |
 | Victoria Roa | 1 | 0 |
 | Por asignar | 1 | 0 |
@@ -110,13 +113,14 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
   hallazgos nuevos (O-37, O-38, O-39, CL-04, A-09, A-10).
 - **10-11:** el desarrollo corrigió los 9 que le correspondían a Fernando (commits `4c44c7b` y `3876212`).
 - **11-11:** Eduardo corrigió **R-05, A-09 y A-10** (commits `bd14e43` y `221c2eb`), integrados en `develop`.
-  **No quedan defectos abiertos.** Los 40 en estado *Corregido* esperan la re-prueba de QA.
-- El commit `bd14e43` corrige además CO-07, CO-08, CL-07 e I-07, hallazgos del 10-11 que todavía no
-  están en este registro (falta traspasarlos desde la planilla de QA).
+  **No quedan defectos abiertos.** Los 44 en estado *Corregido* esperan la re-prueba de QA.
+- **Ciclo 7 (10-11):** el commit `bd14e43` corrige además CO-07, CO-08, CL-07 e I-07. Esos cuatro se
+  registraron aquí **a partir del mensaje del commit**: la planilla de QA todavía no los incluye, por lo
+  que su resumen es la corrección aplicada y su prioridad y clasificación quedan «por confirmar» con QA.
 
 ## 4. Defectos abiertos (pendientes)
 
-Ninguno al 11-11-2026. Pendiente: re-prueba de QA de los 40 defectos en estado *Corregido*.
+Ninguno al 11-11-2026. Pendiente: re-prueba de QA de los 44 defectos en estado *Corregido*.
 
 ## 5. Detalle por módulo
 
@@ -191,7 +195,7 @@ Columnas: **Reportado** = fecha del ciclo en que se encontró · **Re-prueba QA*
 | CA-18 | Los desplegables de categoría solo se recorren con la flecha; no se puede escribir para buscar | Usabilidad | Media | Fernando | 04-11-2026 | Corregido | Pendiente (corregido el 10-11) | El desplegable muestra una lista que se acorta con cada letra (commit 4c44c7b) |
 | CA-19 | El código de barras no se puede modificar en la ficha (aparece bloqueado) | Alcance | Media | Fernando | 04-11-2026 | Corregido | Pendiente | Corregido en b25037d (05-11): el código de barras se puede cambiar en la ficha; no se admite uno repetido, se actualiza en todas las tablas y en los tickets en espera, y… |
 
-### F3 Inventario (6)
+### F3 Inventario (7)
 
 | ID | Resumen | Clasif. | Prior. | Resp. | Reportado | Estado | Re-prueba QA | Corrección |
 |---|---|---|---|---|---|---|---|---|
@@ -201,8 +205,9 @@ Columnas: **Reportado** = fecha del ciclo en que se encontró · **Re-prueba QA*
 | I-04 | La tecla Insert no abre «Agregar a inventario», aunque el botón dice «INS» | Error | Baja | Fernando | 05-11-2026 | Corregido | Pendiente | Corregido en 0a0b4f7 (05-11): la tecla Insert abre «Agregar a inventario» en F3, igual que en F2 y F5. |
 | I-05 | Al cerrar el cuadro y volver a abrirlo, queda escrito el código anterior | Usabilidad | Baja | Fernando | 05-11-2026 | Corregido | Pendiente | Corregido en 0a0b4f7 (05-11): el cuadro «Agregar a inventario» se abre vacío, también después de «Ingresar». |
 | I-06 | La columna Cantidad queda pegada a Motivo y se confunden | Usabilidad | Baja | Fernando | 05-11-2026 | Corregido | Pendiente | Corregido en 0a0b4f7 (05-11): la columna Cantidad queda separada de Motivo en el reporte de movimientos. |
+| I-07 | Lotes a granel: unidad, formato de fecha y nombre de la columna de cantidad | Por confirmar | Por confirmar | Eduardo | 10-11-2026 | Corregido | Pendiente (corregido el 11-11) | Corregido en bd14e43 (11-11, Eduardo): lotes a granel en kg, fechas dd-mm-aaaa y columna «Cantidad disponible» |
 
-### F4 Clientes (4)
+### F4 Clientes (5)
 
 | ID | Resumen | Clasif. | Prior. | Resp. | Reportado | Estado | Re-prueba QA | Corrección |
 |---|---|---|---|---|---|---|---|---|
@@ -210,8 +215,9 @@ Columnas: **Reportado** = fecha del ciclo en que se encontró · **Re-prueba QA*
 | CL-02 | El estado de cuenta muestra «Venta N° 1 · 1 producto», sin decir qué producto | Alcance | Media | Fernando | 04-11-2026 | Corregido | Pendiente | Corregido en b25037d y 0a0b4f7 (05-11): cada consumo lista sus productos con cantidad y monto, en las pestañas Estado de cuenta y Cuenta. |
 | CL-03 | El descuento del crédito familiar y el total a pagar dicen «por confirmar» | Error | Alta | Fernando | 04-11-2026 | Corregido | Pendiente (corregido el 10-11) | Estado de cuenta con consumos, descuento del 20 % en pesos y total a pagar (commit 4c44c7b) |
 | CL-04 | La pestaña Cuenta no permite elegir el cliente | Usabilidad | Media | Fernando | 09-11-2026 | Corregido | Pendiente (corregido el 10-11) | Selector de cliente con búsqueda en Cuenta y Estado de cuenta; ciclo actual por defecto (commit 4c44c7b) |
+| CL-07 | La lista y la cuenta del cliente dicen «Saldo» | Por confirmar | Por confirmar | Eduardo | 10-11-2026 | Corregido | Pendiente (corregido el 11-11) | Corregido en bd14e43 (11-11, Eduardo): «Saldo» pasa a «Deuda» en la lista y la cuenta |
 
-### F5 Compras (6)
+### F5 Compras (8)
 
 | ID | Resumen | Clasif. | Prior. | Resp. | Reportado | Estado | Re-prueba QA | Corrección |
 |---|---|---|---|---|---|---|---|---|
@@ -221,6 +227,8 @@ Columnas: **Reportado** = fecha del ciclo en que se encontró · **Re-prueba QA*
 | CO-04 | No queda claro que falta apretar «Confirmar factura»; al salir sin confirmar no se guarda nada y no hay aviso | Usabilidad | Media | Fernando | 05-11-2026 | Corregido | Pendiente | Corregido en 0a0b4f7 (05-11): «Confirmar factura» queda como botón principal, avisa «Hay una factura sin confirmar» al cambiar de pestaña, de módulo o salir, y al confir… |
 | CO-05 | La cantidad no indica la unidad y no acepta «1k» | Usabilidad | Media | Fernando | 05-11-2026 | Corregido | Pendiente | Corregido en 0a0b4f7 (05-11): junto a la cantidad se muestra la unidad del producto («kg» si es a granel, «unid.» si no). |
 | CO-06 | Una línea agregada no se puede editar; solo quitarla | Usabilidad | Media | Fernando | 05-11-2026 | Corregido | Pendiente | Corregido en 0a0b4f7 (05-11): doble clic en una línea carga sus datos en el formulario para corregirla. |
+| CO-07 | Compras acepta cantidades decimales en productos por unidad | Por confirmar | Por confirmar | Eduardo | 10-11-2026 | Corregido | Pendiente (corregido el 11-11) | Corregido en bd14e43 (11-11, Eduardo): los productos por unidad no aceptan decimales |
+| CO-08 | No hay aviso cuando el costo deja el margen en negativo | Por confirmar | Por confirmar | Eduardo | 10-11-2026 | Corregido | Pendiente (corregido el 11-11) | Corregido en bd14e43 (11-11, Eduardo): aviso de margen negativo (costo neto vs. precio sin IVA) en compras y ficha |
 
 ### F6 Reportes (5)
 
@@ -249,7 +257,7 @@ Columnas: **Reportado** = fecha del ciclo en que se encontró · **Re-prueba QA*
 
 ## 6. Lecciones de los ciclos
 
-- Casi todo lo que QA encontró fue de **usabilidad y alcance** (39 de 90), no de datos: la lógica de
+- Casi todo lo que QA encontró fue de **usabilidad y alcance** (39 de 94), no de datos: la lógica de
   negocio estaba cubierta por pruebas automáticas y las fallas aparecieron al usar las pantallas reales.
   Por eso se agregaron escenarios de interfaz con la app real (`tests/e2e/`).
 - Cada hallazgo corregido quedó **con su prueba**: ver la trazabilidad en `casos-de-prueba.md`.
