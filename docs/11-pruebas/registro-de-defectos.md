@@ -1,6 +1,6 @@
 # Registro de defectos por ciclos de prueba — Emporio NaturalSur
 
-**Versión:** 1.0 · **Fecha:** 11-11-2026 · **Responsable QA:** Victoria Roa · **Desarrollo:** Silva, Guzmán
+**Versión:** 1.1 · **Fecha:** 11-11-2026 · **Responsable QA:** Victoria Roa · **Desarrollo:** Silva, Guzmán
 
 Este registro reúne **todos los defectos y hallazgos** que el QA (Victoria Roa) reportó en las seis rondas
 de prueba, con su prioridad, quién los corrige, el estado actual y cómo se corrigieron. La fuente es el
@@ -53,16 +53,16 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
 | Estado | Cantidad | % |
 |---|---|---|
 | Cerrado | 50 | 56 % |
-| Corregido | 37 | 41 % |
-| Abierto | 3 | 3 % |
+| Corregido | 40 | 44 % |
+| Abierto | 0 | 0 % |
 
 ### 2.2 Por prioridad
 
 | Prioridad | Total | Abiertos |
 |---|---|---|
 | Alta | 27 | 0 |
-| Media | 34 | 1 |
-| Baja | 29 | 2 |
+| Media | 34 | 0 |
+| Baja | 29 | 0 |
 
 ### 2.3 Por clasificación
 
@@ -87,15 +87,15 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
 | F3 Inventario | 6 | 0 |
 | F4 Clientes | 4 | 0 |
 | F5 Compras | 6 | 0 |
-| F6 Reportes | 5 | 1 |
-| F7 Administración | 10 | 2 |
+| F6 Reportes | 5 | 0 |
+| F7 Administración | 10 | 0 |
 
 ### 2.5 Por responsable
 
 | Responsable | Defectos | Abiertos |
 |---|---|---|
-| Fernando Silva | 70 | 1 |
-| Eduardo Guzmán | 16 | 2 |
+| Fernando Silva | 70 | 0 |
+| Eduardo Guzmán | 16 | 0 |
 | Equipo | 2 | 0 |
 | Victoria Roa | 1 | 0 |
 | Por asignar | 1 | 0 |
@@ -109,15 +109,14 @@ observaciones* o *Rechazado* → si se rechaza, vuelve a *Abierto*.
   parcial), 3 pendientes de revisión y 1 con una definición nueva de la Product Owner. Además registró 6
   hallazgos nuevos (O-37, O-38, O-39, CL-04, A-09, A-10).
 - **10-11:** el desarrollo corrigió los 9 que le correspondían a Fernando (commits `4c44c7b` y `3876212`).
-  Quedan **3 abiertos**, de Eduardo: **R-05, A-09 y A-10**. Los 37 en estado *Corregido* esperan la re-prueba de QA.
+- **11-11:** Eduardo corrigió **R-05, A-09 y A-10** (commits `bd14e43` y `221c2eb`), integrados en `develop`.
+  **No quedan defectos abiertos.** Los 40 en estado *Corregido* esperan la re-prueba de QA.
+- El commit `bd14e43` corrige además CO-07, CO-08, CL-07 e I-07, hallazgos del 10-11 que todavía no
+  están en este registro (falta traspasarlos desde la planilla de QA).
 
 ## 4. Defectos abiertos (pendientes)
 
-| ID | Módulo | Resumen | Prioridad | Responsable | Nota |
-|---|---|---|---|---|---|
-| R-05 | F6 | Desde Rotación se puede desactivar productos, pero no reactivarlos | Baja | Fernando Silva | No se puede reactivar un producto desde Rotación: pendiente, lo corrige Eduardo |
-| A-09 | F7 | Centrar los datos de las tablas | Baja | Eduardo Guzmán | Pendiente: lo corrige Eduardo |
-| A-10 | F7 | El calendario queda flotando al cambiar de módulo | Media | Eduardo Guzmán | Pendiente: lo corrige Eduardo |
+Ninguno al 11-11-2026. Pendiente: re-prueba de QA de los 40 defectos en estado *Corregido*.
 
 ## 5. Detalle por módulo
 
@@ -231,7 +230,7 @@ Columnas: **Reportado** = fecha del ciclo en que se encontró · **Re-prueba QA*
 | R-02 | El reporte muestra «Categoria 3» en vez del nombre y «credito_cliente» como medio de pago. En el equipo de QA no generó resultados | Error | Media | Fernando | 02-11-2026 | Corregido | Pendiente | Corregido en 5550f1d (PR #10, 02-11): el reporte muestra el nombre de la categoría y «Crédito cliente» en vez de los códigos internos. Re-probar en feat/diseno-prototipo… |
 | R-03 | En «Configurar meta diaria» el 0 queda delante de lo que se escribe | Usabilidad | Baja | Fernando | 04-11-2026 | Corregido | Pendiente | Corregido en b25037d (05-11): un campo que ya trae un número queda seleccionado al entrar, así lo que se escribe lo reemplaza. |
 | R-04 | El estado «Inactivo» se ve igual que «Activo» | Usabilidad | Baja | Fernando | 05-11-2026 | Corregido | Pendiente | — |
-| R-05 | Desde Rotación se puede desactivar productos, pero no reactivarlos | Usabilidad | Baja | Fernando | 05-11-2026 | Abierto | Rechazado (09-11) | No se puede reactivar un producto desde Rotación: pendiente, lo corrige Eduardo |
+| R-05 | Desde Rotación se puede desactivar productos, pero no reactivarlos | Usabilidad | Baja | Fernando | 05-11-2026 | Corregido | Pendiente (corregido el 11-11) | Corregido en bd14e43 (11-11, Eduardo): «Reactivar» aparece en lugar de «Desactivar» al filtrar Inactivos |
 
 ### F7 Administración (10)
 
@@ -245,8 +244,8 @@ Columnas: **Reportado** = fecha del ciclo en que se encontró · **Re-prueba QA*
 | A-06 | El cierre por inactividad bloquea la sesión, pero tarda más que el tiempo configurado | Error | Media | Fernando | 04-11-2026 | Corregido | Pendiente | Corregido en b25037d (05-11): el movimiento del mouse ya no cuenta como actividad y el cierre de sesión llega al vencer el plazo configurado. |
 | A-07 | Las tablas no tienen líneas entre filas ni columnas y cuesta seguir una fila | Usabilidad | Media | Fernando | 05-11-2026 | Corregido | Pendiente | — |
 | A-08 | En los calendarios, el día de hoy solo se marca con un punto | Mejora | Baja | Fernando | 05-11-2026 | Corregido | Pendiente | — |
-| A-09 | Centrar los datos de las tablas | Presentación | Baja | Eduardo | 09-11-2026 | Abierto | Pendiente | Pendiente: lo corrige Eduardo |
-| A-10 | El calendario queda flotando al cambiar de módulo | Error | Media | Eduardo | 09-11-2026 | Abierto | Pendiente | Pendiente: lo corrige Eduardo |
+| A-09 | Centrar los datos de las tablas | Presentación | Baja | Eduardo | 09-11-2026 | Corregido | Pendiente (corregido el 11-11) | Corregido en bd14e43 (11-11, Eduardo): datos centrados salvo producto, código, categoría y función |
+| A-10 | El calendario queda flotando al cambiar de módulo | Error | Media | Eduardo | 09-11-2026 | Corregido | Pendiente (corregido el 11-11) | Corregido en bd14e43 y 221c2eb (11-11, Eduardo): el calendario se cierra al perder el foco o cambiar de módulo |
 
 ## 6. Lecciones de los ciclos
 

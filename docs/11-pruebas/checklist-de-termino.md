@@ -31,8 +31,8 @@
 ## 3. Pruebas y calidad
 
 - ✅ 459 pruebas automáticas pasan en `develop` (21,8 s), incluidos los 7 flujos E2E de interfaz.
-- ✅ 87 de 90 defectos corregidos: 50 cerrados por QA y 37 esperando su re-prueba.
-- ⚠️ R-05, A-09 y A-10: Eduardo subió su corrección el 11-11 (commits `bd14e43` y `221c2eb`); falta la re-prueba de QA y actualizar el registro de defectos.
+- ✅ Los 90 defectos registrados están corregidos: 50 cerrados por QA y 40 esperando su re-prueba.
+- ⚠️ Falta la re-prueba de QA de los 40 corregidos y traspasar al registro CO-07, CO-08, CL-07 e I-07 (QA del 10-11).
 
 ## 4. Integración y cierre
 
