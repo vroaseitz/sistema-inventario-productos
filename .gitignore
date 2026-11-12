@@ -211,3 +211,7 @@ WhatsApp Chat*.zip
 
 # Comprobantes guardados como archivos cuando no hay impresora configurada (HU-VTA-06)
 comprobantes/
+
+# Archivos temporales de SQLite (modo WAL)
+*.db-shm
+*.db-wal
