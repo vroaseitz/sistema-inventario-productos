@@ -297,7 +297,7 @@ La migración es un **evento único**, no una sincronización permanente. Se des
 
 ## 8. Instrucciones para ejecutar el proyecto localmente
 
-> **Estado:** el proyecto está en Fase 1 (definición). Esta sección se completa con los comandos concretos una vez definido el stack de la aplicación.
+> **Estado:** aplicación de escritorio en Python (Tkinter) con SQLite local y sincronización a Supabase. Los comandos de abajo son los reales.
 
 ### Requisitos previos
 
@@ -307,7 +307,7 @@ La migración es un **evento único**, no una sincronización permanente. Se des
 | **Git** | Para clonar el repositorio — https://git-scm.com |
 | **Proyecto en Supabase** | URL y llaves del proyecto utilizado como base de datos |
 | **Archivo `PDVDATA.FDB`** | Solo para ejecutar el proceso de migración. Copia del respaldo, nunca la base en producción del local |
-| **Entorno de ejecución** | Por definir junto con el stack de la aplicación |
+| **Entorno de ejecución** | Python 3.11+ (el `.exe` lleva su propio intérprete) |
 
 ### 1. Clonar el repositorio
 
@@ -330,19 +330,39 @@ Abre el archivo `.env` y completa los valores de tu entorno.
 
 ### 3. Instalar dependencias
 
-Pendiente. Se documenta al definir el stack.
+```bash
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt
+```
+
+Python 3.11 o superior (el empaquetado para Windows 8.1 se hace con 3.11 de 64 bits).
 
 ### 4. Ejecutar la aplicación
 
-Pendiente. Se documenta al definir el stack.
+```bash
+PYTHONPATH=src POS_SQLITE_PATH=./pos_local.db python -m pos
+```
+
+Sin `SUPABASE_DB_URL` la app funciona en modo local. En el primer arranque pide crear el usuario
+administrador. El `.exe` para Windows 8.1 se construye en una VM con ese sistema: ver
+[`docs/12-despliegue/manual-de-implementacion.md`](docs/12-despliegue/manual-de-implementacion.md).
 
 ### 5. Ejecutar el proceso de migración
 
-Pendiente. Se documenta al implementar el proceso. El manual completo de despliegue y migración vive en `docs/12-despliegue/`.
+Pendiente: la migración de datos desde el sistema antiguo aún no está construida. Las **migraciones de
+esquema** de Supabase (002 a 009) están en `database/migraciones/` y se aplican en orden desde el SQL
+Editor (ver el manual de implementación).
 
 ### 6. Ejecutar las pruebas
 
-Pendiente. Se documenta al definir el framework de pruebas.
+```bash
+ruff check . && ruff format --check .
+POS_TEST_PG_URL=postgresql://postgres:postgres@localhost:55432/postgres python -m pytest tests -q -p no:warnings
+```
+
+Las pruebas contra PostgreSQL necesitan el contenedor `pos-pg-test` (Docker); sin esa variable se
+omiten. Casos de prueba y defectos: [`docs/11-pruebas/`](docs/11-pruebas/).
 
 ---
 
