@@ -151,8 +151,7 @@ el doble. Y decir en voz alta **el número** que aparece en pantalla.
 
 > «El lote que acabo de ingresar ya aparece en **alertas**: vence en menos de un mes y el sistema
 > sugiere venderlo con **10 % de descuento**, a $13.491. Es una sugerencia: la decisión es de la dueña.
-> En una tienda de productos naturales, esto evita botar mercadería. El sistema antiguo no tenía ni
-> un campo de vencimiento.»
+> El sistema antiguo no tenía ni un campo de vencimiento.»
 
 *Solo si sobra tiempo:* botón **Ajustes y mermas** → `ALM-GR` · `0,1` · motivo `Rotura` →
 **Registrar merma** («si se rompe una bolsa, se da de baja con motivo obligatorio»). Si se hace, el
