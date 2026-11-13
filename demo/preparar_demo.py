@@ -29,6 +29,9 @@ from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQL
 from pos.infraestructura.sqlite.conexion import crear_conexion  # noqa: E402
 from pos.infraestructura.sqlite.repositorio_auditoria import RepositorioAuditoriaSQLite  # noqa: E402
 from pos.infraestructura.sqlite.repositorio_clientes import RepositorioClientesSQLite  # noqa: E402
+from pos.infraestructura.sqlite.repositorio_configuracion import (  # noqa: E402
+    RepositorioConfiguracionSQLite,
+)
 from pos.infraestructura.sqlite.repositorio_facturas_compra import (  # noqa: E402
     RepositorioFacturasCompraSQLite,
 )
@@ -51,6 +54,8 @@ conteo = ConteoDenominaciones({20000: 2, 10000: 1})
 AbrirTurnoCaja(RepositorioTurnosCajaSQLite(con), cola=cola).ejecutar(
     usuario_id=admin.id, fondo_inicial=Dinero(conteo.total), composicion_fondo_inicial=conteo
 )
+# Sin cierre por inactividad: la sesion no debe bloquearse mientras hablan los demas.
+RepositorioConfiguracionSQLite(con).guardar("inactividad_minutos", 0)
 con.commit()
 con.close()
 print("Demo lista: proveedor «Frutos del Sur», cliente «Juan Pérez» (cupo $20.000)")
