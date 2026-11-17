@@ -105,3 +105,31 @@ def test_el_disponible_aclara_que_incluye_el_saldo_a_favor():
     assert _texto_disponible(10000, -390) == "$10.390 (incl. a favor)"
     assert _texto_disponible(10000, 2000) == "$8.000"
     assert _texto_disponible(None, -390) == "—"
+
+
+# --- CA-11 (regresion 17-11) -------------------------------------------------------------------
+
+
+def test_la_ficha_nueva_abre_con_el_cursor_en_el_codigo():
+    import tkinter as tk
+
+    from pos.interfaz.app_catalogo import VentanaCatalogo
+
+    try:
+        raiz = tk.Tk()
+    except tk.TclError:
+        pytest.skip("sin entorno grafico")
+    try:
+        vista = VentanaCatalogo.__new__(VentanaCatalogo)
+        tk.Frame.__init__(vista, raiz)
+        vista.ficha = None
+        vista._repo = MagicMock(obtener_por_codigo=MagicMock(return_value=None))
+        vista._categorias_activas = lambda: {"Frutos secos": 1}
+        vista._abrir_ficha(None)
+        raiz.update()
+        foco = str(raiz.tk.call("focus", "-lastfor", vista.ficha))
+        assert foco.endswith("entry") and str(vista.ficha.v["codigo"]) == str(
+            raiz.nametowidget(foco).cget("textvariable")
+        )
+    finally:
+        raiz.destroy()

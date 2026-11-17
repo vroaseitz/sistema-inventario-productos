@@ -410,9 +410,11 @@ class VentanaCatalogo(ttk.Frame):
             return widget
 
         a = seccion("Producto")
-        fila(a, 0, "Código de barras", ttk.Entry(a, textvariable=v["codigo"], width=28))
+        entrada_codigo = fila(
+            a, 0, "Código de barras", ttk.Entry(a, textvariable=v["codigo"], width=28)
+        )
         # CA-19: el código se puede cambiar (no puede repetirse y queda en la auditoría).
-        fila(a, 1, "Nombre", ttk.Entry(a, textvariable=v["nombre"], width=44))
+        entrada_nombre = fila(a, 1, "Nombre", ttk.Entry(a, textvariable=v["nombre"], width=44))
         fila(
             a,
             2,
@@ -484,6 +486,9 @@ class VentanaCatalogo(ttk.Frame):
         ttk.Button(botones, text="Cancelar", command=ventana.destroy).pack(side="right")
         ventana.bind("<Escape>", lambda _e: ventana.destroy())
         ventana.grab_set()
+        # CA-11: un producto nuevo abre con el cursor en «Código», listo para escanear; si el
+        # codigo ya viene escrito (CO-01) o se edita, el cursor va al nombre.
+        (entrada_nombre if v["codigo"].get() else entrada_codigo).focus_set()
 
     def _alternar_codigo(self, codigo: str) -> None:
         if self.tabla.exists(codigo):
