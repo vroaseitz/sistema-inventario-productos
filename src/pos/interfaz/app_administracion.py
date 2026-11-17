@@ -83,6 +83,7 @@ class VentanaAdministracion(ttk.Frame):
         self._construir_auditoria()
         self._construir_configuracion()
         ttk.Label(self, textvariable=self._mensaje, foreground="#4A4F55").pack(anchor="w", pady=4)
+        tema.atajo_insert(self, lambda: self._dialogo_nuevo(), self._pestanas, 0)  # A-11
         self.refrescar()
 
     # ------------------------------------------------------------------ usuarios --

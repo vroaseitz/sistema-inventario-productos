@@ -75,9 +75,19 @@ def _texto_cupo(cupo: int | None) -> str:
     return "Sin definir" if cupo is None else formatear_clp(cupo)
 
 
+def _texto_deuda(saldo: int) -> str:
+    """CL-06: un saldo negativo (p. ej. tras anular una venta ya abonada) es saldo a favor."""
+    return formatear_clp(saldo) if saldo >= 0 else f"A favor {formatear_clp(-saldo)}"
+
+
 def _texto_disponible(cupo: int | None, saldo: int) -> str:
     disponible = cupo_disponible(cupo, saldo)
-    return "—" if disponible is None else formatear_clp(disponible)
+    if disponible is None:
+        return "—"
+    if saldo < 0:
+        # CL-06: el disponible supera el cupo solo porque incluye el saldo a favor; se dice.
+        return f"{formatear_clp(disponible)} (incl. a favor)"
+    return formatear_clp(disponible)
 
 
 def _ultimos_ciclos(cantidad: int = 12) -> list[str]:
@@ -125,6 +135,7 @@ class VentanaClientes(ttk.Frame):
         self._construir_estado()
         self._construir_saldos()
         ttk.Label(self, textvariable=self._mensaje, foreground="#2E6B3E").pack(anchor="w", pady=4)
+        tema.atajo_insert(self, lambda: self._nuevo_cliente(), self._pestanas, 0)  # A-11
         self.refrescar()
 
     # ------------------------------------------------------------- construccion --
@@ -427,7 +438,7 @@ class VentanaClientes(ttk.Frame):
                     cliente.nombre,
                     cliente.contacto,
                     _fecha(ultimo),
-                    formatear_clp(saldo),
+                    _texto_deuda(saldo),
                     _texto_cupo(cliente.cupo),
                     _texto_disponible(cliente.cupo, saldo),
                     "Activo" if cliente.activo else "Inactivo",
@@ -447,12 +458,16 @@ class VentanaClientes(ttk.Frame):
         saldo_actual = saldo_de(movs)
         self._lbl_saldo.config(
             text=f"Deuda actual: {formatear_clp(saldo_actual)} (antes del descuento del 20 %)"
+            if saldo_actual >= 0
+            else f"A favor {formatear_clp(-saldo_actual)}: el cliente no debe y tiene saldo a "
+            "su favor"  # CL-06
         )
+        a_favor = f" (incluye {formatear_clp(-saldo_actual)} a favor)" if saldo_actual < 0 else ""
         self._lbl_cupo.config(  # CL-01: cupo y lo que aun puede comprar a credito
             text="Cupo de crédito: sin definir"
             if cliente.cupo is None
             else f"Cupo de crédito: {formatear_clp(cliente.cupo)}  ·  disponible: "
-            f"{formatear_clp(cupo_disponible(cliente.cupo, saldo_actual) or 0)}"
+            f"{formatear_clp(cupo_disponible(cliente.cupo, saldo_actual) or 0)}{a_favor}"
         )
         corrido = saldo_anterior(movs, anio, mes)
         self._tabla_cuenta.insert(
@@ -464,7 +479,7 @@ class VentanaClientes(ttk.Frame):
                 "Cierre del ciclo anterior",
                 "",
                 "",
-                formatear_clp(corrido),
+                _texto_deuda(corrido),
             ),
         )
         ciclo = [m for m in movs if en_ciclo(m, anio, mes)]
@@ -486,7 +501,7 @@ class VentanaClientes(ttk.Frame):
                     m.detalle,
                     formatear_clp(m.monto) if es_consumo else "",
                     "" if es_consumo else formatear_clp(m.monto),
-                    formatear_clp(corrido),
+                    _texto_deuda(corrido),  # CL-06
                 ),
             )
             if es_consumo:

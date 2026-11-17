@@ -83,7 +83,14 @@ class VentanaCompras(ttk.Frame):
             ("Limpiar", lambda: self._limpiar(), "", "normal"),
         ):
             tema.BotonAccion(
-                barra, texto, comando, tecla, variante, color=color, fondo=tema.PAPEL
+                barra,
+                texto,
+                comando,
+                tecla,
+                variante,
+                color=color,
+                fondo=tema.PAPEL,
+                tecla_destacada=tecla == "INS",  # A-11: INS en el color del modulo
             ).pack(side="left", padx=(0, 6))
         self._pestanas = ttk.Notebook(self)
         self._pestanas.pack(fill="both", expand=True, padx=12, pady=(0, 8))
@@ -96,6 +103,9 @@ class VentanaCompras(ttk.Frame):
         self._pestana_actual = self._pestanas.select()
         # CO-04: avisa si se deja una factura a medio hacer.
         self._pestanas.bind("<<NotebookTabChanged>>", self._al_cambiar_pestana)
+        tema.atajo_insert(
+            self, lambda: self.ir_a_registrar()
+        )  # A-11: Insert abre «Registrar factura»
 
         # --- Datos de la factura -----------------------------------------------------------
         datos = ttk.LabelFrame(self._tab_registrar, text="Registrar factura de compra", padding=10)

@@ -268,7 +268,13 @@ class VentanaPrincipal(tk.Tk):
 
     def mostrar(self, clave: str) -> None:
         """Cambia de modulo: muestra su pantalla y pinta franja, titulo y pestana con su color."""
-        if clave == self._activo or clave not in self._marcos:
+        if clave == self._activo:
+            # O-41: la tecla del modulo en el que ya se esta lo lleva a su pantalla principal.
+            al_repetir = getattr(self._marcos.get(clave), "al_repetir_tecla", None)
+            if callable(al_repetir):
+                al_repetir()
+            return
+        if clave not in self._marcos:
             return
         if clave not in self._permitidos():
             return  # HU-USR-02: la vendedora no entra a los modulos de la administradora

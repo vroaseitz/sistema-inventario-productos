@@ -179,8 +179,19 @@ class VentanaCatalogo(ttk.Frame):
         self.bind_all("<Insert>", self._atajo_nuevo, add="+")
 
     def _atajo_nuevo(self, _evento=None) -> None:
-        if self.winfo_ismapped() and self._pestanas.index("current") == 0:
+        if not self.winfo_ismapped():
+            return
+        try:
+            foco = self.focus_get()
+        except (KeyError, tk.TclError):
+            foco = None
+        if foco is not None and foco.winfo_toplevel() is not self.winfo_toplevel():
+            return  # hay una ficha o dialogo abierto encima
+        # A-11: en Productos abre «Nuevo producto»; en Categorías, «Nueva categoría».
+        if self._pestanas.index("current") == 0:
             self.nuevo()
+        elif self._pestanas.index("current") == 1:
+            self.nueva_categoria()
 
     def limpiar_filtros(self) -> None:
         self._buscar.set("")

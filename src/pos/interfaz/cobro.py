@@ -45,7 +45,16 @@ DESCRIPCION_MEDIO = {
     MedioPago.TRANSFERENCIA: "Medio propio",
     MedioPago.CREDITO_CLIENTE: "Cuenta de un cliente",
 }
-MOTIVOS_DESCUENTO = ("Cortesía", "Producto dañado", "Cliente frecuente", "Error de precio", "Otro")
+# O-42: «Próximo a vencer» es el motivo del descuento sugerido por un lote en alerta.
+MOTIVO_PROXIMO_A_VENCER = "Próximo a vencer"
+MOTIVOS_DESCUENTO = (
+    "Cortesía",
+    "Producto dañado",
+    "Cliente frecuente",
+    MOTIVO_PROXIMO_A_VENCER,
+    "Error de precio",
+    "Otro",
+)
 
 
 def _ventana_modal(host: tk.Misc, titulo: str) -> tk.Toplevel:
@@ -554,6 +563,22 @@ class DialogoDescuento(tk.Toplevel):
         BotonAccion(
             botones, "Aplicar descuento", self.aplicar, "ENTER", "primario", host_color()
         ).pack(side="left", padx=6)
+        # O-42: si el lote de la linea esta por vencer, el descuento sugerido viene propuesto.
+        sugerencia = (
+            host.descuento_sugerido(codigo) if self.detalle.descuento_linea.monto == 0 else None
+        )
+        if sugerencia is not None:
+            porcentaje, vence = sugerencia
+            self.var_tipo.set("Porcentaje")
+            self.var_valor.set(str(porcentaje))
+            self.var_motivo.set(MOTIVO_PROXIMO_A_VENCER)
+            tk.Label(
+                self,
+                text=f"Descuento sugerido {porcentaje} %: el lote vence el {vence:%d-%m}. "
+                "La vendedora decide si lo aplica.",
+                bg=PAPEL,
+                fg=TINTA_2,
+            ).grid(row=7, column=0, columnspan=3, padx=14, pady=(0, 10), sticky="w")
         self.var_tipo.trace_add("write", lambda *_a: self._recalcular())
         self.var_valor.trace_add("write", lambda *_a: self._recalcular())
         self.bind("<Return>", lambda _e: self.aplicar())
