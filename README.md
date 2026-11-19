@@ -359,11 +359,11 @@ pip install pyinstaller
 pyinstaller build/pos.spec
 ```
 
-El ejecutable final se construye en una máquina virtual Windows 8.1 (ADR 0003). Detalle en el manual técnico y de despliegue.
+El ejecutable final se construye en una máquina virtual Windows 8.1 (ADR 0001). Detalle en el manual técnico y de despliegue.
 
 ### 7. Migración desde el sistema antiguo
 
-Pendiente de implementación. Plan y procedimiento de reversa en `docs/09-plan-migracion/`.
+Se hace con `scripts/importar_migracion.py` a partir de los CSV extraídos del respaldo del sistema antiguo (primero con `--simulacro`). Procedimiento en `docs/12-despliegue/migracion-de-datos.md` y plan de reversa en `docs/09-plan-migracion/`. Las migraciones de esquema de Supabase (002 a 011) están en `database/migraciones/` y se aplican en orden desde el SQL Editor.
 
 ---
 

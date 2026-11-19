@@ -1,0 +1,44 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; font-family: "Inter", sans-serif; color: #f3f5f4; }
+    .stat { position: absolute; left: 56px; top: 880px; padding: 14px 30px 16px 26px; border-radius: 14px; background: rgba(15,16,22,.92); backdrop-filter: blur(22px); border-left: 6px solid #7fbf95; }
+    .st-c { font-size: 54px; font-weight: 900; letter-spacing: -0.02em; line-height: 1.05; color: #ffffff; white-space: nowrap; }
+    .st-l { font-size: 24px; font-weight: 500; color: #c8cecb; margin-top: 4px; white-space: nowrap; }
+  </style>
+  <div id="root" data-composition-id="cifras" data-width="1920" data-height="1080">
+    <div id="st-1" class="clip stat" data-start="21.4" data-duration="3.2" data-track-index="3"><div class="st-c">$9.500</div><div class="st-l">total a cobrar · 3 productos</div></div>
+    <div id="st-2" class="clip stat" data-start="24.6" data-duration="2.8" data-track-index="4"><div class="st-c">$5.000 + $4.500</div><div class="st-l">efectivo + tarjeta</div></div>
+    <div id="st-3" class="clip stat" data-start="35.0" data-duration="3.6" data-track-index="5"><div class="st-c">−$150</div><div class="st-l">10 % de descuento · motivo Cortesía</div></div>
+    <div id="st-4" class="clip stat" data-start="43.0" data-duration="3.2" data-track-index="6"><div class="st-c">$650</div><div class="st-l">de vuelto: pagó con $2.000 por $1.350</div></div>
+    <div id="st-5" class="clip stat" data-start="62.9" data-duration="3.2" data-track-index="7"><div class="st-c">Frutos secos y semillas</div><div class="st-l">categoría del producto nuevo · perecible, avisa 7 días antes</div></div>
+    <div id="st-6" class="clip stat" data-start="70.2" data-duration="2.6" data-track-index="8"><div class="st-c">Mascotas</div><div class="st-l">categoría nueva, ya en la lista y en el selector</div></div>
+    <div id="st-7" class="clip stat" data-start="86.0" data-duration="3.0" data-track-index="9"><div class="st-c">Vence 02-12-2026</div><div class="st-l">lote ALM-001 · 20 unidades</div></div>
+    <div id="st-8" class="clip stat" data-start="106.2" data-duration="3.0" data-track-index="10"><div class="st-c">$0</div><div class="st-l">de diferencia: esperado $21.350 = contado $21.350</div></div>
+    <div id="st-9" class="clip stat" data-start="113.6" data-duration="3.0" data-track-index="11"><div class="st-c">Distribuidora Sur</div><div class="st-l">proveedor nuevo, con su contacto</div></div>
+    <div id="st-10" class="clip stat" data-start="132.2" data-duration="3.4" data-track-index="12"><div class="st-c">$41.650</div><div class="st-l">factura F-1001: $35.000 + IVA $6.650</div></div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#st-1", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 21.4);
+    tl.fromTo("#st-1", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 24.3);
+    tl.fromTo("#st-2", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 24.6);
+    tl.fromTo("#st-2", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 27.1);
+    tl.fromTo("#st-3", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 35.0);
+    tl.fromTo("#st-3", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 38.3);
+    tl.fromTo("#st-4", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 43.0);
+    tl.fromTo("#st-4", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 45.9);
+    tl.fromTo("#st-5", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 62.9);
+    tl.fromTo("#st-5", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 65.8);
+    tl.fromTo("#st-6", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 70.2);
+    tl.fromTo("#st-6", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 72.5);
+    tl.fromTo("#st-7", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 86.0);
+    tl.fromTo("#st-7", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 88.7);
+    tl.fromTo("#st-8", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 106.2);
+    tl.fromTo("#st-8", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 108.9);
+    tl.fromTo("#st-9", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 113.6);
+    tl.fromTo("#st-9", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 116.3);
+    tl.fromTo("#st-10", { opacity: 0, y: 36, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.7, ease: "expo.out" }, 132.2);
+    tl.fromTo("#st-10", { opacity: 1, y: 0 }, { opacity: 0, y: 12, duration: 0.3, ease: "power2.in", immediateRender: false }, 135.3);
+    window.__timelines["cifras"] = tl;
+  </script>
+</template>

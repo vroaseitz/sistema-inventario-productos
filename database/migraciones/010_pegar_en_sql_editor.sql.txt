@@ -1,0 +1,9 @@
+-- Pegar completo en Supabase > SQL Editor y ejecutar (rol postgres). Es idempotente.
+SET search_path TO pos;
+
+ALTER TABLE producto DROP CONSTRAINT IF EXISTS producto_precio_venta_check;
+ALTER TABLE producto ADD CONSTRAINT producto_precio_venta_check CHECK (precio_venta >= 0);
+
+-- Verificar (debe devolver 0 filas):
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+WHERE conrelid = 'pos.producto'::regclass AND pg_get_constraintdef(oid) LIKE '%precio_venta > 0%';

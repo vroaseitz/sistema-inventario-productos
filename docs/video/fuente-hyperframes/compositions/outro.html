@@ -1,0 +1,29 @@
+<template>
+  <style>
+    #root { position: absolute; inset: 0; background: radial-gradient(ellipse at 70% 30%, #2a3a32 0%, #1b2220 62%); font-family: "Inter", sans-serif; color: #f3f5f4; }
+    #ou-titulo { position: absolute; left: 160px; top: 150px; font-size: 76px; font-weight: 900; letter-spacing: -0.02em; }
+    .card { position: absolute; top: 330px; width: 480px; height: 300px; border-radius: 18px; background: #232b28; border: 2px solid #3a4541; }
+    .cifra { position: absolute; left: 36px; top: 46px; font-size: 96px; font-weight: 900; letter-spacing: -0.03em; color: #7fbf95; white-space: nowrap; }
+    .rotulo { position: absolute; left: 38px; top: 188px; width: 410px; font-size: 26px; font-weight: 500; line-height: 1.3; color: #c8cecb; }
+    #ou-k1 { left: 160px; } #ou-k2 { left: 690px; } #ou-k3 { left: 1220px; }
+    #ou-pend { position: absolute; left: 160px; top: 740px; width: 1500px; font-size: 28px; line-height: 1.4; color: #c8cecb; }
+    #ou-pend b { color: #f3f5f4; }
+  </style>
+  <div id="root" data-composition-id="outro" data-width="1920" data-height="1080">
+    <div id="ou-titulo">Resultado de la prueba</div>
+    <div id="ou-k1" class="card"><div class="cifra">11</div><div class="rotulo">pasos recorridos con la app real: de abrir la jornada al corte</div></div>
+    <div id="ou-k2" class="card"><div class="cifra">$0</div><div class="rotulo">de diferencia en el corte: esperado $21.350, contado $21.350</div></div>
+    <div id="ou-k3" class="card"><div class="cifra">6</div><div class="rotulo">problemas encontrados en la prueba y ya corregidos</div></div>
+    <div id="ou-pend"><b>Pendiente:</b> aplicar la migración 007 en Supabase, sincronizar clientes, compras y proveedores, y probar la impresora real.</div>
+  </div>
+  <script>
+    const tl = gsap.timeline({ paused: true });
+    tl.fromTo("#root", { opacity: 0, filter: "blur(10px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.5, ease: "power2.out" }, 0);
+    tl.fromTo("#ou-titulo", { opacity: 0, filter: "blur(10px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.55, ease: "expo.out" }, 0.3);
+    tl.fromTo("#ou-k1", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "expo.out" }, 0.8);
+    tl.fromTo("#ou-k2", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "expo.out" }, 1.0);
+    tl.fromTo("#ou-k3", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "expo.out" }, 1.2);
+    tl.fromTo("#ou-pend", { opacity: 0 }, { opacity: 1, duration: 0.7, ease: "power2.out" }, 2.2);
+    window.__timelines["outro"] = tl;
+  </script>
+</template>

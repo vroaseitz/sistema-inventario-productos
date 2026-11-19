@@ -17,4 +17,7 @@ def crear_conexion(ruta: str) -> sqlite3.Connection:
     conexion.execute("PRAGMA journal_mode=WAL;")
     conexion.execute("PRAGMA foreign_keys=ON;")
     conexion.execute("PRAGMA synchronous=NORMAL;")
+    conexion.execute("PRAGMA busy_timeout=5000;")  # espera hasta 5 s si otra conexion escribe
+    conexion.execute("PRAGMA cache_size=-20000;")  # ~20 MB de cache de paginas (el defecto: 2 MB)
+    conexion.execute("PRAGMA temp_store=MEMORY;")  # ordenamientos y agrupaciones sin tocar disco
     return conexion
