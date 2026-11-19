@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 from typing import Any
 
+from pos.aplicacion.puertos import OperacionIncompleta, OperacionRechazada
 from pos.infraestructura.supabase.traductor import traducir_operacion
 
 
@@ -81,9 +82,19 @@ class AdaptadorSupabase:
             conexion, _ = self._conexion_viva()
             try:
                 self._aplicar(conexion, sentencias, operacion)
+            except (psycopg2.IntegrityError, psycopg2.DataError) as exc:
+                self.cerrar()
+                motivo = (str(exc).strip().splitlines() or [type(exc).__name__])[0]
+                raise OperacionRechazada(motivo) from exc
             except Exception:
                 self.cerrar()
                 raise
+        except (psycopg2.IntegrityError, psycopg2.DataError) as exc:
+            # El destino rechazo los DATOS (restriccion, tipo, duplicado): no es la conexion y
+            # reintentar no sirve. Se avisa con un error propio para apartarla sin frenar la cola.
+            self.cerrar()
+            motivo = (str(exc).strip().splitlines() or [type(exc).__name__])[0]
+            raise OperacionRechazada(motivo) from exc
         except Exception:
             self.cerrar()  # tras un rechazo del servidor la siguiente operacion parte limpia
             raise
@@ -150,7 +161,7 @@ def consulta_de_verificacion(operacion: dict) -> tuple[str, tuple, int] | None:
 
 def comprobar(operacion: dict, encontrado: int, esperado: int) -> None:
     if encontrado != esperado:
-        raise RuntimeError(
+        raise OperacionIncompleta(
             f"La operacion {operacion['entidad']} no quedo completa en el destino "
             f"(esperado {esperado}, encontrado {encontrado}); queda pendiente"
         )

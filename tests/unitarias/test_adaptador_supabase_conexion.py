@@ -6,6 +6,7 @@ import pytest
 
 psycopg2 = pytest.importorskip("psycopg2")
 
+from pos.aplicacion.puertos import OperacionRechazada  # noqa: E402
 from pos.infraestructura.supabase import adaptador_supabase  # noqa: E402
 from pos.infraestructura.supabase.adaptador_supabase import AdaptadorSupabase  # noqa: E402
 
@@ -126,6 +127,6 @@ def test_un_rechazo_del_servidor_descarta_la_conexion(conexiones, monkeypatch):
         raise psycopg2.IntegrityError("check violation")
 
     monkeypatch.setattr(Cursor, "execute", lambda self, *a: rechazo())
-    with pytest.raises(psycopg2.IntegrityError):
+    with pytest.raises(OperacionRechazada, match="check violation"):
         adaptador.publicar(OP)
     assert abiertas[0].closed  # la siguiente operacion parte de una conexion limpia

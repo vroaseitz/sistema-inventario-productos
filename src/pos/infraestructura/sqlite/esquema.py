@@ -314,6 +314,7 @@ _MIGRACIONES = (
     "ALTER TABLE productos ADD COLUMN desc_dias_2 INTEGER",
     "ALTER TABLE productos ADD COLUMN desc_pct_2 INTEGER",
     "ALTER TABLE productos ADD COLUMN iaba_pct INTEGER",
+    "ALTER TABLE cola_sincronizacion ADD COLUMN motivo_rechazo TEXT NOT NULL DEFAULT ''",
 )
 
 

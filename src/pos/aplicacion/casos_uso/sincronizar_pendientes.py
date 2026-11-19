@@ -12,7 +12,12 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from pos.aplicacion.puertos import ColaSincronizacion, PublicadorRemoto
+from pos.aplicacion.puertos import (
+    ColaSincronizacion,
+    OperacionIncompleta,
+    OperacionRechazada,
+    PublicadorRemoto,
+)
 
 
 @dataclass
@@ -20,6 +25,9 @@ class ResultadoSincronizacion:
     sincronizadas: int
     fallo_en: str | None = None
     incompleto: bool = False  # se acabo el tiempo dado; lo que falta sigue pendiente
+    rechazadas: int = (
+        0  # el destino las rechazo por sus datos: quedaron aparte, sin frenar al resto
+    )
 
 
 @dataclass
@@ -39,21 +47,61 @@ class SincronizarPendientes:
                 cerrar()  # suelta la conexion reutilizada al terminar la tanda
 
     def _publicar_todo(self, limite_segundos: float | None) -> ResultadoSincronizacion:
+        # Lo rechazado antes vuelve a intentarse: si la causa ya se arreglo (p. ej. se aplico una
+        # migracion en la nube), esta vez pasa; si no, se aparta de nuevo sin frenar a las demas.
+        reencolar = getattr(self.cola, "reencolar_rechazadas", None)
+        if callable(reencolar):
+            reencolar()
         inicio = self.reloj()
         sincronizadas = 0
+        rechazadas = 0
+        codigos_rechazados: set[str] = set()
         for operacion in self.cola.pendientes():
             if limite_segundos is not None and self.reloj() - inicio >= limite_segundos:
-                return ResultadoSincronizacion(sincronizadas=sincronizadas, incompleto=True)
+                return ResultadoSincronizacion(
+                    sincronizadas, incompleto=True, rechazadas=rechazadas
+                )
             try:
                 self.publicador.publicar(operacion)
-            except Exception:
-                # Se detiene sin marcar la fallida: quedara pendiente para el reintento.
+            except OperacionRechazada as exc:
+                # Anti-bucle: un dato que la nube no acepta no se reintenta eternamente ni frena
+                # a las demas; queda aparte con su motivo, a la vista.
+                self._rechazar(operacion, str(exc))
+                rechazadas += 1
+                codigo = _codigo_de(operacion)
+                if codigo:
+                    codigos_rechazados.add(codigo)
+                continue
+            except OperacionIncompleta:
+                codigo = _codigo_de(operacion)
+                if codigo and codigo in codigos_rechazados:
+                    # Depende de un producto que la nube rechazo: no llegara hasta que se arregle.
+                    self._rechazar(operacion, f"Depende del producto {codigo}, que fue rechazado")
+                    rechazadas += 1
+                    continue
                 return ResultadoSincronizacion(
-                    sincronizadas=sincronizadas, fallo_en=operacion["id_cliente"]
+                    sincronizadas, fallo_en=operacion["id_cliente"], rechazadas=rechazadas
+                )
+            except Exception:
+                # Sin conexion u otro fallo pasajero: se detiene sin marcar la fallida, que
+                # queda pendiente para el reintento.
+                return ResultadoSincronizacion(
+                    sincronizadas, fallo_en=operacion["id_cliente"], rechazadas=rechazadas
                 )
             self.cola.marcar_sincronizada(operacion["id_cliente"])
             sincronizadas += 1
-        return ResultadoSincronizacion(sincronizadas=sincronizadas)
+        return ResultadoSincronizacion(sincronizadas, rechazadas=rechazadas)
+
+    def _rechazar(self, operacion: dict, motivo: str) -> None:
+        marcar = getattr(self.cola, "marcar_rechazada", None)
+        if callable(marcar):
+            marcar(operacion["id_cliente"], motivo)
+
+
+def _codigo_de(operacion: dict) -> str:
+    """Codigo de producto al que se refiere la operacion (para propagar un rechazo a lo suyo)."""
+    datos = operacion.get("datos") or {}
+    return str(datos.get("codigo") or datos.get("codigo_producto") or "")
 
 
 MENSAJE_CIERRE_ENVIADO = "Jornada cerrada. Datos enviados a la nube."
@@ -63,6 +111,13 @@ def mensaje_cierre_pendientes(cuantas: int) -> str:
     return (
         f"Jornada cerrada. Quedan {cuantas} operaciones sin enviar; se enviarán en el próximo "
         "cierre o con el botón Sincronizar."
+    )
+
+
+def mensaje_rechazadas(cuantas: int) -> str:
+    return (
+        f"La nube rechazó {cuantas} operaciones por sus datos. Quedaron guardadas en este "
+        "computador y no se pierden; avisa a soporte para revisarlas."
     )
 
 
@@ -92,4 +147,13 @@ class SincronizarAlCierre:
             quedan = len(self.cola.pendientes())
         except Exception:  # la sincronizacion jamas debe romper el cierre
             return None
-        return MENSAJE_CIERRE_ENVIADO if quedan == 0 else mensaje_cierre_pendientes(quedan)
+        rechazadas = getattr(self.cola, "rechazadas", None)
+        n_rechazadas = len(rechazadas()) if callable(rechazadas) else 0
+        texto = MENSAJE_CIERRE_ENVIADO if quedan == 0 else mensaje_cierre_pendientes(quedan)
+        if n_rechazadas:
+            texto = (
+                texto.replace(MENSAJE_CIERRE_ENVIADO, "Jornada cerrada.")
+                + " "
+                + (mensaje_rechazadas(n_rechazadas))
+            )
+        return texto

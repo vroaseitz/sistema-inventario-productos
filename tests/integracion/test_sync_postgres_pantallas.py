@@ -171,3 +171,59 @@ def test_la_migracion_007_se_puede_aplicar_dos_veces(pg):
     pg.execute("SET search_path TO pos;")
     pg.execute(sql)  # ya estaba aplicada por la fixture: no debe fallar
     pg.execute("RESET search_path;")
+
+
+def test_precio_cero_llega_a_la_nube_con_la_migracion_010(pg):
+    """Migracion de datos: 25 productos traen precio $0; antes la nube los rechazaba (CHECK > 0)."""
+    app = App()
+    app.sembrar("SINPRECIO", "Producto sin precio", 0, 3)
+    assert app.sincronizar().fallo_en is None
+    assert _uno(pg, "SELECT precio_venta FROM pos.producto WHERE codigo = 'SINPRECIO'") == 0
+
+
+def test_una_operacion_que_la_nube_rechaza_no_frena_a_las_demas(pg):
+    """El destino rechaza un precio negativo (CHECK); el resto de la cola igual llega."""
+    app = App()
+    app.sembrar("BUENO", "Producto bueno", 1000, 5)
+    app.cola.encolar(
+        "producto",
+        "upsert",
+        {
+            "codigo": "MALO",
+            "nombre": "Dato invalido",
+            "precio": -5,
+            "unidad_venta": "unidad",
+            "activo": True,
+            "categoria": "Sin categoria",
+        },
+        "malo-1",
+    )
+    app.sembrar("OTRO", "Otro producto", 2000, 2)
+
+    resultado = app.sincronizar()
+
+    assert resultado.fallo_en is None and resultado.rechazadas == 1
+    assert _uno(pg, "SELECT count(*) FROM pos.producto WHERE codigo IN ('BUENO', 'OTRO')") == 2
+    assert _uno(pg, "SELECT count(*) FROM pos.producto WHERE codigo = 'MALO'") == 0
+    assert [r["id_cliente"] for r in app.cola.rechazadas()] == ["malo-1"]
+
+
+def test_eliminar_un_producto_sin_historia_lo_borra_en_la_nube_y_con_historia_no(pg):
+    """CA-22: el borrado remoto nunca toca un producto con ventas, lotes o facturas."""
+    from pos.aplicacion.casos_uso.eliminar_producto import EliminarProducto
+
+    app = App()
+    app.sembrar("ERROR1", "Creado por error", 1000, 0)
+    app.sembrar("VIVO1", "Con ventas", 1000, 10)
+    app.abrir.ejecutar(usuario_id=1, fondo_inicial=Dinero(0))
+    app.vender([("VIVO1", 1)], [Pago(medio=MedioPago.EFECTIVO, monto=Dinero(1000))])
+    assert app.sincronizar().fallo_en is None
+    assert _uno(pg, "SELECT count(*) FROM pos.producto") == 2
+
+    EliminarProducto(app.productos, cola=app.cola).ejecutar("ERROR1")
+    # un borrado «a la fuerza» del que tiene ventas: la nube lo ignora (guardas de historia)
+    app.cola.encolar("producto_eliminar", "delete", {"codigo": "VIVO1"}, "forzado-1")
+
+    assert app.sincronizar().fallo_en is None
+    assert _uno(pg, "SELECT count(*) FROM pos.producto WHERE codigo = 'ERROR1'") == 0
+    assert _uno(pg, "SELECT count(*) FROM pos.producto WHERE codigo = 'VIVO1'") == 1

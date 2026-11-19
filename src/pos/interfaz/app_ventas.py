@@ -33,6 +33,7 @@ from pos.aplicacion.casos_uso.resumen_del_dia import ResumenDelDia
 from pos.aplicacion.casos_uso.sincronizar_pendientes import (
     SincronizarAlCierre,
     SincronizarPendientes,
+    mensaje_rechazadas,
 )
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
@@ -478,9 +479,12 @@ class VentanaVentas(ttk.Frame):
             return
         pendientes = len(self._cola.pendientes())
         destino = "" if self._publicador is not None else " (sin Supabase configurado)"
-        self._lbl_sync.config(
-            text="Todo sincronizado" if pendientes == 0 else f"Pendientes: {pendientes}{destino}"
-        )
+        texto = "Todo sincronizado" if pendientes == 0 else f"Pendientes: {pendientes}{destino}"
+        rechazadas = getattr(self._cola, "rechazadas", None)
+        n_rechazadas = len(rechazadas()) if callable(rechazadas) else 0
+        if n_rechazadas:  # estado explicito: lo que la nube no acepto se ve, no se esconde
+            texto += f" · {n_rechazadas} rechazadas por la nube"
+        self._lbl_sync.config(text=texto)
         self._publicar_estado()
 
     def _publicar_estado(self) -> None:
@@ -489,7 +493,7 @@ class VentanaVentas(ttk.Frame):
         if callable(barra):
             barra(
                 "Sincronizado"
-                if "sincronizado" in self._lbl_sync.cget("text").lower()
+                if self._lbl_sync.cget("text") == "Todo sincronizado"
                 else self._lbl_sync.cget("text"),
                 self._lbl_turno.cget("text"),
             )
@@ -502,6 +506,8 @@ class VentanaVentas(ttk.Frame):
             return
         resultado = SincronizarPendientes(self._cola, self._publicador).ejecutar()
         self._refrescar_sync()
+        if resultado.rechazadas:
+            messagebox.showwarning("Sincronización", mensaje_rechazadas(resultado.rechazadas))
         if resultado.fallo_en is not None:
             messagebox.showwarning(
                 "Sincronización",
