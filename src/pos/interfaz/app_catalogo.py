@@ -482,7 +482,8 @@ class VentanaCatalogo(ttk.Frame):
             ttk.Label(d, text="% de descuento").grid(row=fila_n, column=4, sticky="w")
         ttk.Label(
             d,
-            text="Vacío = política por defecto: 20 % desde 14 días y 50 % desde 7 días.",
+            text="Vacío = política por defecto: 20 % desde 14 días y 50 % desde 7 días. "
+            "Solo se sugiere dentro de los días de aviso del producto.",
             foreground="#666",
         ).grid(row=2, column=0, columnspan=5, sticky="w", pady=(4, 0))
 

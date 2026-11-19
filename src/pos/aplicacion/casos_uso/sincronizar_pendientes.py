@@ -55,7 +55,7 @@ class SincronizarPendientes:
         inicio = self.reloj()
         sincronizadas = 0
         rechazadas = 0
-        codigos_rechazados: set[str] = set()
+        claves_rechazadas: set[str] = set()
         for operacion in self.cola.pendientes():
             if limite_segundos is not None and self.reloj() - inicio >= limite_segundos:
                 return ResultadoSincronizacion(
@@ -68,15 +68,15 @@ class SincronizarPendientes:
                 # a las demas; queda aparte con su motivo, a la vista.
                 self._rechazar(operacion, str(exc))
                 rechazadas += 1
-                codigo = _codigo_de(operacion)
-                if codigo:
-                    codigos_rechazados.add(codigo)
+                claves_rechazadas |= _claves_de(operacion)
                 continue
             except OperacionIncompleta:
-                codigo = _codigo_de(operacion)
-                if codigo and codigo in codigos_rechazados:
-                    # Depende de un producto que la nube rechazo: no llegara hasta que se arregle.
-                    self._rechazar(operacion, f"Depende del producto {codigo}, que fue rechazado")
+                padre = _claves_de(operacion) & claves_rechazadas
+                if padre:
+                    # Depende de algo que la nube rechazo (un producto, una venta, un cliente):
+                    # no llegara hasta que eso se arregle, pero no debe frenar a las demas.
+                    nombre = sorted(padre)[0].replace(":", " ")
+                    self._rechazar(operacion, f"Depende de {nombre}, que fue rechazado")
                     rechazadas += 1
                     continue
                 return ResultadoSincronizacion(
@@ -98,10 +98,20 @@ class SincronizarPendientes:
             marcar(operacion["id_cliente"], motivo)
 
 
-def _codigo_de(operacion: dict) -> str:
-    """Codigo de producto al que se refiere la operacion (para propagar un rechazo a lo suyo)."""
-    datos = operacion.get("datos") or {}
-    return str(datos.get("codigo") or datos.get("codigo_producto") or "")
+def _claves_de(operacion: dict) -> set[str]:
+    """A que cosas se refiere la operacion (producto, venta, cliente), para que un rechazo se
+    arrastre a lo que depende de el y a nada mas."""
+    d = operacion.get("datos") or {}
+    claves: set[str] = set()
+    for campo in ("codigo", "codigo_producto"):
+        if d.get(campo):
+            claves.add(f"producto:{d[campo]}")
+    if operacion.get("entidad") in ("venta", "venta_anular") and d.get("uuid"):
+        claves.add(f"venta:{d['uuid']}")
+    cliente = d.get("cliente") if isinstance(d.get("cliente"), dict) else d
+    if operacion.get("entidad") in ("cliente", "movimiento_cliente") and cliente.get("id"):
+        claves.add(f"{cliente['id']}")  # ya viene como «cliente:<id>»
+    return claves
 
 
 MENSAJE_CIERRE_ENVIADO = "Jornada cerrada. Datos enviados a la nube."
@@ -146,7 +156,10 @@ class SincronizarAlCierre:
             )
             quedan = len(self.cola.pendientes())
         except Exception:  # la sincronizacion jamas debe romper el cierre
-            return None
+            return (
+                "Jornada cerrada. No se pudo enviar a la nube; se reintentará en el próximo "
+                "cierre o con el botón Sincronizar."
+            )
         rechazadas = getattr(self.cola, "rechazadas", None)
         n_rechazadas = len(rechazadas()) if callable(rechazadas) else 0
         texto = MENSAJE_CIERRE_ENVIADO if quedan == 0 else mensaje_cierre_pendientes(quedan)

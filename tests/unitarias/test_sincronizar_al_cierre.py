@@ -83,7 +83,8 @@ def test_un_error_inesperado_nunca_rompe_el_cierre():
         def pendientes(self):
             raise RuntimeError("base bloqueada")
 
-    assert SincronizarAlCierre(ColaRota(), PublicadorQueAcepta()).ejecutar() is None
+    mensaje = SincronizarAlCierre(ColaRota(), PublicadorQueAcepta()).ejecutar()
+    assert mensaje is not None and "No se pudo enviar a la nube" in mensaje  # no se calla
 
 
 def test_al_cierre_se_envia_solo_lo_que_alcanza_en_el_tiempo_dado(cola):

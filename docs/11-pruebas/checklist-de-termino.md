@@ -1,6 +1,6 @@
 # Checklist de término — Emporio NaturalSur
 
-**Fecha:** 11-11-2026 · **Equipo:** Silva, Guzmán, Roa · ✅ = verificado; ⚠️ = parcial o pendiente.
+**Fecha:** 19-11-2026 (actualizado; la primera versión es del 11-11) · **Equipo:** Silva, Guzmán, Roa · ✅ = verificado; ⚠️ = parcial o pendiente.
 
 ## 1. Entregables
 
@@ -24,13 +24,14 @@
 | Venta, caja, descuentos, crédito, cupo, anulación (F1, F4) | ✅ probado (automático y manual) |
 | Catálogo, inventario, lotes y alertas (F2, F3) | ✅ |
 | Compras (F5), reportes (F6), administración y auditoría (F7) | ✅ |
-| Sincronización con Supabase | ⚠️ aplicar migración 009; sync real no repetida con el código nuevo |
+| Sincronización con Supabase | ⚠️ aplicar migraciones 009 y 010 y probar con la `.env` real; ya sincroniza al cerrar la jornada y aparta lo rechazado |
+| Migración de datos del sistema antiguo | ✅ importador probado con los CSV reales; ⚠️ falta ensayarlo en la VM y definir el corte (ver `docs/12-despliegue/plan-de-implantacion-20-11.md`) |
 | `.exe` en Windows 8.1 | ⚠️ probado el 08-11; recompilar con el código nuevo y volver a probar |
 | Impresora real | ⚠️ no probada (falta el equipo) |
 
 ## 3. Pruebas y calidad
 
-- ✅ 459 pruebas automáticas pasan en `develop` (21,8 s), incluidos los 7 flujos E2E de interfaz.
+- ✅ 530 pruebas automáticas pasan en `fix/qa-18-11` con PostgreSQL real (≈ 23 s), incluidos los flujos E2E de interfaz y el de migración. En `develop` pasan 459.
 - ✅ Los 94 defectos registrados están corregidos: 50 cerrados por QA y 44 esperando su re-prueba.
 - ⚠️ Falta la re-prueba de QA de los 44 corregidos y confirmar con QA la prioridad y clasificación de CO-07, CO-08, CL-07 e I-07.
 

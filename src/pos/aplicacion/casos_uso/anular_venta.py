@@ -96,6 +96,15 @@ class AnularVenta:
             raise ReglaVentaInvalida("Elige qué se hace con el dinero del cliente")
         if destino is not None and destino not in opciones:
             raise ReglaVentaInvalida(self._por_que_no(venta, destino))
+        # Todo lo que pueda fallar se comprueba ANTES de tocar nada: la conexion local confirma
+        # cada cambio por separado, y un fallo a mitad dejaria el stock repuesto con la venta
+        # todavia cobrada (reintentar lo repondria dos veces).
+        if destino in (DestinoDevolucion.EFECTIVO, DestinoDevolucion.CAMBIO) and (
+            self.registrar_movimiento_caja is None
+        ):
+            raise ReglaVentaInvalida("No se puede registrar la salida de caja")
+        if destino is DestinoDevolucion.SALDO_A_FAVOR and self.repositorio_clientes is None:
+            raise ReglaVentaInvalida("El saldo a favor solo se puede dejar si hay un cliente")
         venta.anular(motivo_final, usuario)
 
         self._restituir_existencias(venta)
@@ -110,7 +119,24 @@ class AnularVenta:
                 "pagada",
                 f"anulada ({motivo_final})" + (f" · {destino.value}" if destino else ""),
             )
+            por_devolver = self._pendiente_por_terminal(venta, destino)
+            if por_devolver:
+                # Lo pagado con tarjeta o transferencia no sale de la caja: se reversa en el
+                # terminal o con una transferencia. Queda constancia para que no se olvide.
+                self.auditor.registrar(
+                    "Reembolso pendiente por tarjeta o transferencia",
+                    f"Venta N° {venta.id}",
+                    formatear_clp(por_devolver),
+                    "por devolver al cliente fuera de la caja",
+                )
         return venta
+
+    @staticmethod
+    def _pendiente_por_terminal(venta: Venta, destino: DestinoDevolucion | None) -> int:
+        """Lo pagado sin efectivo ni credito que NO quedo como saldo a favor del cliente."""
+        if destino is DestinoDevolucion.SALDO_A_FAVOR:
+            return 0
+        return venta.monto_pagado_sin_credito - venta.monto_en_efectivo
 
     @staticmethod
     def _por_que_no(venta: Venta, destino: DestinoDevolucion) -> str:

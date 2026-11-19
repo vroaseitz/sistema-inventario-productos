@@ -1,12 +1,15 @@
 # Registro de defectos por ciclos de prueba — Emporio NaturalSur
 
-**Versión:** 1.2 · **Fecha:** 11-11-2026 · **Responsable QA:** Victoria Roa · **Desarrollo:** Silva, Guzmán
+**Versión:** 1.3 · **Fecha:** 19-11-2026 · **Responsable QA:** Victoria Roa · **Desarrollo:** Silva, Guzmán
 
 Este registro reúne **todos los defectos y hallazgos** que el QA (Victoria Roa) reportó en las seis rondas
 de prueba, con su prioridad, quién los corrige, el estado actual y cómo se corrigieron. La fuente es el
 Excel `Hallazgos-QA_NaturalSur.xlsx` (una hoja por módulo, evidencias en la carpeta *Capston › QA ›
 Evidencia - Fotos*, nombradas con el ID del caso) y el informe «QA 09-11 — hallazgos para corregir».
 Los casos de prueba están en `casos-de-prueba.md`.
+
+> **Ciclo 8 (QA 16-11 al 19-11):** está en la sección 7. Los totales de las secciones 2 a 5 son los del
+> corte del 11-11 y no incluyen ese ciclo.
 
 ## 1. Cómo se clasifican
 
@@ -263,3 +266,26 @@ Columnas: **Reportado** = fecha del ciclo en que se encontró · **Re-prueba QA*
 - Cada hallazgo corregido quedó **con su prueba**: ver la trazabilidad en `casos-de-prueba.md`.
 - Los hallazgos nuevos del 09-11 salieron de **probar con ventas reales** (crédito, cupo, lotes); ese
   tipo de prueba se repite antes de cada entrega.
+
+## 7. Ciclo 8 — QA 16-11, 18-11 y 19-11 (ramas `fix/qa-16-11` y `fix/qa-18-11`)
+
+Fuente: informes «QA 18-11 — nuevos hallazgos y definiciones de la PO» y «QA 18-11 (parte 2)», y la
+decisión SY-01 del 18-11. Los que están en `fix/qa-16-11` (O-40, O-41, CA-11 y la primera parte de A-11,
+O-42 y CL-06) los corrigió Eduardo (commits f0b447c y a4d19c9); lo de `fix/qa-18-11` lo corrigió Fernando
+(commits 23ee576, 69ab61d y siguientes). **Todos esperan la re-prueba de QA** (guía de pruebas en
+`qa-manual-19-11.md`).
+
+| ID | Resumen | Clasif. | Prior. | Resp. | Reportado | Estado | Re-prueba QA | Corrección |
+|---|---|---|---|---|---|---|---|---|
+| O-42 | Descuento por vencimiento en dos etapas (20 % a 14 días, 50 % a 7), editable por producto; F3 y F1 usan la misma política | Alcance | Media | Eduardo / Fernando | 17-11-2026 | Corregido | Pendiente | Política de dos etapas en `PoliticaDescuento`, cuatro campos en la ficha de F2, ADR 0005 actualizado (23ee576) |
+| CL-06 | Al anular una venta pagada hay que ofrecer devolución en efectivo, saldo a favor o cambio; el «Saldo final» dice «A favor $X» | Alcance | Media | Eduardo / Fernando | 17-11-2026 | Corregido | Pendiente | Tres opciones en el diálogo de anular; la devolución sale como retiro; el arqueo cuenta el efectivo de las anuladas sin descontarlo dos veces (23ee576, 69ab61d) |
+| CL-08 | El estado de cuenta muestra dos cifras que no calzan y ninguna es lo que falta pagar | Presentación | Media | Eduardo / Fernando | 18-11-2026 | Corregido | Pendiente | Un solo desglose que termina en «Falta pagar» o «A favor $X» (23ee576) |
+| A-11 | El botón «Registrar factura» sigue blanco; debe ir relleno con el color de F5 | Presentación | Baja | Eduardo / Fernando | 18-11-2026 | Corregido | Pendiente | Botón principal de F5 (23ee576) |
+| A-12 | Una prueba automática falla de vez en cuando en Windows (comprobantes con el mismo nombre) | Calidad de código | Baja | Fernando | 18-11-2026 | Corregido | Pendiente | Contador único en el nombre del comprobante, con prueba (23ee576) |
+| CA-21 | Falta registrar el impuesto adicional a bebidas (IABA); el margen debe incluirlo | Alcance | Media | Fernando | 18-11-2026 | Corregido | Pendiente | Tasa 10 % / 18 % en la ficha de F2, guardada aparte del neto; margen sobre neto + IABA; F5 muestra el IABA aparte del IVA (23ee576) |
+| CA-22 | No se puede eliminar un producto creado por error | Alcance | Baja | Fernando | 18-11-2026 | Corregido | Pendiente | Botón «Eliminar» en la ficha: solo sin historia; con historia ofrece desactivar (23ee576) |
+| SY-01 | La sincronización con Supabase solo ocurre si alguien aprieta «Sincronizar» | Alcance | Alta | Fernando | 18-11-2026 | Corregido | Pendiente | Se sincroniza sola al «Hacer corte de hoy» (máx. 45 s), sin bloquear el cierre (23ee576) |
+| SY-02 | Un dato que Supabase rechaza (p. ej. precio $0) frenaba toda la cola de sincronización | Error | Alta | Fernando | 18-11-2026 | Corregido | Pendiente | Premortem 18-11. Migración 010 (precio 0) y cola de «rechazadas»: se aparta con su motivo y no frena a las demás (9c77066) |
+| SY-03 | La primera sincronización tras migrar (≈3.400 operaciones) tardaría más de una hora | Calidad | Alta | Fernando | 18-11-2026 | Corregido | Pendiente | Una sola conexión y una ida y vuelta por operación: con 100 ms de latencia simulada, de 0,65 a 0,33 s por operación (69ab61d) |
+| MIG-01 | Falta el importador de productos y clientes del sistema antiguo | Alcance | Alta | Fernando | 18-11-2026 | Corregido | Pendiente | `scripts/importar_migracion.py` con simulacro, idempotente y resumen de rechazos (eea92e2); guía en `docs/12-despliegue/migracion-de-datos.md` |
+

@@ -14,10 +14,11 @@ from pos.dominio.clientes import (
     Cliente,
     MovimientoCliente,
     TipoMovimientoCliente,
-    abonos_del_ciclo,
     consumos_del_ciclo,
+    creditos_del_ciclo,
     descuento_credito,
     detalle_descuento,
+    saldo_a_favor_del_ciclo,
     saldo_de,
     total_a_pagar,
 )
@@ -166,8 +167,12 @@ class PagarEstadoDeCuenta:
         if any(m.detalle == marca for m in movimientos):
             raise ReglaClienteInvalida("El descuento de este ciclo ya se aplicó")
         descuento = descuento_credito(consumos)
-        a_pagar = max(0, total_a_pagar(consumos) - abonos_del_ciclo(movimientos, anio, mes))
-        if a_pagar + descuento > saldo_de(movimientos):
+        a_pagar = max(0, total_a_pagar(consumos) - creditos_del_ciclo(movimientos, anio, mes))
+        # El saldo a favor del ciclo (CL-06) puede dejar la cuenta en negativo al asentar el
+        # descuento: eso es legitimo, es plata del cliente, no un error de la cuenta.
+        if a_pagar + descuento > saldo_de(movimientos) + saldo_a_favor_del_ciclo(
+            movimientos, anio, mes
+        ):
             raise ReglaClienteInvalida(
                 "El saldo del cliente es menor que lo que quedaría por pagar: revisa su cuenta"
             )

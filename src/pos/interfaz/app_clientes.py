@@ -27,6 +27,7 @@ from pos.dominio.clientes import (
     TipoMovimientoCliente,
     abonos_del_ciclo,
     consumos_del_ciclo,
+    creditos_del_ciclo,
     cupo_disponible,
     descuento_credito,
     en_ciclo,
@@ -337,7 +338,7 @@ class VentanaClientes(ttk.Frame):
                         f"Descuento del {PORCENTAJE_DESCUENTO_CREDITO} % (crédito familiar)",
                         False,
                     ),
-                    ("abonos", "Abonos del ciclo", False),
+                    ("abonos", "Abonos y saldo a favor", False),
                     ("falta", "Falta pagar", True),  # CL-08: un solo desglose, una cifra final
                 ),
             ),
@@ -543,7 +544,7 @@ class VentanaClientes(ttk.Frame):
                     ),
                 )
         consumos = consumos_del_ciclo(movs, anio, mes)
-        abonos = abonos_del_ciclo(movs, anio, mes)
+        abonos = creditos_del_ciclo(movs, anio, mes)  # abonos + saldo a favor (CL-06)
         descuento = descuento_credito(consumos)
         self._lbl_resumen["anterior"].config(text=formatear_clp(saldo_anterior(movs, anio, mes)))
         self._lbl_resumen["consumos"].config(text=formatear_clp(consumos))

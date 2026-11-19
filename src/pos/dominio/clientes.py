@@ -28,6 +28,9 @@ MEDIO_ANULACION = "anulacion"
 # cuenta del cliente como un abono sin plata: deja el saldo en negativo («A favor $X») y se
 # descuenta de su proxima compra a credito. No es un pago del cliente ni revierte un consumo.
 MEDIO_SALDO_A_FAVOR = "saldo_a_favor"
+# La deuda que el cliente traia del sistema antiguo entra como un consumo con este detalle (fechado
+# antes del ciclo en curso). Es deuda heredada: no es un consumo del ciclo y no recibe el 20 %.
+DETALLE_SALDO_ANTERIOR = "Saldo anterior"
 
 
 def detalle_descuento(anio: int, mes: int) -> str:
@@ -106,7 +109,10 @@ def total_a_pagar(consumos: int) -> int:
 
 
 def falta_pagar(consumos: int, abonos: int) -> int:
-    """CL-08: lo que aun falta pagar del ciclo (consumos - 20 % - abonos). Negativo = a favor."""
+    """CL-08: lo que aun falta pagar del ciclo (consumos - 20 % - abonos). Negativo = a favor.
+
+    `abonos` incluye lo que el cliente ya tenia a favor en el ciclo (`creditos_del_ciclo`).
+    """
     return total_a_pagar(consumos) - abonos
 
 
@@ -159,7 +165,9 @@ def consumos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int
     consumido = sum(
         m.monto
         for m in movimientos
-        if m.tipo is TipoMovimientoCliente.CONSUMO and en_ciclo(m, anio, mes)
+        if m.tipo is TipoMovimientoCliente.CONSUMO
+        and en_ciclo(m, anio, mes)
+        and not m.detalle.startswith(DETALLE_SALDO_ANTERIOR)
     )
     anulado = sum(
         m.monto
@@ -179,4 +187,22 @@ def abonos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) 
         if m.tipo is TipoMovimientoCliente.ABONO
         and m.medio not in (MEDIO_DESCUENTO, MEDIO_ANULACION, MEDIO_SALDO_A_FAVOR)
         and en_ciclo(m, anio, mes)
+    )
+
+
+def saldo_a_favor_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
+    """Dinero que el cliente dejo a favor en el ciclo al anularse una venta pagada (CL-06)."""
+    return sum(
+        m.monto
+        for m in movimientos
+        if m.tipo is TipoMovimientoCliente.ABONO
+        and m.medio == MEDIO_SALDO_A_FAVOR
+        and en_ciclo(m, anio, mes)
+    )
+
+
+def creditos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
+    """Lo que ya esta cubierto del ciclo: abonos del cliente mas su saldo a favor."""
+    return abonos_del_ciclo(movimientos, anio, mes) + saldo_a_favor_del_ciclo(
+        movimientos, anio, mes
     )

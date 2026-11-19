@@ -47,7 +47,18 @@ class AdaptadorSupabase:
             ) from exc
         # Si la URL ya trae sslmode, manda la URL (p. ej. ?sslmode=disable en pruebas locales).
         extra = {} if "sslmode=" in self._db_url else {"sslmode": self._sslmode}
-        return psycopg2.connect(self._db_url, connect_timeout=5, **extra)
+        # Keepalives: una conexion reutilizada que quedo «medio muerta» se detecta en segundos y
+        # no cuelga la pantalla minutos. (No se usa `options=-c statement_timeout`: el pooler en
+        # modo transaccion de Supabase rechaza parametros de arranque.)
+        return psycopg2.connect(
+            self._db_url,
+            connect_timeout=5,
+            keepalives=1,
+            keepalives_idle=15,
+            keepalives_interval=5,
+            keepalives_count=3,
+            **extra,
+        )
 
     def cerrar(self) -> None:
         """Cierra la conexion reutilizada al terminar la tanda; la proxima abre otra."""
@@ -147,6 +158,12 @@ def consulta_de_verificacion(operacion: dict) -> tuple[str, tuple, int] | None:
         return (
             "SELECT count(*) FROM pos.movimiento_caja WHERE id_cliente = %s",
             (operacion["id_cliente"],),
+            1,
+        )
+    if entidad == "venta_anular":
+        return (
+            "SELECT count(*) FROM pos.venta WHERE id_cliente = %s AND estado = 'anulada'",
+            (d["uuid"],),
             1,
         )
     if entidad == "venta":

@@ -59,7 +59,7 @@ def test_un_rechazo_no_frena_al_resto_y_se_arrastra_a_lo_que_depende_de_el(cola)
     rechazadas = {r["id_cliente"]: r for r in cola.rechazadas()}
     assert set(rechazadas) == {"op-2", "op-3"}
     assert "precio_venta" in rechazadas["op-2"]["motivo"]
-    assert "Depende del producto MALO" in rechazadas["op-3"]["motivo"]
+    assert "Depende de producto MALO" in rechazadas["op-3"]["motivo"]
 
 
 def test_lo_rechazado_se_reintenta_en_la_siguiente_tanda_y_pasa_si_se_arreglo(cola):

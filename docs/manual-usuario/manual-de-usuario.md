@@ -95,7 +95,9 @@ Antes de la primera venta del día hay que abrir la jornada:
 
 - **Caja y corte → Movimiento de caja**: para registrar un ingreso de sencillo o un retiro de dinero.
 - **Caja y corte → Hacer corte de hoy**: al terminar el día, contar el dinero y cerrar la jornada. El corte muestra
-  lo vendido por medio de pago, el efectivo que debería haber y la diferencia.
+  lo vendido por medio de pago, el efectivo que debería haber y la diferencia. Al terminar, el sistema envía
+  solo los datos a la nube; si no hay internet avisa «Quedan N operaciones sin enviar» (no es un error: se
+  envían en el próximo cierre o con el botón **Sincronizar**).
 - La pestaña **Resumen del día** muestra las ventas y la meta del día, y avisa lo que necesita atención
   (por ejemplo, productos sin costo). El enlace **Ver →** lleva directo a corregirlo.
 
@@ -120,6 +122,13 @@ Antes de la primera venta del día hay que abrir la jornada:
 - **Nuevo producto**: código, nombre, categoría, precio de venta, costo neto y si es perecible o a granel.
 - Para modificar un producto, seleccionarlo en la lista y editarlo. Un producto que ya no se vende se
   **desactiva** (no se borra, para conservar su historia).
+- En la ficha del producto, la sección **Descuento al acercarse el vencimiento** permite cambiar, para
+  ese producto, los días y el porcentaje de cada etapa. Vacío = el descuento por defecto (20 % desde 14
+  días y 50 % desde 7 días antes de vencer). La misma cifra aparece en F3 › Alertas y en la venta.
+- Si el producto es una **bebida con impuesto adicional (IABA)**, se elige 10 % o 18 % en la sección
+  *Costo*. El IABA se guarda aparte del costo neto y la ganancia se calcula sobre el neto más el IABA.
+- **Eliminar** (en la ficha) borra un producto creado por error, solo si nunca tuvo ventas, lotes,
+  facturas ni movimientos. Si los tiene, el sistema ofrece desactivarlo.
 - Los filtros de la lista permiten ver, por ejemplo, los productos **sin costo** cargado. Sin costo, el
   programa no puede calcular la ganancia de ese producto.
 

@@ -504,8 +504,20 @@ class VentanaVentas(ttk.Frame):
                 "Sincronización", "No hay Supabase configurado (variable SUPABASE_DB_URL)"
             )
             return
-        resultado = SincronizarPendientes(self._cola, self._publicador).ejecutar()
+        # Tras una migracion hay miles de operaciones: se envia por tandas de 2 minutos para que la
+        # pantalla no parezca colgada; se vuelve a presionar para seguir.
+        self._lbl_sync.config(text="Sincronizando con la nube…")
+        self.update_idletasks()
+        resultado = SincronizarPendientes(self._cola, self._publicador).ejecutar(
+            limite_segundos=120
+        )
         self._refrescar_sync()
+        if resultado.incompleto:
+            messagebox.showinfo(
+                "Sincronización",
+                f"Se enviaron {resultado.sincronizadas} operaciones y quedan "
+                f"{len(self._cola.pendientes())}. Presiona «Sincronizar» otra vez para seguir.",
+            )
         if resultado.rechazadas:
             messagebox.showwarning("Sincronización", mensaje_rechazadas(resultado.rechazadas))
         if resultado.fallo_en is not None:
@@ -1703,7 +1715,15 @@ class VentanaVentas(ttk.Frame):
         producto = self._repo_productos.obtener_por_codigo(codigo)
         if lote is None or producto is None:
             return None
-        porcentaje = producto.politica_descuento().porcentaje(lote.dias_para_vencer(date.today()))
+        # Mismo criterio que F3 › Alertas: solo dentro de los dias de aviso del producto (si no
+        # tiene, el de la configuracion), y con las etapas propias del producto (O-42).
+        aviso = producto.dias_aviso or (
+            self._configuracion.obtener("aviso_defecto_dias") if self._configuracion else 14
+        )
+        dias = lote.dias_para_vencer(date.today())
+        if dias > aviso:
+            return None
+        porcentaje = producto.politica_descuento().porcentaje(dias)
         return (porcentaje, lote.fecha_vencimiento) if porcentaje else None
 
     def _avisar_descuento_sugerido(self, codigo: str) -> None:
