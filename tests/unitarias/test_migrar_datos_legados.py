@@ -85,7 +85,7 @@ def test_productos_con_categoria_costo_y_carga_inicial(con, tmp_path):
     assert [r.fila for r in resumen.rechazados] == [6]
     repo = RepositorioProductosSQLite(con)
     bebida = repo.obtener_por_codigo("A3")
-    # El repositorio solo persiste el costo neto (IVA e IABA: CA-21 pendiente).
+    # El costo neto de las bebidas ya incluye el IABA (PO, CA-21): no se separa al migrar.
     assert bebida.costo.neto.monto == 700
     assert any("IABA" in a for a in resumen.avisos)
     assert repo.obtener_por_codigo("A4").costo is None

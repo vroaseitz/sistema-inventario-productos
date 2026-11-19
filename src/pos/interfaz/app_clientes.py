@@ -29,9 +29,9 @@ from pos.dominio.clientes import (
     cupo_disponible,
     descuento_credito,
     en_ciclo,
+    falta_pagar,
     saldo_anterior,
     saldo_de,
-    total_a_pagar,
     ultimo_consumo,
 )
 from pos.dominio.errores import ErrorDominio, ReglaClienteInvalida
@@ -336,14 +336,14 @@ class VentanaClientes(ttk.Frame):
                         f"Descuento del {PORCENTAJE_DESCUENTO_CREDITO} % (crédito familiar)",
                         False,
                     ),
-                    ("total", "Total a pagar", True),
+                    ("abonos", "Abonos del ciclo", False),
+                    ("falta", "Falta pagar", True),  # CL-08: un solo desglose, una cifra final
                 ),
             ),
             (
                 secundario,
                 (
                     ("anterior", "Saldo anterior", False),
-                    ("abonos", "Abonos del ciclo", False),
                     ("final", "Saldo final", True),
                 ),
             ),
@@ -543,9 +543,9 @@ class VentanaClientes(ttk.Frame):
         self._lbl_resumen["anterior"].config(text=formatear_clp(saldo_anterior(movs, anio, mes)))
         self._lbl_resumen["consumos"].config(text=formatear_clp(consumos))
         self._lbl_resumen["descuento"].config(text=f"− {formatear_clp(descuento)}")  # CL-03
-        self._lbl_resumen["total"].config(text=formatear_clp(total_a_pagar(consumos)))
-        self._lbl_resumen["abonos"].config(text=formatear_clp(abonos))
-        self._lbl_resumen["final"].config(text=formatear_clp(corrido))
+        self._lbl_resumen["abonos"].config(text=f"− {formatear_clp(abonos)}" if abonos else "$0")
+        self._lbl_resumen["falta"].config(text=_texto_deuda(falta_pagar(consumos, abonos)))
+        self._lbl_resumen["final"].config(text=_texto_deuda(corrido))  # CL-06: «A favor $X»
 
     def _pagar_estado(self) -> None:
         """Asienta el pago del ciclo: abono por transferencia + descuento, y la deuda queda en 0."""

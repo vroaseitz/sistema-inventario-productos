@@ -392,6 +392,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
         ReporteInventario,
     )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
+    from pos.aplicacion.casos_uso.eliminar_producto import EliminarProducto
     from pos.aplicacion.casos_uso.gestionar_categorias import GestionarCategorias
     from pos.aplicacion.casos_uso.gestionar_clientes import (
         GestionarClientes,
@@ -565,6 +566,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 repo_categorias,
                 repo_historial,
                 sesion=sesion,
+                eliminar=EliminarProducto(repo_productos, cola=cola, auditor=auditor),
             ),
             "F4": lambda padre: VentanaClientes(
                 padre,

@@ -42,6 +42,7 @@ def encolar_producto(
             "perecible": producto.perecible,
             "dias_aviso": producto.dias_aviso,
             "stock_minimo": producto.stock_minimo,
+            "iaba_pct": producto.iaba_pct,
             # Nombre (no id local): el id de la categoria cambia entre la base local y la remota.
             "categoria": categoria,
         },
@@ -54,6 +55,13 @@ def encolar_producto_codigo(cola: ColaSincronizacion | None, anterior: str, nuev
     if cola is None:
         return
     cola.encolar("producto_codigo", "update", {"anterior": anterior, "nuevo": nuevo}, str(uuid4()))
+
+
+def encolar_producto_eliminado(cola: ColaSincronizacion | None, codigo: str) -> None:
+    """CA-22: se borro un producto creado por error; el destino solo lo borra sin historia."""
+    if cola is None:
+        return
+    cola.encolar("producto_eliminar", "delete", {"codigo": codigo}, str(uuid4()))
 
 
 def encolar_existencia(cola: ColaSincronizacion | None, existencia: Existencia) -> None:

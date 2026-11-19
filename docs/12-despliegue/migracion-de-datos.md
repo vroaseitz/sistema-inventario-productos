@@ -49,9 +49,10 @@ Opciones: `--fecha-saldo AAAA-MM-DD` (por defecto, el último día del mes anter
    el código como nombre y se avisa; si es solo un número (1 caso) se rechaza.
 2. **Clientes sin teléfono ni correo (15 de 16):** el sistema exige un contacto, así que quedan con
    «Sin teléfono (migración)»; hay que completarlo desde F4. El cliente sin nombre (1) se rechaza.
-3. **IVA e impuesto adicional (IABA):** el sistema solo guarda el costo neto; ambos se descartan al
-   cargar (hallazgo CA-21, pendiente de la PO). Si la contadora define que el IABA es crédito, hay que
-   recalcular el neto de los ~138 líquidos.
+3. **IVA e impuesto adicional (IABA):** la PO definió el 18-11 que el IABA se suma al costo de la bebida
+   y que en la migración no hay que corregir nada: el `costo_neto` de los ~138 líquidos (costo antiguo
+   ÷ 1,19) ya lo incluye de forma aproximada. El importador no separa el IABA (lo avisa en el
+   resumen); si se quiere afinar, se marca la tasa del producto en F2 y se corrige su costo neto.
 4. **Duplicados y revisión de Roxana:** se migran todos; desactivar los que Roxana indique, desde F2.
 
 ## Pruebas

@@ -170,8 +170,9 @@ class MigrarProductos:
             )
         if self._con_adicional:
             resumen.avisos.append(
-                f"{self._con_adicional} productos traen impuesto adicional (IABA) y el sistema "
-                "solo guarda el costo neto: el IVA y el IABA no quedan registrados (CA-21)."
+                f"{self._con_adicional} productos traen impuesto adicional (IABA): su costo neto "
+                "ya lo incluye de forma aproximada (definición de la PO, CA-21), así que no se "
+                "separa; se ajusta después desde F2 si hace falta."
             )
         if self.auditor is not None and resumen.cargados:
             self.auditor.registrar(

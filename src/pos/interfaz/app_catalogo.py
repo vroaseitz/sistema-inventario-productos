@@ -16,12 +16,13 @@ from pos.aplicacion.casos_uso.cambiar_estado_producto import CambiarEstadoProduc
 from pos.aplicacion.casos_uso.consultar_catalogo import ConsultarCatalogo, ConsultarCategorias
 from pos.aplicacion.casos_uso.consultar_inventario import DefinirStockMinimo
 from pos.aplicacion.casos_uso.editar_producto import EditarProducto
+from pos.aplicacion.casos_uso.eliminar_producto import EliminarProducto, ProductoConHistoria
 from pos.aplicacion.casos_uso.gestionar_categorias import GestionarCategorias
 from pos.aplicacion.casos_uso.registrar_producto import RegistrarProducto
 from pos.aplicacion.puertos import RepositorioCategorias, RepositorioHistorial, RepositorioProductos
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_clp, parsear_monto
-from pos.dominio.productos import UnidadVenta
+from pos.dominio.productos import TASAS_IABA, UnidadVenta, costo_con_iaba
 from pos.dominio.value_objects import neto_de_precio
 from pos.interfaz import tema
 from pos.interfaz.avisos import costo_bajo_el_precio_o_confirmado
@@ -36,6 +37,34 @@ IVA = 19  # % de IVA chileno; solo informativo en la ficha
 
 def _porcentaje(valor: float) -> str:
     return f"{valor * 100:.1f}%".replace(".", ",")
+
+
+SIN_IABA = "No afecto"
+SIN_IABA_Y_TASAS = (SIN_IABA, *(f"{t} %" for t in TASAS_IABA))
+
+
+def _texto_iaba(tasa: int | None) -> str:
+    return SIN_IABA if tasa is None else f"{tasa} %"
+
+
+def _tasa_iaba(texto: str) -> int | None:
+    texto = texto.strip()
+    return None if texto in ("", SIN_IABA) else int(texto.rstrip(" %"))
+
+
+def _texto_opcional(producto, campo: str) -> str:
+    valor = getattr(producto, campo, None) if producto else None
+    return "" if valor is None else str(valor)
+
+
+def _entero_opcional(texto: str) -> int | None:
+    texto = texto.strip()
+    if not texto:
+        return None
+    try:
+        return int(texto)
+    except ValueError as exc:
+        raise ValueError("El descuento por vencimiento lleva solo números enteros.") from exc
 
 
 class VentanaCatalogo(ttk.Frame):
@@ -55,8 +84,10 @@ class VentanaCatalogo(ttk.Frame):
         repo_categorias: RepositorioCategorias,
         repo_historial: RepositorioHistorial,
         sesion=None,
+        eliminar: EliminarProducto | None = None,
     ) -> None:
         super().__init__(parent)
+        self._eliminar = eliminar
         self._consultar = consultar
         self._consultar_categorias = consultar_categorias
         self._registrar = registrar
@@ -382,6 +413,13 @@ class VentanaCatalogo(ttk.Frame):
                 value=str(base.stock_minimo) if base and base.stock_minimo is not None else ""
             ),
             "motivo": tk.StringVar(),
+            # O-42: etapas del descuento por vencer propias del producto (vacio = por defecto)
+            "d1": tk.StringVar(value=_texto_opcional(base, "desc_dias_1")),
+            "p1": tk.StringVar(value=_texto_opcional(base, "desc_pct_1")),
+            "d2": tk.StringVar(value=_texto_opcional(base, "desc_dias_2")),
+            "p2": tk.StringVar(value=_texto_opcional(base, "desc_pct_2")),
+            "iaba": tk.StringVar(value=_texto_iaba(base.iaba_pct if base else None)),
+            "iaba_monto": tk.StringVar(value="—"),
             "iva": tk.StringVar(value="—"),
             "ganancia": tk.StringVar(value="—"),
             "margen": tk.StringVar(value="—"),
@@ -433,8 +471,33 @@ class VentanaCatalogo(ttk.Frame):
         fila(a, 5, "Avisar antes de vencer (días)", ttk.Entry(a, textvariable=v["dias"], width=8))
         fila(a, 6, "Existencia mínima (unidades)", ttk.Entry(a, textvariable=v["minimo"], width=8))
 
+        d = seccion("Descuento al acercarse el vencimiento")
+        for fila_n, (rotulo, dias, pct) in enumerate(
+            (("Primera etapa", "d1", "p1"), ("Etapa final", "d2", "p2"))
+        ):
+            ttk.Label(d, text=rotulo).grid(row=fila_n, column=0, sticky="w", pady=3)
+            ttk.Entry(d, textvariable=v[dias], width=5).grid(row=fila_n, column=1, padx=(8, 2))
+            ttk.Label(d, text="días antes de vencer,").grid(row=fila_n, column=2)
+            ttk.Entry(d, textvariable=v[pct], width=5).grid(row=fila_n, column=3, padx=(8, 2))
+            ttk.Label(d, text="% de descuento").grid(row=fila_n, column=4, sticky="w")
+        ttk.Label(
+            d,
+            text="Vacío = política por defecto: 20 % desde 14 días y 50 % desde 7 días.",
+            foreground="#666",
+        ).grid(row=2, column=0, columnspan=5, sticky="w", pady=(4, 0))
+
         b = seccion("Costo")
         fila(b, 0, "Costo neto ($)", ttk.Entry(b, textvariable=v["costo"], width=14))
+        # CA-21: bebidas con impuesto adicional (IABA); el margen se calcula sobre neto + IABA.
+        fila(
+            b,
+            1,
+            "Impuesto adicional a bebidas (IABA)",
+            ttk.Combobox(
+                b, textvariable=v["iaba"], values=SIN_IABA_Y_TASAS, state="readonly", width=12
+            ),
+        )
+        fila(b, 2, "IABA por unidad ($)", ttk.Label(b, textvariable=v["iaba_monto"]))
 
         c = seccion("Precio y ganancia")
         fila(
@@ -455,7 +518,7 @@ class VentanaCatalogo(ttk.Frame):
                 ttk.Entry(c, textvariable=v["motivo"], width=34),
             )
 
-        for clave in ("costo", "precio"):
+        for clave in ("costo", "precio", "iaba"):
             v[clave].trace_add("write", lambda *_: self._recalcular(v))
         self._recalcular(v)
 
@@ -483,12 +546,53 @@ class VentanaCatalogo(ttk.Frame):
                 text="Reactivar" if not base.activo else "Desactivar",
                 command=lambda: (ventana.destroy(), self._alternar_codigo(base.codigo)),
             ).pack(side="left", padx=6)
+            if self._eliminar is not None:
+                ttk.Button(
+                    botones,
+                    text="Eliminar",
+                    command=lambda: self._eliminar_producto(ventana, base.codigo),
+                ).pack(side="left", padx=6)
         ttk.Button(botones, text="Cancelar", command=ventana.destroy).pack(side="right")
         ventana.bind("<Escape>", lambda _e: ventana.destroy())
         ventana.grab_set()
         # CA-11: un producto nuevo abre con el cursor en «Código», listo para escanear; si el
         # codigo ya viene escrito (CO-01) o se edita, el cursor va al nombre.
         (entrada_nombre if v["codigo"].get() else entrada_codigo).focus_set()
+
+    def _eliminar_producto(self, ventana: tk.Toplevel, codigo: str) -> None:
+        """CA-22: borra un producto creado por error; con historia solo ofrece desactivarlo."""
+        if self._eliminar is None:
+            return
+        producto = self._repo.obtener_por_codigo(codigo)
+        if producto is None:
+            return
+        if not self._eliminar.puede_eliminarse(codigo):
+            if messagebox.askyesno(
+                "Eliminar producto",
+                f"«{producto.nombre}» tiene ventas, lotes, facturas o movimientos y no se puede "
+                "eliminar: los reportes y la auditoría quedarían apuntando a un producto que ya "
+                "no existe.\n\n¿Quieres desactivarlo? Su historial se conserva.",
+            ):
+                ventana.destroy()
+                self._alternar_codigo(codigo)
+            return
+        if not messagebox.askyesno(
+            "Eliminar producto",
+            f"¿Eliminar «{producto.nombre}»?\n\nEsta acción no se puede deshacer. Queda en la "
+            "auditoría.",
+        ):
+            return
+        try:
+            self._eliminar.ejecutar(codigo)
+        except ProductoConHistoria as error:
+            messagebox.showerror("Eliminar producto", str(error))
+            return
+        except ErrorDominio as error:
+            messagebox.showerror("Eliminar producto", str(error))
+            return
+        ventana.destroy()
+        self._mensaje.set(f"Producto {producto.nombre} eliminado.")
+        self.refrescar()
 
     def _alternar_codigo(self, codigo: str) -> None:
         if self.tabla.exists(codigo):
@@ -506,6 +610,9 @@ class VentanaCatalogo(ttk.Frame):
             costo = parsear_monto(v["costo"].get()) if v["costo"].get().strip() else None
         except ValueError:
             costo = None
+        tasa = _tasa_iaba(v["iaba"].get())
+        adicional = costo_con_iaba(costo, tasa).impuesto_adicional.monto if costo else 0
+        v["iaba_monto"].set(formatear_clp(adicional) if costo and tasa else "—")
         if precio is None:
             for clave in ("iva", "ganancia", "margen", "markup"):
                 v[clave].set("—")
@@ -517,10 +624,11 @@ class VentanaCatalogo(ttk.Frame):
             for clave in ("ganancia", "margen", "markup"):
                 v[clave].set("falta costo")
             return
-        ganancia = precio_neto - costo
+        base = costo + adicional  # CA-21: el margen incluye el IABA; el IVA no
+        ganancia = precio_neto - base
         v["ganancia"].set(formatear_clp(ganancia))
         v["margen"].set(_porcentaje(ganancia / precio_neto) if precio_neto else "—")
-        v["markup"].set(_porcentaje(ganancia / costo))
+        v["markup"].set(_porcentaje(ganancia / base))
 
     def _guardar_ficha(self, ventana: tk.Toplevel, editando: bool) -> bool:
         """Valida, avisa si se vende bajo el costo, y registra o edita. True si quedó guardado."""
@@ -537,6 +645,16 @@ class VentanaCatalogo(ttk.Frame):
             dias = int(dias_texto) if dias_texto else None
             minimo_texto = v["minimo"].get().strip()
             minimo = int(minimo_texto) if minimo_texto else None
+            descuento = {
+                nombre: _entero_opcional(v[clave].get())
+                for nombre, clave in (
+                    ("desc_dias_1", "d1"),
+                    ("desc_pct_1", "p1"),
+                    ("desc_dias_2", "d2"),
+                    ("desc_pct_2", "p2"),
+                )
+            }
+            descuento["iaba_pct"] = _tasa_iaba(v["iaba"].get())
         except (ValueError, KeyError) as error:
             messagebox.showerror("No se pudo guardar", str(error) or "Revise los datos.")
             return False
@@ -561,6 +679,7 @@ class VentanaCatalogo(ttk.Frame):
                     perecible=v["perecible"].get(),
                     dias_aviso=dias,
                     motivo_precio=v["motivo"].get().strip(),
+                    **descuento,
                 )
             else:
                 self._registrar.ejecutar(
@@ -572,6 +691,7 @@ class VentanaCatalogo(ttk.Frame):
                     costo,
                     v["perecible"].get(),
                     dias,
+                    **descuento,
                 )
             self._definir_minimo.ejecutar(codigo, None if granel is UnidadVenta.GRANEL else minimo)
         except ErrorDominio as error:

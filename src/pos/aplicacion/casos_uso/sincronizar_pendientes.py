@@ -37,3 +37,36 @@ class SincronizarPendientes:
             self.cola.marcar_sincronizada(operacion["id_cliente"])
             sincronizadas += 1
         return ResultadoSincronizacion(sincronizadas=sincronizadas)
+
+
+MENSAJE_CIERRE_ENVIADO = "Jornada cerrada. Datos enviados a la nube."
+
+
+def mensaje_cierre_pendientes(cuantas: int) -> str:
+    return (
+        f"Jornada cerrada. Quedan {cuantas} operaciones sin enviar; se enviarán en el próximo "
+        "cierre o con el botón Sincronizar."
+    )
+
+
+@dataclass
+class SincronizarAlCierre:
+    """SY-01 (decision del 18-11): al cerrar la jornada se envia lo pendiente a la nube.
+
+    Nunca deshace ni bloquea el cierre (la jornada ya quedo cerrada en el PC): un solo intento,
+    sin reintentar en bucle, y sin Supabase configurado no hace nada ni muestra error.
+    """
+
+    cola: ColaSincronizacion | None
+    publicador: PublicadorRemoto | None
+
+    def ejecutar(self) -> str | None:
+        """Texto para la usuaria, o None si no hay nada que informar (sin Supabase)."""
+        if self.cola is None or self.publicador is None:
+            return None
+        try:
+            SincronizarPendientes(self.cola, self.publicador).ejecutar()
+            quedan = len(self.cola.pendientes())
+        except Exception:  # la sincronizacion jamas debe romper el cierre
+            return None
+        return MENSAJE_CIERRE_ENVIADO if quedan == 0 else mensaje_cierre_pendientes(quedan)

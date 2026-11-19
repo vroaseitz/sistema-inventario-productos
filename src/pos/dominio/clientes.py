@@ -101,6 +101,11 @@ def total_a_pagar(consumos: int) -> int:
     return consumos - descuento_credito(consumos)
 
 
+def falta_pagar(consumos: int, abonos: int) -> int:
+    """CL-08: lo que aun falta pagar del ciclo (consumos - 20 % - abonos). Negativo = a favor."""
+    return total_a_pagar(consumos) - abonos
+
+
 @dataclass(frozen=True)
 class LineaConsumo:
     """Un producto dentro de un consumo a credito (para el estado de cuenta, HU-CLI-02/04)."""

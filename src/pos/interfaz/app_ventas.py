@@ -30,7 +30,10 @@ from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
 from pos.aplicacion.casos_uso.resumen_del_dia import ResumenDelDia
-from pos.aplicacion.casos_uso.sincronizar_pendientes import SincronizarPendientes
+from pos.aplicacion.casos_uso.sincronizar_pendientes import (
+    SincronizarAlCierre,
+    SincronizarPendientes,
+)
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
     PublicadorRemoto,
@@ -52,7 +55,6 @@ from pos.dominio.formato import (
     parsear_monto,
     rango_de_busqueda,
 )
-from pos.dominio.lotes import PoliticaDescuento
 from pos.dominio.pagos import (
     DENOMINACIONES_CLP,
     ConteoDenominaciones,
@@ -1016,6 +1018,18 @@ class VentanaVentas(ttk.Frame):
             f"Diferencia: {_formatear_clp(arqueo.diferencia)}",
         )
         self._refrescar_turno()
+        self._sincronizar_al_cierre()
+
+    def _sincronizar_al_cierre(self) -> None:
+        """SY-01: tras cerrar la jornada se envia lo pendiente a la nube, sin bloquear el cierre."""
+        if self._publicador is None:
+            return  # sin Supabase configurado: cierre normal, sin error
+        self._lbl_sync.config(text="Sincronizando con la nube…")
+        self.update_idletasks()
+        mensaje = SincronizarAlCierre(self._cola, self._publicador).ejecutar()
+        self._refrescar_sync()
+        if mensaje:
+            messagebox.showinfo("Cierre de jornada", mensaje)
 
     # ------------------------------------------------------------ Anular venta (HU-VTA-11) --
 
@@ -1612,7 +1626,7 @@ class VentanaVentas(ttk.Frame):
     def descuento_sugerido(self, codigo: str) -> tuple[int, date] | None:
         """El % sugerido por el lote que se vende (el mismo de F3 › Alertas) y su vencimiento.
 
-        La politica (30/20/10 % segun los dias) sigue siendo una propuesta por validar con la PO.
+        La politica es de dos etapas (20 % y 50 % por defecto) y se edita por producto en F2.
         """
         venta = self._venta
         if venta is None:
@@ -1621,17 +1635,7 @@ class VentanaVentas(ttk.Frame):
         producto = self._repo_productos.obtener_por_codigo(codigo)
         if lote is None or producto is None:
             return None
-        aviso = producto.dias_aviso
-        if not aviso:
-            aviso = (
-                self._configuracion.obtener("aviso_defecto_dias")
-                if self._configuracion is not None
-                else 7
-            )
-        dias = lote.dias_para_vencer(date.today())
-        if dias > aviso:
-            return None
-        porcentaje = PoliticaDescuento().porcentaje(dias, aviso)
+        porcentaje = producto.politica_descuento().porcentaje(lote.dias_para_vencer(date.today()))
         return (porcentaje, lote.fecha_vencimiento) if porcentaje else None
 
     def _avisar_descuento_sugerido(self, codigo: str) -> None:

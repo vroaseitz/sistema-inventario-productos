@@ -14,8 +14,8 @@ from pos.aplicacion.puertos import (
 from pos.aplicacion.sincronizacion import encolar_producto, encolar_producto_codigo
 from pos.dominio.errores import DatosProductoInvalidos
 from pos.dominio.formato import formatear_clp
-from pos.dominio.productos import RegistroCambioPrecio
-from pos.dominio.value_objects import Costo, Dinero
+from pos.dominio.productos import TASAS_IABA, RegistroCambioPrecio
+from pos.dominio.value_objects import Dinero
 
 
 @dataclass
@@ -60,6 +60,11 @@ class EditarProducto:
         perecible: bool = False,
         dias_aviso: int | None = None,
         motivo_precio: str = "",
+        desc_dias_1: int | None = None,
+        desc_pct_1: int | None = None,
+        desc_dias_2: int | None = None,
+        desc_pct_2: int | None = None,
+        iaba_pct: int | None = None,
     ) -> None:
         # 1. Obtener el producto actual
         producto = self.repositorio_productos.obtener_por_codigo(codigo)
@@ -74,10 +79,19 @@ class EditarProducto:
         producto.nombre = nuevo_nombre.strip()
         producto.precio = nuevo_precio_dinero
         producto.categoria_id = nueva_categoria_id
+        producto.iaba_pct = iaba_pct
         if costo is not None:
-            producto.costo = Costo(neto=Dinero(costo), iva=Dinero(0))
+            producto.fijar_costo_neto(costo)
+        elif producto.costo is not None:
+            producto.fijar_costo_neto(producto.costo.neto.monto)  # CA-21: re-calcula el IABA
         producto.perecible = perecible
         producto.dias_aviso = dias_aviso
+        # O-42: vacio = vuelve a la politica por defecto. Se valida antes de guardar nada.
+        producto.desc_dias_1, producto.desc_pct_1 = desc_dias_1, desc_pct_1
+        producto.desc_dias_2, producto.desc_pct_2 = desc_dias_2, desc_pct_2
+        producto.politica_descuento()
+        if iaba_pct is not None and iaba_pct not in TASAS_IABA:
+            raise DatosProductoInvalidos("El impuesto adicional a bebidas es de 10 % o 18 %")
 
         # 3. Guardar PRIMERO el producto
         self.repositorio_productos.guardar(producto)

@@ -48,7 +48,7 @@ class ConsultarAlertasVencimiento:
                     nombre_producto=producto.nombre,
                     precio_actual=producto.precio,
                     dias_restantes=dias,
-                    descuento_pct=self.politica.porcentaje(dias, aviso),
+                    descuento_pct=producto.politica_descuento(self.politica).porcentaje(dias),
                 )
             )
         return sorted(alertas, key=lambda a: a.dias_restantes)

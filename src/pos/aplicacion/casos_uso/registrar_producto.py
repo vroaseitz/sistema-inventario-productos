@@ -8,8 +8,8 @@ from pos.aplicacion.auditor import Auditor
 from pos.aplicacion.puertos import ColaSincronizacion, RepositorioCategorias, RepositorioProductos
 from pos.aplicacion.sincronizacion import encolar_producto
 from pos.dominio.errores import DatosProductoInvalidos
-from pos.dominio.productos import Producto, UnidadVenta
-from pos.dominio.value_objects import Costo, Dinero
+from pos.dominio.productos import Producto, UnidadVenta, costo_con_iaba
+from pos.dominio.value_objects import Dinero
 
 
 @dataclass
@@ -29,11 +29,16 @@ class RegistrarProducto:
         costo: int | None = None,
         perecible: bool = False,
         dias_aviso: int | None = None,
+        desc_dias_1: int | None = None,
+        desc_pct_1: int | None = None,
+        desc_dias_2: int | None = None,
+        desc_pct_2: int | None = None,
+        iaba_pct: int | None = None,
     ) -> Producto:
         if self.repositorio.obtener_por_codigo(codigo) is not None:
             raise DatosProductoInvalidos(f"Ya existe un producto con código {codigo}")
 
-        costo_obj = Costo(neto=Dinero(costo), iva=Dinero(0)) if costo is not None else None
+        costo_obj = costo_con_iaba(costo, iaba_pct) if costo is not None else None
 
         producto = Producto(
             codigo=codigo,
@@ -44,6 +49,11 @@ class RegistrarProducto:
             costo=costo_obj,
             perecible=perecible,
             dias_aviso=dias_aviso,
+            desc_dias_1=desc_dias_1,
+            desc_pct_1=desc_pct_1,
+            desc_dias_2=desc_dias_2,
+            desc_pct_2=desc_pct_2,
+            iaba_pct=iaba_pct,
         )
         self.repositorio.guardar(producto)
         nombre_categoria = (

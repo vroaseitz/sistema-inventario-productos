@@ -12,7 +12,7 @@ import pytest
 pytest.importorskip("tkinter", reason="Tkinter no disponible en este entorno")
 
 from pos.dominio.caja import TurnoCaja  # noqa: E402
-from pos.dominio.lotes import Lote  # noqa: E402
+from pos.dominio.lotes import Lote, PoliticaDescuento  # noqa: E402
 from pos.dominio.value_objects import Dinero  # noqa: E402
 from pos.infraestructura.sqlite.conexion import crear_conexion  # noqa: E402
 from pos.infraestructura.sqlite.esquema import crear_esquema  # noqa: E402
@@ -72,19 +72,20 @@ def _venta_con_lote(dias_para_vencer: int, dias_aviso: int = 30):
     vista._tickets, vista._indice = [MagicMock()], 0  # `_venta` es el ticket activo
     lote = Lote("ALM", date.today() + timedelta(days=dias_para_vencer), Decimal("5"))
     vista._registrar_venta = MagicMock(lote_para=MagicMock(return_value=lote))
-    producto = MagicMock(dias_aviso=dias_aviso)
+    producto = MagicMock(dias_aviso=dias_aviso, politica_descuento=lambda: PoliticaDescuento())
     vista._repo_productos = MagicMock(obtener_por_codigo=MagicMock(return_value=producto))
     vista._configuracion = None
     return vista, lote
 
 
-@pytest.mark.parametrize(("dias", "porcentaje"), [(1, 30), (3, 30), (5, 20), (15, 10)])
+@pytest.mark.parametrize(("dias", "porcentaje"), [(1, 50), (7, 50), (10, 20), (14, 20)])
 def test_el_lote_por_vencer_sugiere_el_mismo_descuento_que_f3(dias, porcentaje):
     vista, lote = _venta_con_lote(dias)
     assert vista.descuento_sugerido("ALM") == (porcentaje, lote.fecha_vencimiento)
 
 
 def test_un_lote_lejos_de_vencer_o_vencido_no_sugiere_descuento():
+    assert _venta_con_lote(15)[0].descuento_sugerido("ALM") is None
     assert _venta_con_lote(60)[0].descuento_sugerido("ALM") is None
     assert _venta_con_lote(-1)[0].descuento_sugerido("ALM") is None
 

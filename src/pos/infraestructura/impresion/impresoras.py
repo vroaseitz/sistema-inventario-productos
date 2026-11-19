@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import itertools
 import subprocess
 import sys
 from datetime import datetime
@@ -15,6 +16,11 @@ from pathlib import Path
 
 from pos.dominio.errores import ErrorImpresion
 from pos.infraestructura.impresion.escpos import PULSO_CAJON, a_escpos
+
+# A-12: en Windows el reloj avanza a saltos de ~15 ms y dos comprobantes seguidos podian tener la
+# misma hora (el segundo pisaba al primero). El contador, unico en todo el proceso, lo evita y
+# mantiene el orden alfabetico igual al orden de impresion.
+_SECUENCIA = itertools.count(1)
 
 
 class ImpresoraEnArchivo:
@@ -24,7 +30,10 @@ class ImpresoraEnArchivo:
 
     def imprimir(self, lineas: list[str], abrir_cajon: bool = False) -> None:
         self._carpeta.mkdir(parents=True, exist_ok=True)
-        archivo = self._carpeta / f"comprobante-{datetime.now():%Y%m%d-%H%M%S-%f}.txt"
+        archivo = (
+            self._carpeta
+            / f"comprobante-{datetime.now():%Y%m%d-%H%M%S-%f}-{next(_SECUENCIA):05d}.txt"
+        )
         texto = "\n".join(lineas)
         if abrir_cajon:
             texto += "\n[se abriria el cajon de dinero]"

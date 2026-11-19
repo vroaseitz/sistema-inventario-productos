@@ -89,8 +89,8 @@ def test_alerta_ordena_por_urgencia_y_sugiere_descuento(app):
     app.ingresar.ejecutar("YOG", 5, "Compra", fecha_vencimiento=HOY + timedelta(days=60))
     alertas = app.alertas.ejecutar(HOY)
     assert [a.dias_restantes for a in alertas] == [2, 6]  # el de 60 dias no alerta
-    assert [a.descuento_pct for a in alertas] == [30, 20]
-    assert alertas[0].precio_sugerido == Dinero(1400)
+    assert [a.descuento_pct for a in alertas] == [50, 50]  # O-42: 7 dias o menos = etapa final
+    assert alertas[0].precio_sugerido == Dinero(1000)  # 2000 con 50 %
 
 
 def test_lote_sin_saldo_no_alerta(app):

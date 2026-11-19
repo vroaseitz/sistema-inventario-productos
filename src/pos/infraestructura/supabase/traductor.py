@@ -61,6 +61,21 @@ _SQL_CATEGORIA_RENOMBRAR = (
     "AND NOT EXISTS (SELECT 1 FROM pos.categoria WHERE nombre = %s)"
 )
 
+# CA-22: eliminar un producto creado por error. Nunca borra uno con ventas, lotes ni facturas.
+_SIN_HISTORIA = (
+    "AND NOT EXISTS (SELECT 1 FROM pos.venta_detalle d WHERE d.producto_id = p.id) "
+    "AND NOT EXISTS (SELECT 1 FROM pos.lote l WHERE l.producto_id = p.id) "
+    "AND NOT EXISTS (SELECT 1 FROM pos.factura_compra_detalle f WHERE f.producto_id = p.id)"
+)
+_SQL_PRODUCTO_ELIMINAR_EXISTENCIA = (
+    "DELETE FROM pos.existencia e USING pos.producto p "
+    "WHERE e.producto_id = p.id AND p.codigo = %s " + _SIN_HISTORIA
+)
+_SQL_PRODUCTO_ELIMINAR = (
+    "DELETE FROM pos.producto p WHERE p.codigo = %s "
+    "AND NOT EXISTS (SELECT 1 FROM pos.existencia e WHERE e.producto_id = p.id) " + _SIN_HISTORIA
+)
+
 # Eliminar (despues de fusionar): nunca borra una categoria que aun tenga productos.
 _SQL_CATEGORIA_ELIMINAR = (
     "DELETE FROM pos.categoria c WHERE c.nombre = %s "
@@ -259,6 +274,12 @@ def traducir_operacion(operacion: dict) -> list[Sentencia]:
 
     if entidad == "producto_codigo":
         return [(_SQL_PRODUCTO_CODIGO, (d["nuevo"], d["anterior"], d["nuevo"]))]
+
+    if entidad == "producto_eliminar":
+        return [
+            (_SQL_PRODUCTO_ELIMINAR_EXISTENCIA, (d["codigo"],)),
+            (_SQL_PRODUCTO_ELIMINAR, (d["codigo"],)),
+        ]
 
     if entidad == "categoria":
         return [(_SQL_CATEGORIA_ESTADO, (d["nombre"], d.get("activa", True)))]

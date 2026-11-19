@@ -149,7 +149,7 @@ verificar(
 r = cli._lbl_resumen
 verificar(r["consumos"].cget("text") == "$8.990", "consumos del ciclo")
 verificar(r["descuento"].cget("text") == "− $1.798", "descuento del 20 % (8.990 x 0,2)")
-verificar(r["total"].cget("text") == "$7.192", "total a pagar = consumos - descuento")
+verificar(r["falta"].cget("text") == "$7.192", "falta pagar = consumos - descuento - abonos")
 verificar(r["final"].cget("text") == "$8.990", "saldo final = lo que se debe (sin abonos)")
 
 verificar(
