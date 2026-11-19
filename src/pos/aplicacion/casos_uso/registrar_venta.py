@@ -93,7 +93,8 @@ class RegistrarVenta:
                 f"hay {disponible}, se pedirian {pedido_total}"
             )
 
-        costo_unitario = producto.costo.neto if producto.costo is not None else None
+        # CA-21: el costo de lo vendido es el neto mas el IABA (el margen lo incluye).
+        costo_unitario = producto.costo.para_margen if producto.costo is not None else None
         return venta.agregar_detalle(codigo_producto, cantidad_dec, producto.precio, costo_unitario)
 
     def agregar_pago(self, venta: Venta, pago: Pago) -> None:

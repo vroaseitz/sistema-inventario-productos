@@ -1,0 +1,16 @@
+-- Pegar completo en Supabase > SQL Editor y ejecutar (rol postgres). Es idempotente.
+SET search_path TO pos;
+
+ALTER TABLE producto ADD COLUMN IF NOT EXISTS desc_dias_1 INTEGER;
+ALTER TABLE producto ADD COLUMN IF NOT EXISTS desc_pct_1 INTEGER;
+ALTER TABLE producto ADD COLUMN IF NOT EXISTS desc_dias_2 INTEGER;
+ALTER TABLE producto ADD COLUMN IF NOT EXISTS desc_pct_2 INTEGER;
+ALTER TABLE producto ADD COLUMN IF NOT EXISTS iaba_pct INTEGER
+    CHECK (iaba_pct IS NULL OR iaba_pct IN (10, 18));
+
+SELECT pos.aplicar_permisos_pos_app();
+
+-- Verificar (debe devolver 5 filas):
+SELECT column_name FROM information_schema.columns
+WHERE table_schema = 'pos' AND table_name = 'producto'
+  AND column_name IN ('desc_dias_1', 'desc_pct_1', 'desc_dias_2', 'desc_pct_2', 'iaba_pct');

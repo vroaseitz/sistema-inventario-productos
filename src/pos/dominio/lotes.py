@@ -4,8 +4,8 @@ Un producto perecible puede tener varios lotes (misma mercaderia, distinto venci
 Al vender se consume primero el lote que vence antes (FEFO). La alerta de vencimiento
 sugiere un descuento sobre el lote segun cuanto le queda de vida.
 
-La politica de descuento por defecto es una PROPUESTA del equipo de desarrollo, aun sin
-validar con la Product Owner (ver docs/08-diseno/adr/0005-politica-descuento-vencimiento.md).
+La politica de descuento (dos etapas, editable por producto) la definio la Product Owner el
+17-11-2026 (ver docs/08-diseno/adr/0005-politica-descuento-vencimiento.md).
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 
-from .errores import ReglaInventarioInvalida
+from .errores import DatosProductoInvalidos, ReglaInventarioInvalida
 from .value_objects import Dinero
 
 
@@ -83,26 +83,53 @@ def consumir_fefo(
 
 @dataclass(frozen=True)
 class PoliticaDescuento:
-    """Descuento sugerido segun los dias que le quedan al lote.
+    """Descuento sugerido por vencimiento, en dos etapas (O-42, definido por la PO el 17-11).
 
-    `tramos` es una tupla (dias_maximos, porcentaje) de menor a mayor; el primer tramo cuyo
-    `dias_maximos` alcance a los dias restantes define el descuento. Si el lote esta dentro
-    del aviso del producto pero fuera de todos los tramos, se aplica `porcentaje_aviso`.
-    Un lote ya vencido no se rebaja: no se debe vender.
+    Por defecto: 20 % desde 14 dias antes de vencer y 50 % desde 7 dias antes (etapa final). Los
+    dias y los porcentajes se pueden editar por producto (el pan dura 2 semanas; otros productos,
+    meses). Un lote ya vencido no se rebaja: no se debe vender.
     """
 
-    tramos: tuple[tuple[int, int], ...] = ((3, 30), (7, 20))
-    porcentaje_aviso: int = 10
+    dias_inicial: int = 14
+    pct_inicial: int = 20
+    dias_final: int = 7
+    pct_final: int = 50
 
-    def porcentaje(self, dias_restantes: int, dias_aviso: int | None) -> int:
+    def __post_init__(self) -> None:
+        for dias in (self.dias_inicial, self.dias_final):
+            if dias < 1:
+                raise DatosProductoInvalidos("Los días de cada etapa deben ser 1 o más")
+        for pct in (self.pct_inicial, self.pct_final):
+            if not 1 <= pct <= 100:
+                raise DatosProductoInvalidos("El porcentaje de descuento debe estar entre 1 y 100")
+        if self.dias_final >= self.dias_inicial:
+            raise DatosProductoInvalidos(
+                "La etapa final del descuento debe empezar más cerca del vencimiento"
+            )
+
+    def porcentaje(self, dias_restantes: int) -> int:
         if dias_restantes < 0:
             return 0
-        for dias_maximos, porcentaje in self.tramos:
-            if dias_restantes <= dias_maximos:
-                return porcentaje
-        if dias_aviso is not None and dias_restantes <= dias_aviso:
-            return self.porcentaje_aviso
+        if dias_restantes <= self.dias_final:
+            return self.pct_final
+        if dias_restantes <= self.dias_inicial:
+            return self.pct_inicial
         return 0
+
+    def con_ajustes(
+        self,
+        dias_1: int | None = None,
+        pct_1: int | None = None,
+        dias_2: int | None = None,
+        pct_2: int | None = None,
+    ) -> PoliticaDescuento:
+        """La politica con los valores propios de un producto; lo que va vacio usa esta."""
+        return PoliticaDescuento(
+            dias_1 if dias_1 is not None else self.dias_inicial,
+            pct_1 if pct_1 is not None else self.pct_inicial,
+            dias_2 if dias_2 is not None else self.dias_final,
+            pct_2 if pct_2 is not None else self.pct_final,
+        )
 
 
 @dataclass(frozen=True)

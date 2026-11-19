@@ -47,3 +47,35 @@ class ColaSincronizacionSQLite:
             "UPDATE cola_sincronizacion SET estado = 'synced' WHERE id_cliente = ?",
             (id_cliente,),
         )
+
+    # Estados explicitos de cada operacion: pending -> synced | rejected. «rejected» = el destino la
+    # rechazo por sus datos: se aparta (no frena a las demas) y queda guardada con su motivo.
+
+    def marcar_rechazada(self, id_cliente: str, motivo: str) -> None:
+        self._con.execute(
+            "UPDATE cola_sincronizacion SET estado = 'rejected', motivo_rechazo = ? "
+            "WHERE id_cliente = ?",
+            (motivo[:500], id_cliente),
+        )
+
+    def rechazadas(self) -> list[dict]:
+        filas = self._con.execute(
+            "SELECT * FROM cola_sincronizacion WHERE estado = 'rejected' ORDER BY rowid"
+        ).fetchall()
+        return [
+            {
+                "id_cliente": f["id_cliente"],
+                "entidad": f["entidad"],
+                "motivo": f["motivo_rechazo"],
+                "datos": json.loads(f["datos_json"]),
+            }
+            for f in filas
+        ]
+
+    def reencolar_rechazadas(self) -> int:
+        """Las rechazadas vuelven a pendientes (p. ej. tras aplicar una migracion en la nube)."""
+        cursor = self._con.execute(
+            "UPDATE cola_sincronizacion SET estado = 'pending', motivo_rechazo = '' "
+            "WHERE estado = 'rejected'"
+        )
+        return cursor.rowcount

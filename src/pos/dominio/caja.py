@@ -101,9 +101,11 @@ def calcular_arqueo(
 ) -> Arqueo:
     """Calcula el arqueo de cierre de una jornada.
 
-    Solo se consideran las ventas con estado PAGADA: una venta anulada no aporta al total
-    vendido ni al efectivo esperado, pero se cuenta aparte (`ventas_anuladas`, `monto_anulado`)
-    para que el cierre la muestre como partida propia (HU-VTA-11).
+    Solo las ventas PAGADAS suman al total vendido. Una venta anulada no es una venta, pero su
+    efectivo SI entro a la gaveta: lo que salga de ahi al anularla (CL-06: devolucion en efectivo)
+    queda como un retiro «Devolución» del dia, y asi la gaveta cuadra sin descontarlo dos veces.
+    Si en cambio el dinero queda como saldo a favor del cliente, sigue en la gaveta. Las anuladas
+    se cuentan aparte (`ventas_anuladas`, `monto_anulado`) como partida propia (HU-VTA-11).
     """
     abonos = abonos_efectivo if abonos_efectivo is not None else Dinero(0)
     totales_por_medio: dict[MedioPago, int] = dict.fromkeys(MedioPago, 0)
@@ -115,12 +117,14 @@ def calcular_arqueo(
         if venta.estado is EstadoVenta.ANULADA:
             anuladas += 1
             monto_anulado += venta.total.monto
-        if venta.estado is not EstadoVenta.PAGADA:
+        if venta.estado not in (EstadoVenta.PAGADA, EstadoVenta.ANULADA):
             continue
         for pago in venta.pagos:
             # totales_por_medio es la VENTA (neta del vuelto): lo que se compara
-            # contra el reporte del terminal de pago, no el flujo de caja.
-            totales_por_medio[pago.medio] += pago.monto.monto
+            # contra el reporte del terminal de pago, no el flujo de caja. Una venta anulada
+            # no cuenta como vendida.
+            if venta.estado is EstadoVenta.PAGADA:
+                totales_por_medio[pago.medio] += pago.monto.monto
             if pago.cobro_efectivo is not None:
                 efectivo_entregado_total += pago.cobro_efectivo.monto_entregado.monto
             elif pago.medio is MedioPago.EFECTIVO:

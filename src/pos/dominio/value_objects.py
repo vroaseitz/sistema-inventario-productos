@@ -84,3 +84,8 @@ class Costo:
     @property
     def total(self) -> Dinero:
         return self.neto + self.iva + self.impuesto_adicional
+
+    @property
+    def para_margen(self) -> Dinero:
+        """CA-21 (definido el 18-11): el margen se calcula sobre el neto MAS el IABA; el IVA, no."""
+        return self.neto + self.impuesto_adicional

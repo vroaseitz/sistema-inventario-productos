@@ -25,7 +25,12 @@ CREATE TABLE IF NOT EXISTS productos (
     costo_neto    INTEGER,
     perecible     INTEGER NOT NULL DEFAULT 0,
     dias_aviso    INTEGER,
-    stock_minimo  INTEGER
+    stock_minimo  INTEGER,
+    desc_dias_1   INTEGER,
+    desc_pct_1    INTEGER,
+    desc_dias_2   INTEGER,
+    desc_pct_2    INTEGER,
+    iaba_pct      INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS existencias (
@@ -304,6 +309,12 @@ _MIGRACIONES = (
     "ALTER TABLE ventas ADD COLUMN uuid TEXT",
     "ALTER TABLE ventas ADD COLUMN nota TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE venta_detalles ADD COLUMN motivo_descuento TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE productos ADD COLUMN desc_dias_1 INTEGER",
+    "ALTER TABLE productos ADD COLUMN desc_pct_1 INTEGER",
+    "ALTER TABLE productos ADD COLUMN desc_dias_2 INTEGER",
+    "ALTER TABLE productos ADD COLUMN desc_pct_2 INTEGER",
+    "ALTER TABLE productos ADD COLUMN iaba_pct INTEGER",
+    "ALTER TABLE cola_sincronizacion ADD COLUMN motivo_rechazo TEXT NOT NULL DEFAULT ''",
 )
 
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
-from enum import Enum
+from enum import Enum, StrEnum
 from uuid import uuid4
 
 from .errores import ReglaVentaInvalida
@@ -48,6 +48,14 @@ def texto_del_motivo(motivo: str, detalle: str = "") -> str:
             raise ReglaVentaInvalida("Con el motivo «Otro» escribe cuál fue")
         return f"{MOTIVO_OTRO}: {detalle}"
     return motivo
+
+
+class DestinoDevolucion(StrEnum):
+    """CL-06 (PO, 17-11): que se hace con el dinero al anular una venta pagada."""
+
+    EFECTIVO = "efectivo"  # sale de la caja del dia, con motivo «Devolución»
+    SALDO_A_FAVOR = "saldo_a_favor"  # solo con cliente: queda en su cuenta para la proxima compra
+    CAMBIO = "cambio"  # se anula y se abre una venta nueva para el producto de reemplazo
 
 
 @dataclass
@@ -172,6 +180,16 @@ class Venta:
     def total(self) -> Dinero:
         """Total exacto de la venta, sin redondeo de efectivo."""
         return Dinero(sum((d.subtotal.monto for d in self.detalles), 0))
+
+    @property
+    def monto_en_efectivo(self) -> int:
+        """Efectivo que la venta dejo en la gaveta (ya sin el vuelto)."""
+        return sum(p.monto.monto for p in self.pagos if p.medio is MedioPago.EFECTIVO)
+
+    @property
+    def monto_pagado_sin_credito(self) -> int:
+        """Lo pagado con efectivo, tarjeta o transferencia (lo que se devolveria al anular)."""
+        return sum(p.monto.monto for p in self.pagos if p.medio is not MedioPago.CREDITO_CLIENTE)
 
     @property
     def tiene_pago_en_efectivo(self) -> bool:

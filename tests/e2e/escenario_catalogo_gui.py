@@ -336,6 +336,69 @@ verificar(
     f"tras ingresar stock, Existencias se actualiza {fila}",
 )
 
+# --- O-42 y CA-21: descuento por vencimiento propio e IABA desde la ficha ---------------------
+cat.nuevo()
+app.update()
+v = cat.ficha.v
+v["codigo"].set("COLA1")
+v["nombre"].set("Bebida cola 1,5 L")
+v["categoria"].set(nombres[0])
+v["costo"].set("1.000")
+v["precio"].set("2.380")
+v["iaba"].set("18 %")
+app.update()
+verificar(
+    v["iaba_monto"].get() == "$180", f"CA-21: la ficha muestra el IABA {v['iaba_monto'].get()}"
+)
+verificar(
+    v["margen"].get().startswith("41"), f"CA-21: margen sobre neto + IABA {v['margen'].get()}"
+)
+v["d1"].set("3")
+v["p1"].set("25")
+v["d2"].set("1")
+verificar(cat._guardar_ficha(cat.ficha, False) is True, "la ficha guarda el descuento y el IABA")
+guardado = cat._repo.obtener_por_codigo("COLA1")
+verificar(
+    guardado.iaba_pct == 18 and guardado.costo.impuesto_adicional.monto == 180,
+    "CA-21: el IABA queda guardado aparte del neto",
+)
+verificar(
+    guardado.politica_descuento().porcentaje(3) == 25
+    and guardado.politica_descuento().porcentaje(1) == 50,
+    "O-42: el descuento propio del producto queda guardado",
+)
+cat._abrir_ficha("COLA1")
+app.update()
+verificar(cat.ficha.v["d1"].get() == "3" and cat.ficha.v["iaba"].get() == "18 %", "se reabre igual")
+cat.ficha.v["d1"].set("1")  # etapa 1 no puede empezar mas cerca que la final (1)
+verificar(cat._guardar_ficha(cat.ficha, True) is False, "O-42: etapas incoherentes no se guardan")
+cat.ficha.destroy()
+
+# --- CA-22: eliminar un producto creado por error (sin historia) ---------------------------
+cat.nuevo()
+app.update()
+v = cat.ficha.v
+v["codigo"].set("ERROR1")
+v["nombre"].set("Creado por error")
+v["categoria"].set(nombres[0])
+v["precio"].set("1.000")
+cat._guardar_ficha(cat.ficha, False)
+cat._abrir_ficha("ERROR1")
+app.update()
+cat._eliminar_producto(cat.ficha, "ERROR1")
+app.update()
+verificar(
+    cat._repo.obtener_por_codigo("ERROR1") is None, "CA-22: el producto sin historia se elimina"
+)
+verificar(not cat.tabla.exists("ERROR1"), "CA-22: ya no aparece en la lista")
+# con historia (la Castaña tiene stock): no se elimina, ofrece desactivar
+cat._abrir_ficha("7801234500011")
+app.update()
+cat._eliminar_producto(cat.ficha, "7801234500011")
+app.update()
+castana = cat._repo.obtener_por_codigo("7801234500011")
+verificar(castana is not None and not castana.activo, "CA-22: con historia solo se desactiva")
+
 # --- F4 a F7: pestañas del prototipo y barras de acciones ---
 for clave, esperadas in (
     ("F4", ["Clientes", "Cuenta", "Estado de cuenta"]),

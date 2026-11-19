@@ -40,15 +40,16 @@ class ConsultarAlertasVencimiento:
                 continue
             dias = lote.dias_para_vencer(hoy)
             aviso = producto.dias_aviso if producto.dias_aviso else aviso_defecto
+            politica = producto.politica_descuento(self.politica)
             if dias > aviso:
-                continue  # todavia lejos de vencer
+                continue  # todavia lejos de vencer (los dias de aviso del producto, HU-INV-03)
             alertas.append(
                 AlertaVencimiento(
                     lote=lote,
                     nombre_producto=producto.nombre,
                     precio_actual=producto.precio,
                     dias_restantes=dias,
-                    descuento_pct=self.politica.porcentaje(dias, aviso),
+                    descuento_pct=politica.porcentaje(dias),
                 )
             )
         return sorted(alertas, key=lambda a: a.dias_restantes)

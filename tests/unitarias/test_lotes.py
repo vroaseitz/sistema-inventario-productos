@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from pos.dominio.errores import ReglaInventarioInvalida
+from pos.dominio.errores import DatosProductoInvalidos, ReglaInventarioInvalida
 from pos.dominio.lotes import AlertaVencimiento, Lote, PoliticaDescuento, consumir_fefo
 from pos.dominio.value_objects import Dinero
 
@@ -47,20 +47,40 @@ def test_fefo_rechaza_cantidad_no_positiva():
 
 
 @pytest.mark.parametrize(
-    ("dias", "aviso", "esperado"),
+    ("dias", "esperado"),
     [
-        (-1, 7, 0),  # vencido: no se rebaja, no debe venderse
-        (0, 7, 30),
-        (3, 7, 30),
-        (4, 7, 20),
-        (7, 7, 20),
-        (8, 14, 10),  # dentro del aviso del producto, fuera de los tramos
-        (15, 14, 0),  # todavia lejos
-        (8, None, 0),  # sin aviso configurado
+        (-1, 0),  # vencido: no se rebaja, no debe venderse
+        (0, 50),
+        (7, 50),  # etapa final: 7 dias o menos
+        (8, 20),
+        (14, 20),  # primera etapa: dentro de 14 dias
+        (15, 0),  # todavia lejos
     ],
 )
-def test_politica_de_descuento_por_tramos(dias, aviso, esperado):
-    assert PoliticaDescuento().porcentaje(dias, aviso) == esperado
+def test_politica_de_descuento_en_dos_etapas(dias, esperado):
+    assert PoliticaDescuento().porcentaje(dias) == esperado
+
+
+def test_politica_propia_del_producto_usa_sus_etapas_y_completa_con_el_defecto():
+    pan = PoliticaDescuento().con_ajustes(dias_1=3, dias_2=1)  # solo cambia los dias
+    assert (pan.dias_inicial, pan.pct_inicial, pan.dias_final, pan.pct_final) == (3, 20, 1, 50)
+    assert pan.porcentaje(3) == 20 and pan.porcentaje(1) == 50 and pan.porcentaje(4) == 0
+    queso = PoliticaDescuento().con_ajustes(dias_1=30, pct_1=15, dias_2=10, pct_2=40)
+    assert queso.porcentaje(25) == 15 and queso.porcentaje(10) == 40
+
+
+@pytest.mark.parametrize(
+    "ajustes",
+    [
+        {"dias_1": 7},  # la etapa final (7 por defecto) no queda antes de la primera
+        {"pct_1": 0},
+        {"pct_2": 101},
+        {"dias_2": 0},
+    ],
+)
+def test_politica_rechaza_etapas_incoherentes(ajustes):
+    with pytest.raises(DatosProductoInvalidos):
+        PoliticaDescuento().con_ajustes(**ajustes)
 
 
 def test_precio_sugerido_aplica_el_descuento_y_redondea_a_pesos():

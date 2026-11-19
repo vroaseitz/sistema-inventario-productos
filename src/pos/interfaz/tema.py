@@ -299,6 +299,30 @@ def colorear_modulo(estilo: ttk.Style, clave: str) -> None:
     estilo.map("TEntry", bordercolor=[("focus", color)])
 
 
+def atajo_insert(pantalla: tk.Misc, accion, pestanas: ttk.Notebook | None = None, indice=0):
+    """A-11: Insert ejecuta la accion «Nuevo» de la pantalla visible (como I-04 en F3).
+
+    Si se indica `pestanas`, solo responde en la pestana `indice`. No actua si hay un dialogo
+    abierto encima (el foco esta en otra ventana).
+    """
+
+    def _al_presionar(_evento=None) -> None:
+        if not pantalla.winfo_ismapped():
+            return
+        if pestanas is not None and indice is not None and pestanas.index("current") != indice:
+            return
+        try:
+            foco = pantalla.focus_get()
+        except (KeyError, tk.TclError):
+            foco = None
+        if foco is not None and foco.winfo_toplevel() is not pantalla.winfo_toplevel():
+            return
+        accion()
+
+    pantalla.bind_all("<Insert>", _al_presionar, add="+")
+    return _al_presionar
+
+
 class BotonAccion(tk.Frame):
     """Boton del prototipo: una insignia con la tecla (F10, INS, DEL...) y el texto al lado.
 
@@ -314,6 +338,7 @@ class BotonAccion(tk.Frame):
         variante: str = "normal",
         color: str = "#1D4E6F",
         fondo: str = PAPEL,
+        tecla_destacada: bool = False,
     ) -> None:
         primario = variante == "primario"
         super().__init__(
@@ -332,8 +357,9 @@ class BotonAccion(tk.Frame):
             insignia = tk.Label(
                 self,
                 text=tecla,
-                bg="#3a6786" if primario else "#dfe4e2",
-                fg="#ffffff" if primario else TINTA_2,
+                # A-11: la insignia INS va en el color del modulo aunque el boton sea normal.
+                bg="#3a6786" if primario else (color if tecla_destacada else "#dfe4e2"),
+                fg="#ffffff" if primario or tecla_destacada else TINTA_2,
                 font=fuente(9),
                 padx=4,
             )

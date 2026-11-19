@@ -8,7 +8,8 @@ from decimal import Decimal
 from enum import Enum
 
 from .errores import DatosProductoInvalidos
-from .value_objects import Costo, Dinero, neto_de_precio
+from .lotes import PoliticaDescuento
+from .value_objects import Costo, Dinero, _a_pesos, neto_de_precio
 
 
 class UnidadVenta(Enum):
@@ -19,6 +20,15 @@ class UnidadVenta(Enum):
 
 
 CATEGORIAS_VALIDAS = ("frutas", "verduras", "abarrotes", "limpieza")
+
+# CA-21 / HU-PRD-02: impuesto adicional a bebidas (IABA): 10 % (bajo en azucar) o 18 % (azucaradas).
+TASAS_IABA = (10, 18)
+
+
+def costo_con_iaba(neto: int, iaba_pct: int | None) -> Costo:
+    """Costo neto con su IABA calculado aparte (el IVA se captura en la factura, no aqui)."""
+    adicional = _a_pesos(Decimal(neto) * iaba_pct / 100) if iaba_pct else 0
+    return Costo(neto=Dinero(neto), iva=Dinero(0), impuesto_adicional=Dinero(adicional))
 
 
 @dataclass
@@ -40,6 +50,13 @@ class Producto:
     perecible: bool = False
     dias_aviso: int | None = None
     stock_minimo: int | None = None  # HU-INV-05: bajo este numero de unidades se avisa
+    # O-42: etapas del descuento por vencimiento propias del producto; None = politica por defecto.
+    desc_dias_1: int | None = None
+    desc_pct_1: int | None = None
+    desc_dias_2: int | None = None
+    desc_pct_2: int | None = None
+    # CA-21: tasa del impuesto adicional a bebidas (10 o 18); None = no esta afecto.
+    iaba_pct: int | None = None
     _validado: bool = field(default=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -55,6 +72,19 @@ class Producto:
             raise DatosProductoInvalidos("El stock mínimo no puede ser negativo")
         if self.perecible and (self.dias_aviso is None or self.dias_aviso <= 0):
             raise DatosProductoInvalidos("Un producto perecible requiere dias_aviso (C-05a)")
+        if self.iaba_pct is not None and self.iaba_pct not in TASAS_IABA:
+            raise DatosProductoInvalidos("El impuesto adicional a bebidas es de 10 % o 18 %")
+        self.politica_descuento()  # valida los ajustes propios de descuento (O-42)
+
+    def fijar_costo_neto(self, neto: int) -> None:
+        """Guarda el costo neto del producto con su IABA calculado segun su tasa (CA-21)."""
+        self.costo = costo_con_iaba(neto, self.iaba_pct)
+
+    def politica_descuento(self, base: PoliticaDescuento | None = None) -> PoliticaDescuento:
+        """Descuento por vencimiento de este producto: sus etapas propias o las por defecto."""
+        return (base or PoliticaDescuento()).con_ajustes(
+            self.desc_dias_1, self.desc_pct_1, self.desc_dias_2, self.desc_pct_2
+        )
 
     @property
     def es_granel(self) -> bool:
@@ -72,7 +102,7 @@ class Producto:
         if self.precio.monto == 0:
             raise DatosProductoInvalidos("No se puede calcular margen con precio 0")
         precio_neto = neto_de_precio(self.precio.monto)
-        diferencia = precio_neto - self.costo.neto.monto
+        diferencia = precio_neto - self.costo.para_margen.monto
         return (Decimal(diferencia) / Decimal(precio_neto)).quantize(Decimal("0.0001"))
 
     @property
@@ -84,10 +114,11 @@ class Producto:
         markup sobre cero no esta definido, pero a diferencia del caso
         anterior esto no es un dato faltante).
         """
-        if self.costo is None or self.costo.neto.monto == 0:
+        if self.costo is None or self.costo.para_margen.monto == 0:
             return None
-        diferencia = neto_de_precio(self.precio.monto) - self.costo.neto.monto
-        return (Decimal(diferencia) / Decimal(self.costo.neto.monto)).quantize(Decimal("0.0001"))
+        base = self.costo.para_margen.monto
+        diferencia = neto_de_precio(self.precio.monto) - base
+        return (Decimal(diferencia) / Decimal(base)).quantize(Decimal("0.0001"))
 
     def calcular_total(self, cantidad) -> Dinero:
         """Total para una cantidad dada.

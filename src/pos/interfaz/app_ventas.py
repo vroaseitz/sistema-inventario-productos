@@ -30,7 +30,11 @@ from pos.aplicacion.casos_uso.imprimir_comprobante import ImprimirComprobante
 from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
 from pos.aplicacion.casos_uso.resumen_del_dia import ResumenDelDia
-from pos.aplicacion.casos_uso.sincronizar_pendientes import SincronizarPendientes
+from pos.aplicacion.casos_uso.sincronizar_pendientes import (
+    SincronizarAlCierre,
+    SincronizarPendientes,
+    mensaje_rechazadas,
+)
 from pos.aplicacion.puertos import (
     ColaSincronizacion,
     PublicadorRemoto,
@@ -62,13 +66,21 @@ from pos.dominio.pagos import (
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.usuarios import Rol
 from pos.dominio.value_objects import Dinero
-from pos.dominio.ventas import MOTIVO_OTRO, MOTIVOS_ANULACION, EstadoVenta, Venta
+from pos.dominio.ventas import (
+    MOTIVO_OTRO,
+    MOTIVOS_ANULACION,
+    DestinoDevolucion,
+    EstadoVenta,
+    Venta,
+)
+from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.cobro import DialogoCobro, DialogoDescuento, DialogoEspera
 from pos.interfaz.desplazable import MarcoDesplazable
 from pos.interfaz.dialogo_formulario import pedir_formulario
 from pos.interfaz.panel_dia import PanelDelDia
 from pos.interfaz.sesion import Sesion
 from pos.interfaz.tema import (
+    ALERTA_FONDO,
     LINEA_2,
     MODULOS_COLOR,
     PAPEL,
@@ -110,6 +122,25 @@ def _normalizar(texto: str) -> str:
     """Minusculas y sin tildes, para buscar sin que el acento importe (D-26)."""
     sin_tildes = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
     return sin_tildes.lower()
+
+
+def _dia_en_palabras(dia: date) -> str:
+    dias = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
+    meses = (
+        "enero",
+        "febrero",
+        "marzo",
+        "abril",
+        "mayo",
+        "junio",
+        "julio",
+        "agosto",
+        "septiembre",
+        "octubre",
+        "noviembre",
+        "diciembre",
+    )
+    return f"{dias[dia.weekday()]}, {dia.day} de {meses[dia.month - 1]} de {dia.year}"
 
 
 class VentanaVentas(ttk.Frame):
@@ -315,6 +346,11 @@ class VentanaVentas(ttk.Frame):
         ttk.Label(
             fila_cliente, text="Solo se carga a una cuenta de crédito", foreground=TINTA_3
         ).grid(row=2, column=0, sticky="w")
+        # O-42: aviso del descuento sugerido cuando el lote del producto esta por vencer.
+        self._fila_cliente = fila_cliente
+        self._lbl_sugerencia = tk.Label(
+            tab_venta, text="", bg=ALERTA_FONDO, fg=TINTA, font=fuente(11, True), anchor="w"
+        )
 
         # --- Barra de abajo: productos, Total / Pago con / Cambio y el total a cobrar grande.
         barra_total = tk.Frame(tab_venta, bg=claro)
@@ -443,9 +479,12 @@ class VentanaVentas(ttk.Frame):
             return
         pendientes = len(self._cola.pendientes())
         destino = "" if self._publicador is not None else " (sin Supabase configurado)"
-        self._lbl_sync.config(
-            text="Todo sincronizado" if pendientes == 0 else f"Pendientes: {pendientes}{destino}"
-        )
+        texto = "Todo sincronizado" if pendientes == 0 else f"Pendientes: {pendientes}{destino}"
+        rechazadas = getattr(self._cola, "rechazadas", None)
+        n_rechazadas = len(rechazadas()) if callable(rechazadas) else 0
+        if n_rechazadas:  # estado explicito: lo que la nube no acepto se ve, no se esconde
+            texto += f" · {n_rechazadas} rechazadas por la nube"
+        self._lbl_sync.config(text=texto)
         self._publicar_estado()
 
     def _publicar_estado(self) -> None:
@@ -454,7 +493,7 @@ class VentanaVentas(ttk.Frame):
         if callable(barra):
             barra(
                 "Sincronizado"
-                if "sincronizado" in self._lbl_sync.cget("text").lower()
+                if self._lbl_sync.cget("text") == "Todo sincronizado"
                 else self._lbl_sync.cget("text"),
                 self._lbl_turno.cget("text"),
             )
@@ -465,8 +504,22 @@ class VentanaVentas(ttk.Frame):
                 "Sincronización", "No hay Supabase configurado (variable SUPABASE_DB_URL)"
             )
             return
-        resultado = SincronizarPendientes(self._cola, self._publicador).ejecutar()
+        # Tras una migracion hay miles de operaciones: se envia por tandas de 2 minutos para que la
+        # pantalla no parezca colgada; se vuelve a presionar para seguir.
+        self._lbl_sync.config(text="Sincronizando con la nube…")
+        self.update_idletasks()
+        resultado = SincronizarPendientes(self._cola, self._publicador).ejecutar(
+            limite_segundos=120
+        )
         self._refrescar_sync()
+        if resultado.incompleto:
+            messagebox.showinfo(
+                "Sincronización",
+                f"Se enviaron {resultado.sincronizadas} operaciones y quedan "
+                f"{len(self._cola.pendientes())}. Presiona «Sincronizar» otra vez para seguir.",
+            )
+        if resultado.rechazadas:
+            messagebox.showwarning("Sincronización", mensaje_rechazadas(resultado.rechazadas))
         if resultado.fallo_en is not None:
             messagebox.showwarning(
                 "Sincronización",
@@ -507,7 +560,10 @@ class VentanaVentas(ttk.Frame):
                     ),
                 )
         self._publicar_estado()
-        self._refrescar_corte(turno, ventas_turno)
+        if getattr(self, "_turno_consultado", None) is not None:
+            self._mostrar_corte_consultado()  # O-40: se sigue viendo el dia elegido
+        else:
+            self._refrescar_corte(turno, ventas_turno)
         self._refrescar_resumen()
 
     def _construir_caja(self, padre: ttk.Frame) -> None:
@@ -536,26 +592,14 @@ class VentanaVentas(ttk.Frame):
 
         info = ttk.Frame(padre)
         info.pack(fill="x", padx=12, pady=(10, 0))
-        hoy = date.today()
-        dias = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
-        meses = [
-            "enero",
-            "febrero",
-            "marzo",
-            "abril",
-            "mayo",
-            "junio",
-            "julio",
-            "agosto",
-            "septiembre",
-            "octubre",
-            "noviembre",
-            "diciembre",
-        ]
-        ttk.Label(
-            info,
-            text=f"Día: {dias[hoy.weekday()]}, {hoy.day} de {meses[hoy.month - 1]} de {hoy.year}",
-        ).pack(side="left")
+        # O-40: «Día» se elige en el calendario; otro dia muestra su corte en modo consulta.
+        ttk.Label(info, text="Día:").pack(side="left")
+        self._dia_corte = CampoFecha(info, date.today(), width=12, modulo="F1")
+        self._dia_corte.pack(side="left", padx=(4, 6))
+        self._lbl_dia_corte = ttk.Label(info, text=_dia_en_palabras(date.today()))
+        self._lbl_dia_corte.pack(side="left")
+        self._turno_consultado = None  # la jornada de otro dia que se esta consultando
+        self._dia_corte.al_cambiar(self._al_cambiar_dia_corte)
         self._lbl_cajera = ttk.Label(info, text="")
         self._lbl_cajera.pack(side="left", padx=24)
         self._lbl_estado_jornada = ttk.Label(info, text="", font=fuente(11, True))
@@ -663,7 +707,42 @@ class VentanaVentas(ttk.Frame):
         self._tabla_ventas_turno.tag_configure("anulada", foreground="#999999")  # HU-VTA-11
         self._tabla_ventas_turno.pack(fill="both", expand=True, padx=12, pady=(4, 12))
 
-    def _refrescar_corte(self, turno, ventas) -> None:
+    def _al_cambiar_dia_corte(self) -> None:
+        """O-40: al elegir otro dia se consulta su corte; hoy vuelve a la jornada abierta."""
+        dia = self._dia_corte.fecha()
+        if dia is None:
+            return  # todavia escribiendo
+        self._lbl_dia_corte.config(text=_dia_en_palabras(dia))
+        if dia == date.today():
+            self._turno_consultado = None
+            self._refrescar_turno()
+            return
+        jornadas = self._repo_turnos.jornadas_del_dia(dia)
+        self._turno_consultado = jornadas[-1] if jornadas else False
+        self._cuantas_jornadas = len(jornadas)
+        self._mostrar_corte_consultado()
+
+    def _mostrar_corte_consultado(self) -> None:
+        turno = self._turno_consultado
+        self._tabla_movimientos.delete(*self._tabla_movimientos.get_children())
+        for movimiento in turno.movimientos if turno else []:
+            self._tabla_movimientos.insert(
+                "",
+                "end",
+                values=(
+                    movimiento.creado_en.strftime("%H:%M"),
+                    movimiento.tipo.value.capitalize(),
+                    _formatear_clp(movimiento.monto.monto),
+                    movimiento.motivo,
+                    f"usuario #{turno.usuario_id}",
+                ),
+            )
+        if not turno:
+            self._refrescar_corte(None, [], consulta=True)
+            return
+        self._refrescar_corte(turno, self._repo_ventas.obtener_por_turno(turno.id), consulta=True)
+
+    def _refrescar_corte(self, turno, ventas, consulta: bool = False) -> None:
         """Llena el corte de la jornada: venta por medio, dinero en caja y conciliacion."""
         for tabla in (
             self._tabla_jornada,
@@ -673,7 +752,9 @@ class VentanaVentas(ttk.Frame):
         ):
             tabla.delete(*tabla.get_children())
         if turno is None:
-            self._lbl_estado_jornada.config(text="Sin jornada abierta")
+            self._lbl_estado_jornada.config(
+                text="Sin jornadas ese día" if consulta else "Sin jornada abierta"
+            )
             self._lbl_cajera.config(text="")
             for etiqueta in self._filas_dinero.values():
                 etiqueta.config(text="-")
@@ -682,8 +763,20 @@ class VentanaVentas(ttk.Frame):
             self._clientes.abonos_en_efectivo_del_turno(turno.id) if self._clientes else 0
         )
         arqueo = calcular_arqueo(turno, ventas, Dinero(0), abonos_efectivo=abonos)
-        self._lbl_estado_jornada.config(text="Estado: jornada abierta")
-        self._lbl_cajera.config(text=f"Cajera: {self._sesion.nombre or turno.usuario_id}")
+        if consulta:
+            # O-40: un dia anterior se muestra en modo consulta (solo lectura).
+            estado = "cerrada" if turno.cerrado_en else "abierta"
+            otras = getattr(self, "_cuantas_jornadas", 1)
+            extra = f" · se muestra la última de {otras} jornadas" if otras > 1 else ""
+            self._lbl_estado_jornada.config(text=f"Consulta: jornada #{turno.id} {estado}{extra}")
+        else:
+            self._lbl_estado_jornada.config(text="Estado: jornada abierta")
+        cajera = (
+            self._sesion.nombre
+            if turno.usuario_id == self._sesion.usuario_id and self._sesion.nombre
+            else f"usuario #{turno.usuario_id}"
+        )
+        self._lbl_cajera.config(text=f"Cajera: {cajera}")
         total = 0
         for medio, monto in arqueo.totales_por_medio.items():
             nombre = (
@@ -777,13 +870,22 @@ class VentanaVentas(ttk.Frame):
                 self._resumen_dia,
                 self._configuracion,
                 self._auditor,
-                ir_a_venta=lambda: self._subpestanas.select(0),
+                ir_a_venta=self.ir_a_la_venta,
                 ir_a=self._ir_a_modulo,
             )
             self._panel_dia.pack(fill="both", expand=True)
             return
         self._lbl_resumen_dia = ttk.Label(padre, text="", font=fuente(12, True))
         self._lbl_resumen_dia.pack(anchor="w", padx=14, pady=(12, 4))
+
+    def ir_a_la_venta(self) -> None:
+        """O-41: «F1 Ir a la venta» abre la pestana Venta con el cursor en el codigo."""
+        self._subpestanas.select(0)
+        self._entrada_codigo.focus_set()
+
+    def al_repetir_tecla(self) -> None:
+        """O-41: la tecla F1 estando ya en F1 (p. ej. en Resumen del dia) vuelve a la venta."""
+        self.ir_a_la_venta()
 
     def _ir_a_modulo(self, destino: str) -> None:
         """Lleva a otro modulo (y a su pestana) desde un aviso o un boton del resumen."""
@@ -940,16 +1042,34 @@ class VentanaVentas(ttk.Frame):
             f"Diferencia: {_formatear_clp(arqueo.diferencia)}",
         )
         self._refrescar_turno()
+        self._sincronizar_al_cierre()
+
+    def _sincronizar_al_cierre(self) -> None:
+        """SY-01: tras cerrar la jornada se envia lo pendiente a la nube, sin bloquear el cierre."""
+        if self._publicador is None:
+            return  # sin Supabase configurado: cierre normal, sin error
+        self._lbl_sync.config(text="Sincronizando con la nube…")
+        self.update_idletasks()
+        mensaje = SincronizarAlCierre(self._cola, self._publicador).ejecutar()
+        self._refrescar_sync()
+        if mensaje:
+            messagebox.showinfo("Cierre de jornada", mensaje)
 
     # ------------------------------------------------------------ Anular venta (HU-VTA-11) --
 
-    def ejecutar_anulacion(self, venta_id: int, motivo: str, detalle: str = "") -> bool:
+    def ejecutar_anulacion(
+        self,
+        venta_id: int,
+        motivo: str,
+        detalle: str = "",
+        destino: DestinoDevolucion | None = None,
+    ) -> bool:
         """Anula la venta con el caso de uso; los errores salen como aviso, sin romper nada."""
         if self._anular_venta is None:
             return False
         quien = self._sesion.nombre or f"usuario {self._sesion.usuario_id}"
         try:
-            self._anular_venta.ejecutar(venta_id, motivo, detalle, quien)
+            self._anular_venta.ejecutar(venta_id, motivo, detalle, quien, destino)
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo anular la venta", str(exc))
             return False
@@ -1028,6 +1148,45 @@ class VentanaVentas(ttk.Frame):
         entrada = ttk.Entry(dialogo, textvariable=detalle_var, width=36, state="disabled")
         entrada.grid(row=3, column=1, padx=12, pady=6, sticky="w")
 
+        # CL-06: que se hace con el dinero del cliente (solo si la venta se pago con dinero).
+        marco_dinero = ttk.LabelFrame(dialogo, text="¿Qué se hace con el dinero del cliente?")
+        marco_dinero.grid(row=4, column=0, columnspan=2, padx=12, pady=6, sticky="ew")
+        destino_var = StringVar(value="")
+        radios = {}
+        for destino, texto in (
+            (DestinoDevolucion.EFECTIVO, "Devolución en efectivo (sale de la caja del día)"),
+            (
+                DestinoDevolucion.SALDO_A_FAVOR,
+                "Saldo a favor del cliente (solo si la venta tiene cliente)",
+            ),
+            (DestinoDevolucion.CAMBIO, "Cambio por otro producto (se abre una venta nueva)"),
+        ):
+            radios[destino] = ttk.Radiobutton(
+                marco_dinero, text=texto, value=destino.value, variable=destino_var
+            )
+            radios[destino].pack(anchor="w", padx=8, pady=1)
+        aviso_dinero = ttk.Label(marco_dinero, text="", foreground="#666")
+        aviso_dinero.pack(anchor="w", padx=8, pady=(2, 4))
+
+        def al_elegir_venta(_evento: object = None) -> None:
+            seleccion = tabla.selection()
+            venta_elegida = self._repo_ventas.obtener(int(seleccion[0])) if seleccion else None
+            opciones = (
+                self._anular_venta.opciones_de_devolucion(venta_elegida) if venta_elegida else []
+            )
+            for destino_i, radio in radios.items():
+                radio.config(state="normal" if destino_i in opciones else "disabled")
+            destino_var.set(opciones[0].value if opciones else "")
+            aviso_dinero.config(
+                text=""
+                if opciones
+                else "No hay dinero que devolver por caja (pago a crédito, "
+                "tarjeta o transferencia)."
+            )
+
+        tabla.bind("<<TreeviewSelect>>", al_elegir_venta)
+        al_elegir_venta()
+
         def al_cambiar_motivo(_evento: object = None) -> None:
             otro = motivo_var.get() == MOTIVO_OTRO
             entrada.config(state="normal" if otro else "disabled")
@@ -1055,15 +1214,26 @@ class VentanaVentas(ttk.Frame):
                 parent=dialogo,
             ):
                 return
-            if self.ejecutar_anulacion(venta_id, motivo_var.get(), detalle_var.get()):
+            elegido = DestinoDevolucion(destino_var.get()) if destino_var.get() else None
+            if self.ejecutar_anulacion(venta_id, motivo_var.get(), detalle_var.get(), elegido):
                 dialogo.destroy()
                 messagebox.showinfo("Venta anulada", f"La venta N° {venta_id} quedó anulada.")
+                if elegido is DestinoDevolucion.CAMBIO:
+                    self._abrir_venta_de_cambio(venta_id)
 
         botones = ttk.Frame(dialogo)
-        botones.grid(row=4, column=0, columnspan=2, pady=10)
+        botones.grid(row=5, column=0, columnspan=2, pady=10)
         ttk.Button(botones, text="Anular venta", command=confirmar).pack(side="left", padx=6)
         ttk.Button(botones, text="Cancelar", command=dialogo.destroy).pack(side="left", padx=6)
         dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
+
+    def _abrir_venta_de_cambio(self, venta_id: int) -> None:
+        """CL-06: tras anular por «cambio», se abre una venta nueva para el reemplazo."""
+        self._nueva_venta(forzar=True)
+        if self._venta is not None:
+            self._venta.nota = f"Cambio de la venta N° {venta_id}"
+        self._refrescar_ticket()
+        self._entrada_codigo.focus_set()
 
     def _movimiento_ui(self) -> None:
         # E-03: un solo dialogo con tipo, motivo de una lista, observacion y monto,
@@ -1170,6 +1340,7 @@ class VentanaVentas(ttk.Frame):
         self._medio.set(MedioPago.EFECTIVO.value)
         self._medio_nombre.set(NOMBRES_MEDIO_PAGO[MedioPago.EFECTIVO])
         self._refrescar_ticket()
+        self._lbl_sugerencia.pack_forget()  # O-42: el aviso era del ticket anterior
         self._entrada_codigo.focus_set()
 
     # ---------------------------------------------------------- Tickets (O-01b) --
@@ -1223,6 +1394,7 @@ class VentanaVentas(ttk.Frame):
 
     def _registrar_descuento(self, detalle) -> None:
         """Queda en la auditoria con el importe antes y despues y el motivo."""
+        self._lbl_sugerencia.pack_forget()  # O-42: ya se decidio sobre el descuento
         if self._auditoria is None:
             return
         producto = self._repo_productos.obtener_por_codigo(detalle.producto_codigo)
@@ -1526,7 +1698,52 @@ class VentanaVentas(ttk.Frame):
         self._entrada_cantidad.delete(0, "end")
         self._entrada_cantidad.insert(0, "1")  # D-23
         self._refrescar_ticket()
+        self._avisar_descuento_sugerido(codigo)  # O-42
         self._entrada_codigo.focus_set()  # D-24
+
+    # ------------------------------------------- Descuento sugerido por vencimiento (O-42) --
+
+    def descuento_sugerido(self, codigo: str) -> tuple[int, date] | None:
+        """El % sugerido por el lote que se vende (el mismo de F3 › Alertas) y su vencimiento.
+
+        La politica es de dos etapas (20 % y 50 % por defecto) y se edita por producto en F2.
+        """
+        venta = self._venta
+        if venta is None:
+            return None
+        lote = self._registrar_venta.lote_para(venta, codigo)
+        producto = self._repo_productos.obtener_por_codigo(codigo)
+        if lote is None or producto is None:
+            return None
+        # Mismo criterio que F3 › Alertas: solo dentro de los dias de aviso del producto (si no
+        # tiene, el de la configuracion), y con las etapas propias del producto (O-42).
+        aviso = producto.dias_aviso or (
+            self._configuracion.obtener("aviso_defecto_dias") if self._configuracion else 14
+        )
+        dias = lote.dias_para_vencer(date.today())
+        if dias > aviso:
+            return None
+        porcentaje = producto.politica_descuento().porcentaje(dias)
+        return (porcentaje, lote.fecha_vencimiento) if porcentaje else None
+
+    def _avisar_descuento_sugerido(self, codigo: str) -> None:
+        """Muestra «Descuento sugerido N %» y deja la linea elegida para aplicarlo con F9."""
+        sugerencia = self.descuento_sugerido(codigo)
+        if sugerencia is None:
+            self._lbl_sugerencia.config(text="")
+            self._lbl_sugerencia.pack_forget()
+            return
+        porcentaje, vence = sugerencia
+        producto = self._repo_productos.obtener_por_codigo(codigo)
+        self._lbl_sugerencia.config(
+            text=f"  Descuento sugerido {porcentaje} % · {producto.nombre} vence el "
+            f"{vence:%d-%m} · F9 para aplicarlo"
+        )
+        self._lbl_sugerencia.pack(fill="x", padx=12, pady=(6, 0), after=self._fila_cliente)
+        for fila in self._tabla.get_children():
+            if str(self._tabla.item(fila, "values")[0]) == codigo:
+                self._tabla.selection_set(fila)
+                self._tabla.see(fila)
 
     # ------------------------------------------- Escaneo y peso a granel (O-02b) --
 
@@ -2027,9 +2244,16 @@ class VentanaVentas(ttk.Frame):
         messagebox.showinfo("Impresora", f"Se reimprimio el comprobante de la venta #{venta.id}")
 
     def _imprimir_corte(self) -> None:
-        turno = self._repo_turnos.obtener_abierto()
-        if turno is None or self._imprimir is None:
-            messagebox.showwarning("Impresora", "No hay una jornada abierta para imprimir su corte")
+        # O-40: si se esta consultando otro dia, se imprime el corte de esa jornada.
+        consultado = getattr(self, "_turno_consultado", None)
+        turno = consultado if consultado is not None else self._repo_turnos.obtener_abierto()
+        if not turno or self._imprimir is None:
+            aviso = (
+                "No hay jornadas ese día"
+                if consultado is not None
+                else "No hay una jornada abierta"
+            )
+            messagebox.showwarning("Impresora", f"{aviso} para imprimir su corte")
             return
         abonos = Dinero(
             self._clientes.abonos_en_efectivo_del_turno(turno.id) if self._clientes else 0

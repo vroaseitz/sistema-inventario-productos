@@ -24,7 +24,10 @@ def test_producto_es_upsert_por_codigo_en_schema_pos():
     assert "ON CONFLICT (codigo) DO UPDATE" in sql
     # unidad_venta se pasa a mayusculas (el CHECK remoto exige UNIDAD/GRANEL); activo=True.
     # Sin costo ni perecible en la operacion (cola vieja): costo None, no cargado, no perecible.
-    assert params == ("12345", "Nueces", "GRANEL", 8000, True, None, False, False, None, None)
+    assert params == (
+        "12345", "Nueces", "GRANEL", 8000, True, None, False, False, None, None,
+        None, None, None, None, None,
+    )  # fmt: skip
 
 
 def test_existencia_es_upsert_resuelto_por_codigo():
@@ -130,7 +133,28 @@ def test_producto_lleva_costo_perecible_dias_y_minimo():
             },
         )
     )
-    assert params[-5:] == (1200, True, True, 7, 6)  # costo, cargado, perecible, dias, minimo
+    # costo, cargado, perecible, dias, minimo y, sin datos propios, IABA y descuento en None
+    assert params[-10:] == (1200, True, True, 7, 6, None, None, None, None, None)
+
+
+def test_producto_lleva_su_iaba_y_las_etapas_del_descuento():
+    ((_, params),) = traducir_operacion(
+        _op(
+            "producto",
+            {
+                "codigo": "BEB",
+                "nombre": "Bebida",
+                "precio": 1500,
+                "unidad_venta": "unidad",
+                "iaba_pct": 18,
+                "desc_dias_1": 20,
+                "desc_pct_1": 10,
+                "desc_dias_2": 7,
+                "desc_pct_2": 40,
+            },
+        )
+    )
+    assert params[-5:] == (18, 20, 10, 7, 40)
 
 
 def test_categoria_se_envia_con_su_estado():

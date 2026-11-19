@@ -23,7 +23,7 @@ from pos.aplicacion.puertos import RepositorioFacturasCompra, RepositorioProduct
 from pos.dominio.compras import FacturaCompra, LineaFactura, iva_de
 from pos.dominio.errores import ErrorDominio
 from pos.dominio.formato import formatear_cantidad, formatear_clp, parsear_monto
-from pos.dominio.productos import UnidadVenta
+from pos.dominio.productos import UnidadVenta, costo_con_iaba
 from pos.interfaz import tema
 from pos.interfaz.avisos import costo_bajo_el_precio_o_confirmado
 from pos.interfaz.campo_fecha import CampoFecha
@@ -59,6 +59,7 @@ class VentanaCompras(ttk.Frame):
         self._total = tk.StringVar(value="Total: $0")
         self._suma = tk.StringVar(value="Suma del detalle: $0")
         self._diferencia = tk.StringVar(value="Diferencia con el neto: $0")
+        self._iaba = tk.StringVar(value="")  # CA-21: el IABA se muestra aparte del IVA
         self._mensaje = tk.StringVar()
         self._l_codigo = tk.StringVar()
         self._l_cantidad = tk.StringVar()
@@ -69,7 +70,7 @@ class VentanaCompras(ttk.Frame):
         barra = tk.Frame(self, bg=tema.PAPEL)
         barra.pack(fill="x", padx=12, pady=(8, 4))
         for texto, comando, tecla, variante in (
-            ("Registrar factura", self.ir_a_registrar, "INS", "normal"),
+            ("Registrar factura", self.ir_a_registrar, "INS", "primario"),  # A-11
             *(
                 [
                     ("Nuevo proveedor", self.nuevo_proveedor, "", "normal"),
@@ -83,7 +84,14 @@ class VentanaCompras(ttk.Frame):
             ("Limpiar", lambda: self._limpiar(), "", "normal"),
         ):
             tema.BotonAccion(
-                barra, texto, comando, tecla, variante, color=color, fondo=tema.PAPEL
+                barra,
+                texto,
+                comando,
+                tecla,
+                variante,
+                color=color,
+                fondo=tema.PAPEL,
+                tecla_destacada=tecla == "INS",  # A-11: INS en el color del modulo
             ).pack(side="left", padx=(0, 6))
         self._pestanas = ttk.Notebook(self)
         self._pestanas.pack(fill="both", expand=True, padx=12, pady=(0, 8))
@@ -96,6 +104,9 @@ class VentanaCompras(ttk.Frame):
         self._pestana_actual = self._pestanas.select()
         # CO-04: avisa si se deja una factura a medio hacer.
         self._pestanas.bind("<<NotebookTabChanged>>", self._al_cambiar_pestana)
+        tema.atajo_insert(
+            self, lambda: self.ir_a_registrar()
+        )  # A-11: Insert abre «Registrar factura»
 
         # --- Datos de la factura -----------------------------------------------------------
         datos = ttk.LabelFrame(self._tab_registrar, text="Registrar factura de compra", padding=10)
@@ -172,6 +183,7 @@ class VentanaCompras(ttk.Frame):
         resumen.pack(fill="x", pady=4)
         ttk.Label(resumen, textvariable=self._suma).pack(side="left", padx=4)
         ttk.Label(resumen, textvariable=self._diferencia).pack(side="left", padx=16)
+        ttk.Label(resumen, textvariable=self._iaba).pack(side="left", padx=4)
         ttk.Button(resumen, text="Limpiar", command=self._limpiar).pack(side="right", padx=4)
         ttk.Button(
             resumen,
@@ -255,6 +267,17 @@ class VentanaCompras(ttk.Frame):
         self._total.set(f"Total: {formatear_clp(neto + impuestos)}")
         self._suma.set(f"Suma del detalle: {formatear_clp(suma)}")
         self._diferencia.set(f"Diferencia con el neto: {formatear_clp(neto - suma)}")
+        iaba = self._iaba_del_detalle()
+        self._iaba.set(f"IABA (aparte del IVA): {formatear_clp(iaba)}" if iaba else "")
+
+    def _iaba_del_detalle(self) -> int:
+        """CA-21: impuesto adicional a bebidas de las lineas (segun la tasa de cada producto)."""
+        total = 0
+        for linea in self._lineas:
+            producto = self._productos.obtener_por_codigo(linea.codigo_producto)
+            if producto is not None and producto.iaba_pct:
+                total += costo_con_iaba(linea.subtotal, producto.iaba_pct).impuesto_adicional.monto
+        return total
 
     # ------------------------------------------------------------------ lineas --
 

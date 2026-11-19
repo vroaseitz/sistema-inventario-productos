@@ -76,6 +76,14 @@ class CampoFecha(ttk.Frame):
     def set(self, valor: str | date) -> None:
         self._texto.set(valor.isoformat() if isinstance(valor, date) else valor)
 
+    def fecha(self) -> date | None:
+        """La fecha escrita o elegida, o None si el texto no es una fecha."""
+        return _interpretar(self._texto.get())
+
+    def al_cambiar(self, accion) -> None:
+        """Llama a `accion()` cada vez que cambia la fecha (escrita o elegida en el calendario)."""
+        self._texto.trace_add("write", lambda *_: accion())
+
     # -- calendario -------------------------------------------------------------------------
     @property
     def abierto(self) -> bool:

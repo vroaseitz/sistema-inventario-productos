@@ -11,6 +11,7 @@ from pos.aplicacion.casos_uso.anular_venta import AnularVenta
 from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
 from pos.aplicacion.casos_uso.gestionar_clientes import GestionarClientes
 from pos.aplicacion.casos_uso.ingresar_stock import IngresarStock
+from pos.aplicacion.casos_uso.registrar_movimiento_caja import RegistrarMovimientoCaja
 from pos.aplicacion.casos_uso.registrar_venta import RegistrarVenta
 from pos.aplicacion.registro_movimientos import RegistroMovimientos
 from pos.dominio.caja import calcular_arqueo
@@ -25,7 +26,7 @@ from pos.dominio.inventario import Existencia, TipoMovimiento
 from pos.dominio.pagos import MedioPago, Pago
 from pos.dominio.productos import Producto
 from pos.dominio.value_objects import Dinero
-from pos.dominio.ventas import EstadoVenta
+from pos.dominio.ventas import DestinoDevolucion, EstadoVenta
 from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
 from pos.infraestructura.sqlite.conexion import crear_conexion
 from pos.infraestructura.sqlite.esquema import crear_esquema
@@ -77,6 +78,7 @@ def app():
         repositorio_clientes=a.clientes,
         movimientos=RegistroMovimientos(a.repo_movimientos, lambda: "Admin"),
         auditor=Auditor(a.auditoria, lambda: "Admin", cola=a.cola),
+        registrar_movimiento_caja=RegistrarMovimientoCaja(a.turnos, cola=a.cola),
     )
     a.gestion = GestionarClientes(a.clientes)
     a.productos.guardar(Producto("ARR", "Arroz", Dinero(1000), categoria_id=1))
@@ -109,7 +111,7 @@ def _saldos_de_yogur(a):
 
 def test_anular_conserva_la_venta_con_motivo_autor_y_fecha(app):
     v = _vender(app, [("ARR", 3)])
-    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     guardada = app.ventas.obtener(v.id)
     assert guardada is not None  # la venta anulada no se elimina
     assert guardada.estado is EstadoVenta.ANULADA
@@ -121,18 +123,18 @@ def test_anular_conserva_la_venta_con_motivo_autor_y_fecha(app):
 def test_el_motivo_es_de_la_lista_y_otro_se_escribe(app):
     v = _vender(app, [("ARR", 1)])
     with pytest.raises(ReglaVentaInvalida, match="motivo de la lista"):
-        app.anular.ejecutar(v.id, "Porque sí", "", "Admin")
+        app.anular.ejecutar(v.id, "Porque sí", "", "Admin", DestinoDevolucion.EFECTIVO)
     with pytest.raises(ReglaVentaInvalida, match="escribe cuál"):
-        app.anular.ejecutar(v.id, "Otro", "   ", "Admin")
+        app.anular.ejecutar(v.id, "Otro", "   ", "Admin", DestinoDevolucion.EFECTIVO)
     assert app.ventas.obtener(v.id).estado is EstadoVenta.PAGADA  # nada cambio
-    app.anular.ejecutar(v.id, "Otro", "Cobro equivocado", "Admin")
+    app.anular.ejecutar(v.id, "Otro", "Cobro equivocado", "Admin", DestinoDevolucion.EFECTIVO)
     assert app.ventas.obtener(v.id).motivo_anulacion == "Otro: Cobro equivocado"
 
 
 def test_la_existencia_vuelve_con_un_movimiento_de_reversa(app):
     v = _vender(app, [("ARR", 3)])
     assert app.existencias.obtener("ARR").cantidad == Decimal("47")
-    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     assert app.existencias.obtener("ARR").cantidad == Decimal("50")
     reversas = app.repo_movimientos.listar(tipo=TipoMovimiento.ANULACION, codigo="ARR")
     assert len(reversas) == 1 and reversas[0].cantidad == Decimal("3")  # entra, no sale
@@ -143,7 +145,7 @@ def test_la_existencia_vuelve_al_lote_del_que_salio(app):
     segundo = app.lotes.por_producto("YOG")[1]
     v = _vender(app, [("YOG", 2)], elegido=("YOG", segundo.uuid))
     assert _saldos_de_yogur(app) == [Decimal("4"), Decimal("2")]
-    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     assert _saldos_de_yogur(app) == [Decimal("4"), Decimal("4")]
     assert app.existencias.obtener("YOG").cantidad == Decimal("8")
 
@@ -151,15 +153,15 @@ def test_la_existencia_vuelve_al_lote_del_que_salio(app):
 def test_una_venta_dividida_en_dos_lotes_los_restituye_a_cada_uno(app):
     v = _vender(app, [("YOG", 6)])  # FEFO: 4 de L1 y 2 de L2
     assert _saldos_de_yogur(app) == [Decimal("0"), Decimal("2")]
-    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     assert _saldos_de_yogur(app) == [Decimal("4"), Decimal("4")]
 
 
 def test_una_venta_anulada_no_se_anula_de_nuevo(app):
     v = _vender(app, [("ARR", 1)])
-    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     with pytest.raises(ReglaVentaInvalida, match="ya está anulada"):
-        app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+        app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     assert app.existencias.obtener("ARR").cantidad == Decimal("50")  # no se repuso dos veces
 
 
@@ -189,11 +191,14 @@ def test_la_anulacion_libera_el_cupo(app):
 def test_el_cierre_la_cuenta_como_partida_propia_y_el_efectivo_cuadra(app):
     a1 = _vender(app, [("ARR", 2)])  # $2.000 en efectivo, queda
     a2 = _vender(app, [("ARR", 3)])  # $3.000 en efectivo, se anula
-    app.anular.ejecutar(a2.id, "Producto en mal estado", "", "Admin")
+    app.anular.ejecutar(a2.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     turno = app.turnos.obtener_abierto()
     arqueo = calcular_arqueo(turno, app.ventas.obtener_por_turno(turno.id), Dinero(0))
     assert arqueo.totales_por_medio[MedioPago.EFECTIVO].monto == 2000  # solo lo que quedo
-    assert arqueo.efectivo_esperado == 10000 + 2000  # lo anulado se devolvio al cliente
+    # El efectivo de la anulada entro a la gaveta y salio como retiro «Devolución»: cuadra sin
+    # descontarlo dos veces (CL-06).
+    assert arqueo.retiros_caja.monto == 3000
+    assert arqueo.efectivo_esperado == 10000 + 2000 + 3000 - 3000
     assert arqueo.ventas_anuladas == 1 and arqueo.monto_anulado.monto == 3000  # partida propia
     assert a1.estado is EstadoVenta.PAGADA
 
@@ -203,14 +208,14 @@ def test_solo_se_anulan_ventas_de_la_jornada_abierta(app):
     CerrarTurnoCaja(app.turnos, app.ventas).ejecutar(Dinero(11000))
     AbrirTurnoCaja(app.turnos).ejecutar(usuario_id=1, fondo_inicial=Dinero(5000))
     with pytest.raises(ReglaVentaInvalida, match="jornada abierta"):
-        app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+        app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     with pytest.raises(ReglaVentaInvalida, match="no existe"):
-        app.anular.ejecutar(999, "Producto en mal estado", "", "Admin")
+        app.anular.ejecutar(999, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
 
 
 def test_queda_en_la_auditoria_con_usuario_y_motivo_y_se_encola_para_sincronizar(app):
     v = _vender(app, [("ARR", 1)])
-    app.anular.ejecutar(v.id, "Otro", "Cobro equivocado", "Admin")
+    app.anular.ejecutar(v.id, "Otro", "Cobro equivocado", "Admin", DestinoDevolucion.EFECTIVO)
     fila = app.auditoria.listar(accion="Anulación de venta")[0]
     assert fila["usuario"] == "Admin" and f"Venta N° {v.id}" in fila["registro"]
     assert fila["antes"] == "pagada" and "Cobro equivocado" in fila["despues"]
@@ -224,6 +229,75 @@ def test_una_venta_anulada_no_cuenta_en_los_reportes(app):
     v = _vender(app, [("ARR", 2)])
     desde = hasta = HOY
     assert len(app.ventas.por_periodo(desde, hasta)) == 1
-    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
     assert app.ventas.por_periodo(desde, hasta) == []
     assert app.ventas.ultima() is None  # tampoco se reimprime como ultima venta
+
+
+# --- CL-06: que se hace con el dinero al anular una venta pagada -------------------------------
+
+
+def _con_cliente(app):
+    cliente = app.gestion.crear("Cliente Prueba", "+56 9 1111 1111", cupo=50000)
+    return cliente, _vender(app, [("ARR", 3)], cliente_id=cliente.id)  # $3.000 en efectivo
+
+
+def test_no_se_anula_una_venta_pagada_sin_decir_que_se_hace_con_el_dinero(app):
+    v = _vender(app, [("ARR", 2)])
+    with pytest.raises(ReglaVentaInvalida, match="Elige qué se hace con el dinero"):
+        app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin")
+    assert app.ventas.obtener(v.id).estado is EstadoVenta.PAGADA  # no quedo anulada a medias
+
+
+def test_devolucion_en_efectivo_sale_de_la_caja_con_motivo_y_el_arqueo_cuadra(app):
+    v = _vender(app, [("ARR", 2)])  # $2.000 en efectivo
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
+    turno = app.turnos.obtener_abierto()
+    movimiento = turno.movimientos[0]
+    assert movimiento.tipo.value == "retiro" and movimiento.monto.monto == 2000
+    assert movimiento.motivo.startswith("Devolución") and str(v.id) in movimiento.motivo
+    arqueo = calcular_arqueo(turno, app.ventas.obtener_por_turno(turno.id), Dinero(10000))
+    assert arqueo.efectivo_esperado == 10000  # el fondo: ni sobra ni falta, sin doble descuento
+    assert arqueo.diferencia == 0
+
+
+def test_saldo_a_favor_queda_en_la_cuenta_y_el_efectivo_sigue_en_la_gaveta(app):
+    cliente, v = _con_cliente(app)
+    app.anular.ejecutar(
+        v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.SALDO_A_FAVOR
+    )
+    movs = app.clientes.movimientos(cliente.id)
+    assert saldo_de(movs) == -3000  # «A favor $3.000»
+    assert abonos_del_ciclo(movs, HOY.year, HOY.month) == 0  # no es un pago del cliente
+    assert consumos_del_ciclo(movs, HOY.year, HOY.month) == 0  # ni revierte un consumo
+    turno = app.turnos.obtener_abierto()
+    assert turno.movimientos == []  # no sale plata de la caja
+    arqueo = calcular_arqueo(turno, app.ventas.obtener_por_turno(turno.id), Dinero(13000))
+    assert arqueo.efectivo_esperado == 13000 and arqueo.diferencia == 0  # el efectivo se queda
+
+
+def test_saldo_a_favor_exige_cliente(app):
+    v = _vender(app, [("ARR", 1)])  # sin cliente
+    with pytest.raises(ReglaVentaInvalida, match="tiene un cliente"):
+        app.anular.ejecutar(
+            v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.SALDO_A_FAVOR
+        )
+    assert DestinoDevolucion.SALDO_A_FAVOR not in app.anular.opciones_de_devolucion(v)
+
+
+def test_cambio_por_otro_producto_saca_el_efectivo_para_cobrar_el_reemplazo(app):
+    v = _vender(app, [("ARR", 2)])
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.CAMBIO)
+    turno = app.turnos.obtener_abierto()
+    assert turno.movimientos[0].monto.monto == 2000
+    assert "cambio" in turno.movimientos[0].motivo.lower()
+    reemplazo = _vender(app, [("ARR", 1)])  # la venta nueva se cobra completa
+    arqueo = calcular_arqueo(turno, app.ventas.obtener_por_turno(turno.id), Dinero(11000))
+    assert reemplazo.estado is EstadoVenta.PAGADA
+    assert arqueo.efectivo_esperado == 10000 + 1000 and arqueo.diferencia == 0
+
+
+def test_la_auditoria_dice_que_se_hizo_con_el_dinero(app):
+    v = _vender(app, [("ARR", 1)])
+    app.anular.ejecutar(v.id, "Producto en mal estado", "", "Admin", DestinoDevolucion.EFECTIVO)
+    assert "efectivo" in app.auditoria.listar(accion="Anulación de venta")[0]["despues"]

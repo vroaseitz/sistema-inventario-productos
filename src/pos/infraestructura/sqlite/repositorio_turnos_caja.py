@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 from uuid import uuid4
 
 from pos.dominio.caja import MovimientoCaja, TipoMovimientoCaja, TurnoCaja
@@ -52,6 +52,13 @@ class RepositorioTurnosCajaSQLite:
         if not fila:
             return None
         return self._a_turno(fila)
+
+    def jornadas_del_dia(self, dia: date) -> list[TurnoCaja]:
+        """O-40: las jornadas abiertas ese dia (para consultar su corte), en orden."""
+        filas = self._con.execute(
+            "SELECT * FROM turnos_caja WHERE date(abierto_en) = ? ORDER BY id", (dia.isoformat(),)
+        ).fetchall()
+        return [self._a_turno(fila) for fila in filas]
 
     def registrar_movimiento(self, turno_id: int, movimiento: MovimientoCaja) -> None:
         self._con.execute(

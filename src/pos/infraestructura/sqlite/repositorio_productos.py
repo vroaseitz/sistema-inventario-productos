@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from decimal import Decimal
 
 from pos.dominio.categorias import Categoria
-from pos.dominio.productos import Producto, UnidadVenta
-from pos.dominio.value_objects import Costo, Dinero
+from pos.dominio.productos import Producto, UnidadVenta, costo_con_iaba
+from pos.dominio.value_objects import Dinero
 
 _TILDES = "áéíóúüñÁÉÍÓÚÜÑ"
 _SIN_TILDES = "aeiouunaeiouun"
@@ -29,9 +30,10 @@ class RepositorioProductosSQLite:
             """
             INSERT INTO productos (
                 codigo, nombre, precio, unidad_venta, categoria_id, activo,
-                costo_neto, perecible, dias_aviso, stock_minimo
+                costo_neto, perecible, dias_aviso, stock_minimo,
+                desc_dias_1, desc_pct_1, desc_dias_2, desc_pct_2, iaba_pct
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(codigo) DO UPDATE SET
                 nombre=excluded.nombre,
                 precio=excluded.precio,
@@ -41,7 +43,12 @@ class RepositorioProductosSQLite:
                 costo_neto=excluded.costo_neto,
                 perecible=excluded.perecible,
                 dias_aviso=excluded.dias_aviso,
-                stock_minimo=excluded.stock_minimo
+                stock_minimo=excluded.stock_minimo,
+                desc_dias_1=excluded.desc_dias_1,
+                desc_pct_1=excluded.desc_pct_1,
+                desc_dias_2=excluded.desc_dias_2,
+                desc_pct_2=excluded.desc_pct_2,
+                iaba_pct=excluded.iaba_pct
             """,
             (
                 producto.codigo,
@@ -54,6 +61,11 @@ class RepositorioProductosSQLite:
                 1 if producto.perecible else 0,
                 producto.dias_aviso,
                 producto.stock_minimo,
+                producto.desc_dias_1,
+                producto.desc_pct_1,
+                producto.desc_dias_2,
+                producto.desc_pct_2,
+                producto.iaba_pct,
             ),
         )
 
@@ -68,6 +80,39 @@ class RepositorioProductosSQLite:
         ("venta_detalles", "producto_codigo"),
         ("lotes", "codigo_producto"),
     )
+
+    # CA-22: lo que hace que un producto tenga historia y ya no se pueda borrar.
+    _TABLAS_CON_HISTORIA = (
+        ("venta_detalles", "producto_codigo"),
+        ("lotes", "codigo_producto"),
+        ("facturas_compra_lineas", "codigo_producto"),
+        ("movimientos_inventario", "codigo_producto"),
+        ("historial_ajustes_inventario", "codigo_producto"),
+    )
+
+    def tiene_historia(self, codigo: str) -> bool:
+        """True si tiene ventas, lotes, facturas, movimientos o stock (no se debe borrar)."""
+        for tabla, columna in self._TABLAS_CON_HISTORIA:
+            if self._con.execute(
+                f"SELECT 1 FROM {tabla} WHERE {columna} = ? LIMIT 1", (codigo,)
+            ).fetchone():
+                return True
+        fila = self._con.execute(
+            "SELECT cantidad FROM existencias WHERE codigo_producto = ?", (codigo,)
+        ).fetchone()
+        return fila is not None and Decimal(str(fila["cantidad"])) != 0
+
+    def eliminar(self, codigo: str) -> None:
+        """Borra un producto sin historia, con su fila de existencia y sus cambios de precio."""
+        self._con.execute("BEGIN")
+        try:
+            for tabla in ("existencias", "historial_precios"):
+                self._con.execute(f"DELETE FROM {tabla} WHERE codigo_producto = ?", (codigo,))
+            self._con.execute("DELETE FROM productos WHERE codigo = ?", (codigo,))
+        except Exception:
+            self._con.execute("ROLLBACK")
+            raise
+        self._con.execute("COMMIT")
 
     def cambiar_codigo(self, anterior: str, nuevo: str) -> None:
         """Cambia el codigo del producto y de todo lo que lo referencia, todo o nada."""
@@ -138,7 +183,7 @@ class RepositorioProductosSQLite:
         """
         costo = None
         if fila["costo_neto"] is not None:
-            costo = Costo(neto=Dinero(int(fila["costo_neto"])), iva=Dinero(0))
+            costo = costo_con_iaba(int(fila["costo_neto"]), fila["iaba_pct"])
         return Producto(
             codigo=fila["codigo"],
             nombre=fila["nombre"],
@@ -150,6 +195,11 @@ class RepositorioProductosSQLite:
             perecible=bool(fila["perecible"]),
             dias_aviso=fila["dias_aviso"],
             stock_minimo=fila["stock_minimo"],
+            desc_dias_1=fila["desc_dias_1"],
+            desc_pct_1=fila["desc_pct_1"],
+            desc_dias_2=fila["desc_dias_2"],
+            desc_pct_2=fila["desc_pct_2"],
+            iaba_pct=fila["iaba_pct"],
         )
 
     def buscar(self, termino: str) -> list[Producto]:

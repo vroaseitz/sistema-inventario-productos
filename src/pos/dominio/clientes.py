@@ -24,6 +24,14 @@ MEDIO_DESCUENTO = "descuento"
 # HU-VTA-11: anular una venta a credito revierte su consumo con un abono sin plata (medio
 # «anulacion»): baja la deuda, no entra a la caja y no cuenta como un pago del cliente.
 MEDIO_ANULACION = "anulacion"
+# CL-06: al anular una venta pagada con dinero y elegir «saldo a favor», el monto queda en la
+# cuenta del cliente como un abono sin plata: deja el saldo en negativo («A favor $X») y se
+# descuenta de su proxima compra a credito. No es un pago del cliente ni revierte un consumo.
+MEDIO_SALDO_A_FAVOR = "saldo_a_favor"
+# La deuda que el cliente traia del sistema antiguo entra como un consumo con este detalle, fechado
+# el dia del corte (dentro del ciclo en curso). El 20 % se aplica cuando el cliente paga, y esa
+# deuda aun no habia recibido ningun descuento, asi que entra en la base del descuento.
+DETALLE_SALDO_ANTERIOR = "Saldo anterior"
 
 
 def detalle_descuento(anio: int, mes: int) -> str:
@@ -101,6 +109,14 @@ def total_a_pagar(consumos: int) -> int:
     return consumos - descuento_credito(consumos)
 
 
+def falta_pagar(consumos: int, abonos: int) -> int:
+    """CL-08: lo que aun falta pagar del ciclo (consumos - 20 % - abonos). Negativo = a favor.
+
+    `abonos` incluye lo que el cliente ya tenia a favor en el ciclo (`creditos_del_ciclo`).
+    """
+    return total_a_pagar(consumos) - abonos
+
+
 @dataclass(frozen=True)
 class LineaConsumo:
     """Un producto dentro de un consumo a credito (para el estado de cuenta, HU-CLI-02/04)."""
@@ -168,6 +184,24 @@ def abonos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) 
         m.monto
         for m in movimientos
         if m.tipo is TipoMovimientoCliente.ABONO
-        and m.medio not in (MEDIO_DESCUENTO, MEDIO_ANULACION)
+        and m.medio not in (MEDIO_DESCUENTO, MEDIO_ANULACION, MEDIO_SALDO_A_FAVOR)
         and en_ciclo(m, anio, mes)
+    )
+
+
+def saldo_a_favor_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
+    """Dinero que el cliente dejo a favor en el ciclo al anularse una venta pagada (CL-06)."""
+    return sum(
+        m.monto
+        for m in movimientos
+        if m.tipo is TipoMovimientoCliente.ABONO
+        and m.medio == MEDIO_SALDO_A_FAVOR
+        and en_ciclo(m, anio, mes)
+    )
+
+
+def creditos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) -> int:
+    """Lo que ya esta cubierto del ciclo: abonos del cliente mas su saldo a favor."""
+    return abonos_del_ciclo(movimientos, anio, mes) + saldo_a_favor_del_ciclo(
+        movimientos, anio, mes
     )

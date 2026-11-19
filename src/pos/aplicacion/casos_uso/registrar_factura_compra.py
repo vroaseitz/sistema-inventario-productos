@@ -26,7 +26,6 @@ from pos.aplicacion.sincronizacion import encolar_factura_compra, encolar_produc
 from pos.dominio.compras import FacturaCompra
 from pos.dominio.errores import ReglaCompraInvalida
 from pos.dominio.productos import UnidadVenta
-from pos.dominio.value_objects import Costo, Dinero
 
 # CO-07: igual que en la venta, un producto por unidad entra en cantidades enteras.
 MENSAJE_CANTIDAD_ENTERA = "Este producto se vende por unidad: la cantidad debe ser un número entero"
@@ -74,7 +73,7 @@ class RegistrarFacturaCompra:
             producto = self.repositorio_productos.obtener_por_codigo(linea.codigo_producto)
             linea.costo_anterior = producto.costo.neto.monto if producto.costo else None
             # Costo neto sin impuestos (ADR 0004): el margen se calcula sobre el neto.
-            producto.costo = Costo(neto=Dinero(linea.costo_unitario_neto), iva=Dinero(0))
+            producto.fijar_costo_neto(linea.costo_unitario_neto)  # el IABA va aparte (CA-21)
             self.repositorio_productos.guardar(producto)
             categoria = (
                 self.repositorio_categorias.nombre_de(producto.categoria_id)

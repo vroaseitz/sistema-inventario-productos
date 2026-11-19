@@ -16,6 +16,7 @@ simulacro («--simulacro») puede probar todo y deshacerlo.
 from __future__ import annotations
 
 import csv
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
@@ -39,6 +40,7 @@ from pos.aplicacion.sincronizacion import (
     encolar_producto,
 )
 from pos.dominio.clientes import (
+    DETALLE_SALDO_ANTERIOR,
     Cliente,
     MovimientoCliente,
     TipoMovimientoCliente,
@@ -49,7 +51,6 @@ from pos.dominio.productos import Producto, UnidadVenta
 from pos.dominio.value_objects import Costo, Dinero
 
 MOTIVO_CARGA_INICIAL = "Carga inicial"
-DETALLE_SALDO_ANTERIOR = "Saldo anterior"
 CONTACTO_PENDIENTE = "Sin teléfono (migración)"
 
 
@@ -113,15 +114,22 @@ COLUMNAS_PRODUCTOS = (
 COLUMNAS_CLIENTES = ("nombre", "telefono", "observaciones", "cupo", "deuda_actual", "ultimo_pago")
 
 
+_FORMATO_ENTERO = re.compile(r"^\d+$|^\d{1,3}(\.\d{3})+$")
+
+
 def _entero(texto: str, campo: str, minimo: int = 0) -> int | None:
-    """Entero de CLP/unidades; vacio = None. Acepta «1.234» y «1234,0»."""
+    """Entero de CLP/unidades; vacio = None. Acepta «1234» y «1.234» (separador de miles).
+
+    Un decimal («1500.50», «12,5») es ambiguo: se RECHAZA en vez de adivinar y dejar un monto
+    multiplicado por 10 o por 100.
+    """
     if not texto:
         return None
-    limpio = texto.replace(".", "").split(",")[0] if "," in texto else texto.replace(".", "")
-    try:
-        valor = int(limpio)
-    except ValueError as exc:
-        raise ErrorDominio(f"{campo}: «{texto}» no es un número entero") from exc
+    if not _FORMATO_ENTERO.match(texto):
+        raise ErrorDominio(
+            f"{campo}: «{texto}» no es un número entero (los decimales no se aceptan aquí)"
+        )
+    valor = int(texto.replace(".", ""))
     if valor < minimo:
         raise ErrorDominio(f"{campo}: no puede ser menor que {minimo}")
     return valor
@@ -170,8 +178,9 @@ class MigrarProductos:
             )
         if self._con_adicional:
             resumen.avisos.append(
-                f"{self._con_adicional} productos traen impuesto adicional (IABA) y el sistema "
-                "solo guarda el costo neto: el IVA y el IABA no quedan registrados (CA-21)."
+                f"{self._con_adicional} productos traen impuesto adicional (IABA): su costo neto "
+                "ya lo incluye de forma aproximada (definición de la PO, CA-21), así que no se "
+                "separa; se ajusta después desde F2 si hace falta."
             )
         if self.auditor is not None and resumen.cargados:
             self.auditor.registrar(
@@ -247,8 +256,19 @@ class MigrarClientes:
     def ejecutar(self, filas: list[dict[str, str]]) -> ResumenMigracion:
         resumen = ResumenMigracion("clientes", leidos=len(filas))
         sin_contacto = 0
+        vistos: set[str] = set()
         for numero, fila in enumerate(filas, start=2):
             referencia = f"cliente nº {numero - 1}"  # sin el nombre: es un dato personal
+            clave = " ".join(fila["nombre"].split()).casefold()
+            if clave and clave in vistos:
+                # Dos clientes con el mismo nombre en el archivo: no se puede saber si son la misma
+                # persona. Se rechaza el segundo CON su motivo para revisarlo a mano; callarlo
+                # perderia su deuda.
+                resumen.rechazados.append(
+                    Rechazo(numero, referencia, "nombre repetido en el archivo: revisar a mano")
+                )
+                continue
+            vistos.add(clave)
             try:
                 estado = self._cargar(fila)
             except ErrorDominio as exc:

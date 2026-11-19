@@ -268,7 +268,13 @@ class VentanaPrincipal(tk.Tk):
 
     def mostrar(self, clave: str) -> None:
         """Cambia de modulo: muestra su pantalla y pinta franja, titulo y pestana con su color."""
-        if clave == self._activo or clave not in self._marcos:
+        if clave == self._activo:
+            # O-41: la tecla del modulo en el que ya se esta lo lleva a su pantalla principal.
+            al_repetir = getattr(self._marcos.get(clave), "al_repetir_tecla", None)
+            if callable(al_repetir):
+                al_repetir()
+            return
+        if clave not in self._marcos:
             return
         if clave not in self._permitidos():
             return  # HU-USR-02: la vendedora no entra a los modulos de la administradora
@@ -386,6 +392,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
         ReporteInventario,
     )
     from pos.aplicacion.casos_uso.editar_producto import EditarProducto
+    from pos.aplicacion.casos_uso.eliminar_producto import EliminarProducto
     from pos.aplicacion.casos_uso.gestionar_categorias import GestionarCategorias
     from pos.aplicacion.casos_uso.gestionar_clientes import (
         GestionarClientes,
@@ -511,6 +518,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     repositorio_clientes=repo_clientes,
                     movimientos=movimientos,
                     auditor=auditor,
+                    registrar_movimiento_caja=RegistrarMovimientoCaja(repo_turnos, cola=cola),
                 ),
                 repo_tickets=RepositorioTicketsEsperaSQLite(conexion),
                 auditoria=repo_auditoria,
@@ -559,6 +567,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                 repo_categorias,
                 repo_historial,
                 sesion=sesion,
+                eliminar=EliminarProducto(repo_productos, cola=cola, auditor=auditor),
             ),
             "F4": lambda padre: VentanaClientes(
                 padre,
