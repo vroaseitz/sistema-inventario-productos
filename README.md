@@ -4,7 +4,7 @@
 
 **Repositorio público:** https://github.com/vroaseitz/sistema-inventario-productos
 
-![Estado](https://img.shields.io/badge/estado-Fase%201%20·%20Definición-yellow)
+![Estado](https://img.shields.io/badge/estado-Fase%202%20·%20Sistema%20construido%20F1–F7-green)
 ![Metodología](https://img.shields.io/badge/metodología-Ágil%20·%20Sprints%20de%202%20semanas-blue)
 ![Base de datos](https://img.shields.io/badge/datos-Supabase%20·%20PostgreSQL-3ecf8e)
 ![Origen](https://img.shields.io/badge/origen-Firebird%20·%20PDVDATA.FDB-orange)
@@ -169,57 +169,54 @@ La balanza en uso es una **MANA de 40 kg, con graduación de 5 g**, y **no cuent
 
 ## 5. Arquitectura de la solución
 
-La solución es una **aplicación de escritorio sobre Windows** que opera contra una **base de datos gestionada en Supabase (PostgreSQL)**. La migración desde el sistema antiguo es un proceso independiente que se ejecuta una sola vez.
+La solución es una **aplicación de escritorio para Windows** que trabaja sobre una **base local SQLite** y copia cada operación a **Supabase (PostgreSQL)** mediante una cola de sincronización. Así el local sigue vendiendo aunque se caiga internet (ADR 0002). La migración desde el sistema antiguo es un proceso aparte, de ejecución única.
 
 ```mermaid
 flowchart TD
     subgraph ANTIGUO["Sistema antiguo — se apaga tras la migración"]
         A["Abarrotes Punto de Venta 2.12<br/>Firebird embebido — PDVDATA.FDB"]
     end
-
-    subgraph MIG["Proceso de migración — ejecución única"]
-        B["Extract<br/>Lectura de la base Firebird"]
-        C["Transform<br/>Limpieza, validación y normalización"]
-        D["Load<br/>Carga hacia la nueva base de datos"]
+    subgraph MIG["Migración — ejecución única (pendiente)"]
+        B["Extracción, limpieza y carga"]
     end
-
     subgraph NUEVO["Sistema nuevo"]
-        E["Aplicación de escritorio<br/>Windows"]
-        F[("Supabase — PostgreSQL<br/>Productos · Inventario · Ventas<br/>Pagos · Caja · Clientes · Crédito")]
+        E["Aplicación de escritorio<br/>Python 3.11 + Tkinter · ventana única F1–F7"]
+        L[("SQLite local<br/>modo WAL")]
+        Q["Cola de sincronización<br/>UUID por operación"]
+        F[("Supabase — PostgreSQL")]
     end
-
-    A --> B
-    B --> C
-    C --> D
-    D --> F
-    E <--> F
+    A --> B --> F
+    E <--> L
+    L --> Q -->|"ON CONFLICT DO NOTHING"| F
 ```
 
 ### Componentes
 
 | Componente | Responsabilidad |
 | --- | --- |
-| **Aplicación de escritorio** | Interfaz de operación: ventas, caja, inventario, productos, clientes y crédito. Se ejecuta en el equipo del local, sobre Windows |
-| **Base de datos gestionada** | Supabase (PostgreSQL). Almacena toda la información del negocio y es la única fuente de verdad del sistema nuevo |
-| **Proceso de migración** | Componente independiente que lee la base Firebird del sistema antiguo, transforma la información y la carga en la nueva base. Se ejecuta una vez, en el corte |
+| **Aplicación de escritorio** | Ventana única con siete módulos: F1 Operación, F2 Catálogo, F3 Inventario, F4 Clientes, F5 Compras, F6 Reportes y F7 Administración. Se empaqueta como ejecutable con PyInstaller |
+| **Base local SQLite** | Base con la que trabaja la aplicación. Modo WAL con `synchronous=NORMAL`, tolerante a cortes de energía |
+| **Cola de sincronización** | Publica cada operación en Supabase con un identificador único; reintentar no duplica datos |
+| **Supabase (PostgreSQL)** | Copia en la nube del negocio. Esquema en `database/migraciones/` (001 a 009) |
+| **Migración** | Proceso independiente que lee `PDVDATA.FDB` y carga los datos limpios. Plan en `docs/09-plan-migracion/`; aún no implementado |
 
 ### Comunicación
 
-La aplicación de escritorio se comunica con Supabase a través de su API sobre HTTPS. El proceso de migración lee el archivo `PDVDATA.FDB` de forma local y escribe hacia Supabase.
+La aplicación se conecta a Supabase con `psycopg2` por el *session pooler* (TLS, puerto 5432), con un rol de permisos acotados (`pos_app`). La conexión no depende del sistema operativo obsoleto del local, porque el driver trae su propia biblioteca de cifrado (ADR 0001).
 
-> El diagrama de componentes y los diagramas UML detallados se encuentran en `docs/07-diagramas-uml/`. El modelo de datos entidad-relación está en `docs/06-modelo-datos/`.
+> Los diagramas UML están en `docs/07-diagramas-uml/`, el modelo de datos en `docs/06-modelo-datos/` y las decisiones de arquitectura en `docs/08-diseno/adr/` (0001 a 0005).
 
 ### Nota sobre portabilidad y contenedores
 
-La solución **no utiliza contenedores**: se trata de una aplicación de escritorio que se instala en el equipo del local, combinada con una base de datos gestionada por un tercero. No hay componentes ejecutándose como servicio propio. Esta situación fue expuesta a la profesora guía el **21 de agosto de 2026** y se autorizó la excepción, con el compromiso de cumplir mecanismos equivalentes:
+La solución **no utiliza contenedores**: Docker no corre en el Windows 8.1 del local. Esta situación fue expuesta a la profesora guía el **21 de agosto de 2026** y se autorizó la excepción, con el compromiso de cumplir mecanismos equivalentes:
 
 | Mecanismo equivalente | Ubicación |
 | --- | --- |
-| Manual técnico de despliegue | `docs/12-despliegue/` |
-| Instalador empaquetado | Entregable del proyecto |
+| Manual técnico de despliegue | `Fase 3/Evidencias de Proyecto/` y `docs/12-despliegue/` |
+| Ejecutable empaquetado | `build/pos.spec` (PyInstaller) |
 | Variables de entorno separadas del código | `config/.env.example` |
-| Portabilidad como requisito no funcional | `docs/04-requisitos-no-funcionales/` |
-| Justificación técnica de la excepción | `docs/08-diseno/` |
+| Portabilidad como requisito no funcional | Documento de requisitos no funcionales |
+| Justificación técnica de la excepción | `docs/08-diseno/adr/0003-empaquetado-sin-contenedores.md` |
 
 ---
 
@@ -283,31 +280,34 @@ La migración es un **evento único**, no una sincronización permanente. Se des
 | **Cursor** | Entorno de desarrollo |
 | **Máquina virtual** | Ensayos del proceso de migración |
 
-### Pendiente de definición
+### Aplicación
 
-| Definición | Restricciones que debe cumplir |
+| Tecnología | Uso |
 | --- | --- |
-| **Stack de la aplicación de escritorio** | Ejecutarse en Windows · conectarse a Supabase · ser empaquetable como instalador |
-| **Framework de pruebas** | Compatible con el stack que se elija |
-| **Operación sin conexión a internet** | Ver sección de decisiones pendientes |
+| **Python 3.11 (64 bits)** | Lenguaje de la aplicación; última versión compatible con Windows 8.1 (ADR 0001) |
+| **Tkinter / ttk** | Interfaz gráfica, incluida en Python |
+| **SQLite** | Base local con operación sin conexión |
+| **psycopg2-binary** | Conexión a Supabase con TLS propio |
+| **bcrypt** | Cifrado de contraseñas de usuario |
+| **pywin32** | Impresión del comprobante y apertura del cajón en Windows |
+| **PyInstaller** | Empaquetado como ejecutable |
+| **pytest y ruff** | Pruebas automatizadas y análisis estático |
+| **GitHub Actions** | Integración continua: ejecuta todas las pruebas en cada envío |
 
-> Las decisiones técnicas deben justificarse por los requerimientos del proyecto y no únicamente por factibilidad o preferencia tecnológica. La justificación de cada decisión se documenta en `docs/08-diseno/`.
+> La justificación de cada decisión está en `docs/08-diseno/adr/`.
 
 ---
 
 ## 8. Instrucciones para ejecutar el proyecto localmente
 
-> **Estado:** aplicación de escritorio en Python (Tkinter) con SQLite local y sincronización a Supabase. Los comandos de abajo son los reales.
-
 ### Requisitos previos
 
 | Requisito | Detalle |
 | --- | --- |
-| **Windows** | Sistema operativo objetivo de la aplicación |
-| **Git** | Para clonar el repositorio — https://git-scm.com |
-| **Proyecto en Supabase** | URL y llaves del proyecto utilizado como base de datos |
-| **Archivo `PDVDATA.FDB`** | Solo para ejecutar el proceso de migración. Copia del respaldo, nunca la base en producción del local |
-| **Entorno de ejecución** | Python 3.11+ (el `.exe` lleva su propio intérprete) |
+| **Windows** | Sistema operativo objetivo (el local usa Windows 8.1 de 64 bits) |
+| **Python 3.11 (64 bits)** | https://www.python.org/downloads/ — marcar «Add Python to PATH» |
+| **Git** | https://git-scm.com |
+| **Supabase (opcional)** | Sin `SUPABASE_DB_URL` la aplicación funciona solo en local |
 
 ### 1. Clonar el repositorio
 
@@ -316,53 +316,54 @@ git clone https://github.com/vroaseitz/sistema-inventario-productos.git
 cd sistema-inventario-productos
 ```
 
-### 2. Configurar las variables de entorno
-
-El repositorio incluye una plantilla **sin credenciales reales**:
+### 2. Crear el entorno e instalar dependencias
 
 ```bash
-cp config/.env.example .env
-```
-
-Abre el archivo `.env` y completa los valores de tu entorno.
-
-> ⚠️ El archivo `.env` está excluido por `.gitignore` y **nunca debe subirse al repositorio**.
-
-### 3. Instalar dependencias
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+py -3.11 -m venv .venv
+.venv\Scripts\activate
 pip install -r requirements-dev.txt
 ```
 
-Python 3.11 o superior (el empaquetado para Windows 8.1 se hace con 3.11 de 64 bits).
+### 3. Configurar las variables de entorno
+
+```bash
+copy config\.env.example .env
+```
+
+Completa `SUPABASE_DB_URL` (o déjala vacía para trabajar solo en local) y `POS_SQLITE_PATH`.
+
+> ⚠️ El archivo `.env` está excluido por `.gitignore` y **nunca debe subirse al repositorio**.
 
 ### 4. Ejecutar la aplicación
 
 ```bash
-PYTHONPATH=src POS_SQLITE_PATH=./pos_local.db python -m pos
+set PYTHONPATH=src
+python -m pos
 ```
 
-Sin `SUPABASE_DB_URL` la app funciona en modo local. En el primer arranque pide crear el usuario
-administrador. El `.exe` para Windows 8.1 se construye en una VM con ese sistema: ver
-[`docs/12-despliegue/manual-de-implementacion.md`](docs/12-despliegue/manual-de-implementacion.md).
+En el primer inicio la aplicación crea la base local y pide crear la contraseña de la administradora. Para cargar las categorías, `python scripts/cargar_categorias.py categorias.txt` (una por línea). Para una base de demostración con datos ficticios, `python scripts/sembrar_demo_e2e.py demo.db`.
 
-### 5. Ejecutar el proceso de migración
-
-Pendiente: la migración de datos desde el sistema antiguo aún no está construida. Las **migraciones de
-esquema** de Supabase (002 a 009) están en `database/migraciones/` y se aplican en orden desde el SQL
-Editor (ver el manual de implementación).
-
-### 6. Ejecutar las pruebas
+### 5. Ejecutar las pruebas
 
 ```bash
-ruff check . && ruff format --check .
-POS_TEST_PG_URL=postgresql://postgres:postgres@localhost:55432/postgres python -m pytest tests -q -p no:warnings
+ruff check .
+pytest
 ```
 
-Las pruebas contra PostgreSQL necesitan el contenedor `pos-pg-test` (Docker); sin esa variable se
-omiten. Casos de prueba y defectos: [`docs/11-pruebas/`](docs/11-pruebas/).
+Las pruebas contra PostgreSQL se ejecutan solo si existe la variable `POS_TEST_PG_URL`; sin ella se omiten.
+
+### 6. Empaquetar el ejecutable
+
+```bash
+pip install pyinstaller
+pyinstaller build/pos.spec
+```
+
+El ejecutable final se construye en una máquina virtual Windows 8.1 (ADR 0001). Detalle en el manual técnico y de despliegue.
+
+### 7. Migración desde el sistema antiguo
+
+Se hace con `scripts/importar_migracion.py` a partir de los CSV extraídos del respaldo del sistema antiguo (primero con `--simulacro`). Procedimiento en `docs/12-despliegue/migracion-de-datos.md` y plan de reversa en `docs/09-plan-migracion/`. Las migraciones de esquema de Supabase (002 a 011) están en `database/migraciones/` y se aplican en orden desde el SQL Editor.
 
 ---
 
@@ -479,11 +480,9 @@ main          ← rama estable; solo recibe cambios revisados
 ```text
 sistema-inventario-productos/
 │
-├── Evidencias Individuales/         Evidencias individuales de la asignatura
-│   └── Fase 1/
-│
-├── Evidencias Grupales/             Evidencias grupales de la asignatura
-│   └── Fase 1/
+├── Fase 1/                          Evidencias de la Fase 1 (grupales e individuales)
+├── Fase 2/                          Evidencias de la Fase 2 (grupales, individuales y de proyecto)
+├── Fase 3/                          Evidencias de la Fase 3 (grupales, individuales y de proyecto)
 │
 ├── docs/                            Documentación del proyecto
 │   ├── 01-diagnostico/              Diagnóstico del sistema actual
@@ -529,36 +528,36 @@ sistema-inventario-productos/
 
 ## 13. Estado actual del proyecto
 
-**Fase 1 — Definición del Proyecto APT.**
+**Sistema construido y en pruebas (semana 14, 12-11-2026).**
 
-### Resuelto
+### Terminado
 
-- ✅ Identificación del software actual: Abarrotes Punto de Venta 2.12 de Bambu Code, con Firebird embebido.
-- ✅ Diagnóstico de sus limitaciones técnicas y funcionales.
-- ✅ Definición del alcance: punto de venta completo, no solo gestión de productos.
-- ✅ Estrategia de migración: evento único con plan de reversa, ensayada en máquina virtual.
-- ✅ Excepción de contenedores autorizada por la profesora guía, con mecanismos equivalentes comprometidos.
-- ✅ Decisión sobre la balanza: productos pesables soportados desde el inicio, integración descartada.
-- ✅ Metodología y herramienta de gestión: ágil con sprints de 2 semanas en ClickUp.
-- ✅ Repositorio público con estructura definida.
+- ✅ Ventana única con los siete módulos del prototipo v3: F1 Operación, F2 Catálogo, F3 Inventario, F4 Clientes, F5 Compras, F6 Reportes y F7 Administración.
+- ✅ Venta con lector y granel por peso, tickets en espera, cobro mixto con billetes y redondeo a la decena, comprobante, caja y corte con conteo por denominación, anulación de venta.
+- ✅ Catálogo con 20 categorías validadas por la Product Owner, costo con IVA e impuesto adicional, margen calculado e historial de precios.
+- ✅ Inventario con lotes y vencimientos, alertas con descuento sugerido y mermas con motivo.
+- ✅ Clientes con crédito, cupo, abonos y estado de cuenta con descuento del 20 %.
+- ✅ Compras a proveedor que actualizan el costo y crean el lote.
+- ✅ Reportes de ventas, rentabilidad, rotación y meta diaria; usuarios, auditoría y cierre por inactividad.
+- ✅ Sincronización con Supabase (migraciones 001 a 009).
+- ✅ 393 pruebas automatizadas con integración continua; QA manual con registro de hallazgos.
 
-### En curso
+### Pendiente
 
-- 🟡 Levantamiento de requerimientos con la contraparte.
-- 🟡 Definición del stack tecnológico de la aplicación de escritorio.
-- 🟡 Elaboración del informe de Definición del Proyecto APT.
+- ⏳ Migración de datos desde Firebird (HU-MIG-01 a 03).
+- ⏳ Prueba de la impresora y el cajón reales del local.
+- ⏳ Implantación en el local el viernes 20-11-2026, grabada para mostrarla ante la comisión; luego capacitación y marcha blanca.
 
 ---
 
 ## 14. Decisiones pendientes
 
-| Decisión | Restricciones y consideraciones | Prioridad |
+| Decisión | Consideraciones | Prioridad |
 | --- | --- | --- |
-| **Stack de la aplicación de escritorio** | Windows · conexión a Supabase · empaquetable como instalador | **Alta** |
-| **Operación sin conexión a internet** | Si hoy se cae la conexión, no se podría vender. Frente al sistema local actual esto es una regresión, y necesita una respuesta de diseño | **Alta** |
-| **Framework de pruebas** | Compatible con el stack elegido | Media |
+| **Migración desde Firebird** | Debe ensayarse, con su reversa, antes de la implantación del viernes 20-11-2026 | **Alta** |
+| **Perfil «Vendedora»** | Existe en el código sin ampliarse; se activa si se incorpora personal externo | Baja |
 
-Estas decisiones se registran en la lista *Decisiones pendientes* de ClickUp y su resolución se documenta en `docs/08-diseno/`.
+Las decisiones resueltas están en `docs/08-diseno/adr/` y en las actas de `docs/actas/`.
 
 ---
 
