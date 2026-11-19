@@ -16,3 +16,6 @@ Documento que permite instalar, poner en marcha y revertir el sistema.
 Reemplaza el punto de contenedores del instructivo, cuya excepción fue autorizada por la profesora guía con la condición de cumplir mecanismos equivalentes. Este manual es el principal de ellos.
 
 > **Responde al instructivo:** manual técnico de despliegue.
+
+- [Plan de implantación del 20-11](plan-de-implantacion-20-11.md): etapas, responsables, criterios de «sí» y vuelta atrás.
+- [Migración de datos](migracion-de-datos.md): importador de productos y clientes del sistema antiguo.
