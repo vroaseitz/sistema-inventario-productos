@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import pytest
 
+from pos.aplicacion.casos_uso.abrir_turno_caja import AbrirTurnoCaja
+from pos.aplicacion.casos_uso.cerrar_turno_caja import CerrarTurnoCaja
 from pos.aplicacion.casos_uso.sincronizar_pendientes import (
     MENSAJE_CIERRE_ENVIADO,
     SincronizarAlCierre,
+    mensaje_cierre_pendientes,
 )
+from pos.dominio.value_objects import Dinero
 from pos.infraestructura.sqlite.cola_sincronizacion import ColaSincronizacionSQLite
 from pos.infraestructura.sqlite.conexion import crear_conexion
 from pos.infraestructura.sqlite.esquema import crear_esquema
+from pos.infraestructura.sqlite.repositorio_turnos_caja import RepositorioTurnosCajaSQLite
+from pos.infraestructura.sqlite.repositorio_ventas import RepositorioVentasSQLite
 
 
 class PublicadorQueAcepta:
@@ -115,3 +121,50 @@ def test_la_tanda_cierra_la_conexion_del_publicador_al_terminar(cola):
     publicador = ConConexion()
     SincronizarAlCierre(cola, publicador).ejecutar()
     assert publicador.cerrada == 1
+
+
+# --- Pruebas del documento SY-01: cerrar la jornada de verdad y luego sincronizar ---------
+
+
+@pytest.fixture
+def jornada(tmp_path):
+    """Jornada abierta en SQLite real; su apertura ya quedo en la cola de pendientes."""
+    con = crear_conexion(str(tmp_path / "j.db"))
+    crear_esquema(con)
+    cola = ColaSincronizacionSQLite(con)
+    turnos = RepositorioTurnosCajaSQLite(con)
+    AbrirTurnoCaja(turnos, cola).ejecutar(usuario_id=1, fondo_inicial=Dinero(10_000))
+    cerrar = CerrarTurnoCaja(turnos, RepositorioVentasSQLite(con), cola)
+    return cola, turnos, cerrar
+
+
+def _cerrar_jornada(jornada, publicador):
+    """Mismo orden que _cerrar_turno_ui: primero se cierra en el PC y despues se envia."""
+    cola, turnos, cerrar = jornada
+    cerrar.ejecutar(efectivo_contado=Dinero(10_000))
+    return SincronizarAlCierre(cola, publicador).ejecutar()
+
+
+def test_cierre_con_publicador_que_acepta_cierra_y_vacia_la_cola(jornada):
+    cola, turnos, _ = jornada
+    publicador = PublicadorQueAcepta()
+    assert _cerrar_jornada(jornada, publicador) == MENSAJE_CIERRE_ENVIADO
+    assert turnos.obtener_abierto() is None
+    assert cola.pendientes() == []
+    assert any(op.startswith("turno-cerrar:") for op in publicador.publicadas)
+
+
+def test_cierre_con_publicador_que_falla_cierra_y_deja_pendientes(jornada):
+    cola, turnos, _ = jornada
+    mensaje = _cerrar_jornada(jornada, PublicadorSinInternet())
+    assert turnos.obtener_abierto() is None
+    pendientes = cola.pendientes()
+    assert len(pendientes) == 2  # apertura y cierre de la jornada
+    assert mensaje == mensaje_cierre_pendientes(2)
+
+
+def test_cierre_sin_publicador_cierra_sin_mensaje_de_error(jornada):
+    cola, turnos, _ = jornada
+    assert _cerrar_jornada(jornada, None) is None
+    assert turnos.obtener_abierto() is None
+    assert len(cola.pendientes()) == 2
