@@ -28,8 +28,9 @@ MEDIO_ANULACION = "anulacion"
 # cuenta del cliente como un abono sin plata: deja el saldo en negativo («A favor $X») y se
 # descuenta de su proxima compra a credito. No es un pago del cliente ni revierte un consumo.
 MEDIO_SALDO_A_FAVOR = "saldo_a_favor"
-# La deuda que el cliente traia del sistema antiguo entra como un consumo con este detalle (fechado
-# antes del ciclo en curso). Es deuda heredada: no es un consumo del ciclo y no recibe el 20 %.
+# La deuda que el cliente traia del sistema antiguo entra como un consumo con este detalle, fechado
+# el dia del corte (dentro del ciclo en curso). El 20 % se aplica cuando el cliente paga, y esa
+# deuda aun no habia recibido ningun descuento, asi que entra en la base del descuento.
 DETALLE_SALDO_ANTERIOR = "Saldo anterior"
 
 
@@ -165,9 +166,7 @@ def consumos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int
     consumido = sum(
         m.monto
         for m in movimientos
-        if m.tipo is TipoMovimientoCliente.CONSUMO
-        and en_ciclo(m, anio, mes)
-        and not m.detalle.startswith(DETALLE_SALDO_ANTERIOR)
+        if m.tipo is TipoMovimientoCliente.CONSUMO and en_ciclo(m, anio, mes)
     )
     anulado = sum(
         m.monto

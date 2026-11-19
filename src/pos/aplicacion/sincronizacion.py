@@ -43,6 +43,10 @@ def encolar_producto(
             "dias_aviso": producto.dias_aviso,
             "stock_minimo": producto.stock_minimo,
             "iaba_pct": producto.iaba_pct,
+            "desc_dias_1": producto.desc_dias_1,
+            "desc_pct_1": producto.desc_pct_1,
+            "desc_dias_2": producto.desc_dias_2,
+            "desc_pct_2": producto.desc_pct_2,
             # Nombre (no id local): el id de la categoria cambia entre la base local y la remota.
             "categoria": categoria,
         },

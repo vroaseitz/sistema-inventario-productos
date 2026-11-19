@@ -198,7 +198,7 @@ def test_comando_simulacro_no_guarda_nada(tmp_path, monkeypatch):
     assert RepositorioClientesSQLite(con).listar() == []
 
 
-def test_comando_guarda_y_deja_el_saldo_en_el_mes_anterior(tmp_path, monkeypatch, capsys):
+def test_comando_guarda_y_fecha_el_saldo_el_dia_del_corte(tmp_path, monkeypatch, capsys):
     db = tmp_path / "g.db"
     monkeypatch.setenv("POS_SQLITE_PATH", str(db))
     p = _csv(tmp_path / "p.csv", CABECERA_P, FILAS_P)
@@ -210,10 +210,5 @@ def test_comando_guarda_y_deja_el_saldo_en_el_mes_anterior(tmp_path, monkeypatch
     assert len(RepositorioProductosSQLite(con).listar()) == 4
     cli = RepositorioClientesSQLite(con)
     mov = cli.movimientos(cli.listar()[0].id)[0]
-    assert mov.fecha == importar_migracion.fin_de_mes_anterior(date.today())
+    assert mov.fecha == date.today()  # dentro del ciclo: recibe el 20 % al pagar
     assert "4 cargados" in capsys.readouterr().out
-
-
-def test_fin_de_mes_anterior():
-    assert importar_migracion.fin_de_mes_anterior(date(2026, 11, 18)) == date(2026, 10, 31)
-    assert importar_migracion.fin_de_mes_anterior(date(2026, 1, 5)) == date(2025, 12, 31)

@@ -147,11 +147,15 @@ cli._abonar.ejecutar(credito.id, 5000, "transferencia")
 cli.mostrar_cuenta(credito.id)
 app.update()
 r = cli._lbl_resumen
-verificar(r["consumos"].cget("text") == "$11.130", "estado de cuenta: consumos $11.130")
-verificar(r["descuento"].cget("text") == "− $2.226", "descuento del 20 %")
+# La deuda heredada ($12.000, fechada el dia del corte) entra en la base del 20 %.
+verificar(
+    r["consumos"].cget("text") == "$23.130",
+    f"estado de cuenta: consumos 12.000 + 11.130 {r['consumos'].cget('text')}",
+)
+verificar(r["descuento"].cget("text") == "− $4.626", "descuento del 20 % sobre $23.130")
 verificar(r["abonos"].cget("text") == "− $5.000", "abonos del ciclo")
 verificar(
-    r["falta"].cget("text") == "$3.904", f"CL-08: Falta pagar $3.904 {r['falta'].cget('text')}"
+    r["falta"].cget("text") == "$13.504", f"CL-08: Falta pagar $13.504 {r['falta'].cget('text')}"
 )
 verificar(r["final"].cget("text") == "$18.130", "saldo final: 12.000 antiguos + 11.130 - 5.000")
 

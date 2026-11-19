@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -48,12 +48,6 @@ from pos.infraestructura.sqlite.repositorio_movimientos import (  # noqa: E402
 from pos.infraestructura.sqlite.repositorio_productos import RepositorioProductosSQLite  # noqa: E402
 
 USUARIO = "migración"
-
-
-def fin_de_mes_anterior(hoy: date) -> date:
-    """El saldo antiguo se fecha antes del ciclo en curso: asi no cuenta como consumo del mes
-    (y no recibe el 20 % de descuento del credito familiar de este mes)."""
-    return date(hoy.year, hoy.month, 1) - timedelta(days=1)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -101,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
                 ).ejecutar(filas_p)
             )
         if filas_c is not None:
-            fecha = args.fecha_saldo or fin_de_mes_anterior(date.today())
+            fecha = args.fecha_saldo or date.today()  # dia del corte, dentro del ciclo en curso
             resumenes.append(
                 MigrarClientes(
                     RepositorioClientesSQLite(con),

@@ -29,6 +29,7 @@ from pos.dominio.clientes import (
     creditos_del_ciclo,
     falta_pagar,
     saldo_de,
+    total_a_pagar,
 )
 from pos.dominio.errores import ReglaVentaInvalida
 from pos.dominio.inventario import Existencia
@@ -128,21 +129,25 @@ def test_dos_clientes_con_el_mismo_nombre_en_el_archivo_no_se_pierden_en_silenci
     assert "repetido" in resumen.rechazados[0].motivo  # el segundo se ve, no desaparece
 
 
-# --- 3) la deuda heredada no recibe el 20 % --------------------------------------------------
+# --- 3) la deuda heredada entra en la base del 20 % (Germaine, 19-11) -------------------------
 
 
-def test_el_saldo_anterior_de_la_migracion_no_cuenta_como_consumo_del_ciclo(con):
+def test_el_saldo_anterior_de_la_migracion_entra_en_la_base_del_descuento(con):
+    # Ejemplo de Victoria: trae $50.000 y consume $30.000 mas: paga $64.000, no $74.000.
     clientes = RepositorioClientesSQLite(con)
     cliente = GestionarClientes(clientes).crear("Luis", "+56 9 2")
-    mes_anterior = date(HOY.year, HOY.month, 1).replace(day=1)
     clientes.agregar_movimiento(
         MovimientoCliente(
-            cliente.id, TipoMovimientoCliente.CONSUMO, 12000, mes_anterior, DETALLE_SALDO_ANTERIOR
+            cliente.id, TipoMovimientoCliente.CONSUMO, 50000, HOY, DETALLE_SALDO_ANTERIOR
         )
     )
+    clientes.agregar_movimiento(
+        MovimientoCliente(cliente.id, TipoMovimientoCliente.CONSUMO, 30000, HOY, "Venta")
+    )
     movs = clientes.movimientos(cliente.id)
-    assert saldo_de(movs) == 12000  # la deuda existe
-    assert consumos_del_ciclo(movs, mes_anterior.year, mes_anterior.month) == 0  # sin descuento
+    assert saldo_de(movs) == 80000  # la deuda existe
+    consumos = consumos_del_ciclo(movs, HOY.year, HOY.month)
+    assert consumos == 80000 and total_a_pagar(consumos) == 64000
 
 
 # --- 4) anular: validar antes de tocar nada; constancia del reembolso por terminal ------------

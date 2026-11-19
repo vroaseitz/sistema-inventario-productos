@@ -24,18 +24,23 @@ Sentencia = tuple[str, tuple]
 _USUARIO_CAJA = "(SELECT id FROM pos.usuario WHERE correo = 'caja@naturalsur.local')"
 _CATEGORIA_DEFECTO = "(SELECT id FROM pos.categoria WHERE nombre = 'Sin categoria')"
 
-_COLUMNAS_EXTRA = "costo_neto, costo_cargado, es_perecible, dias_aviso_vencimiento, stock_minimo"
+_COLUMNAS_EXTRA = (
+    "costo_neto, costo_cargado, es_perecible, dias_aviso_vencimiento, stock_minimo, "
+    "iaba_pct, desc_dias_1, desc_pct_1, desc_dias_2, desc_pct_2"
+)
 _ACTUALIZAR_EXTRA = (
     "costo_neto = EXCLUDED.costo_neto, costo_cargado = EXCLUDED.costo_cargado, "
     "es_perecible = EXCLUDED.es_perecible, "
     "dias_aviso_vencimiento = EXCLUDED.dias_aviso_vencimiento, "
-    "stock_minimo = EXCLUDED.stock_minimo"
+    "stock_minimo = EXCLUDED.stock_minimo, iaba_pct = EXCLUDED.iaba_pct, "
+    "desc_dias_1 = EXCLUDED.desc_dias_1, desc_pct_1 = EXCLUDED.desc_pct_1, "
+    "desc_dias_2 = EXCLUDED.desc_dias_2, desc_pct_2 = EXCLUDED.desc_pct_2"
 )
 
 _SQL_PRODUCTO = (
     "INSERT INTO pos.producto (codigo, nombre, categoria_id, unidad_venta, precio_venta, activo, "
     f"{_COLUMNAS_EXTRA}) "
-    f"VALUES (%s, %s, {_CATEGORIA_DEFECTO}, %s, %s, %s, %s, %s, %s, %s, %s) "
+    f"VALUES (%s, %s, {_CATEGORIA_DEFECTO}, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
     "ON CONFLICT (codigo) DO UPDATE SET "
     "nombre = EXCLUDED.nombre, unidad_venta = EXCLUDED.unidad_venta, "
     f"precio_venta = EXCLUDED.precio_venta, activo = EXCLUDED.activo, {_ACTUALIZAR_EXTRA}"
@@ -86,7 +91,7 @@ _SQL_PRODUCTO_CON_CATEGORIA = (
     "INSERT INTO pos.producto (codigo, nombre, categoria_id, unidad_venta, precio_venta, activo, "
     f"{_COLUMNAS_EXTRA}) "
     "VALUES (%s, %s, (SELECT id FROM pos.categoria WHERE nombre = %s), %s, %s, %s, "
-    "%s, %s, %s, %s, %s) "
+    "%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) "
     "ON CONFLICT (codigo) DO UPDATE SET "
     "nombre = EXCLUDED.nombre, categoria_id = EXCLUDED.categoria_id, "
     "unidad_venta = EXCLUDED.unidad_venta, "
@@ -234,8 +239,8 @@ def _sql_venta(n_lineas: int, n_pagos: int) -> str:
 
 
 def _extras_producto(d: dict) -> tuple:
-    """costo_neto, costo_cargado, es_perecible, dias_aviso, stock_minimo (con valores por defecto
-    para operaciones viejas que aun esten en la cola sin estos campos)."""
+    """costo_neto, costo_cargado, es_perecible, dias_aviso, stock_minimo, iaba_pct y las etapas del
+    descuento (con valores por defecto para operaciones viejas que aun esten en la cola)."""
     costo = d.get("costo")
     return (
         costo,
@@ -243,6 +248,11 @@ def _extras_producto(d: dict) -> tuple:
         bool(d.get("perecible", False)),
         d.get("dias_aviso"),
         d.get("stock_minimo"),
+        d.get("iaba_pct"),
+        d.get("desc_dias_1"),
+        d.get("desc_pct_1"),
+        d.get("desc_dias_2"),
+        d.get("desc_pct_2"),
     )
 
 

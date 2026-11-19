@@ -27,7 +27,7 @@ PYTHONPATH=src python scripts/importar_migracion.py \
   --productos productos_a_migrar.csv --clientes clientes_a_migrar_PRIVADO.csv
 ```
 
-Opciones: `--fecha-saldo AAAA-MM-DD` (por defecto, el último día del mes anterior), `--contacto-pendiente
+Opciones: `--fecha-saldo AAAA-MM-DD` (por defecto, hoy: el día del corte, dentro del ciclo en curso, para que la deuda heredada reciba el 20 % al pagar), `--contacto-pendiente
 "texto"`, `--sin-cola` (no encola para Supabase).
 
 ## Qué hace
@@ -36,8 +36,9 @@ Opciones: `--fecha-saldo AAAA-MM-DD` (por defecto, el último día del mes anter
   costo neto, stock mínimo y existencia. La existencia queda en el historial como movimiento
   **«Carga inicial»** (solo si es mayor que 0). Todo se encola para Supabase.
 - **Clientes:** crea cada uno con su cupo. La deuda actual queda como un consumo **«Saldo anterior»**
-  (con el último pago en el detalle), fechado antes del ciclo en curso para que no cuente como consumo
-  del mes ni reciba el 20 % del crédito familiar de este mes.
+  (con el último pago en el detalle), fechado el día del corte, dentro del ciclo en curso: como el 20 %
+  se aplica cuando el cliente paga y esa deuda aún no recibió descuento (Germaine, 19-11), entra en la
+  base del descuento. Ejemplo: trae $50.000 y consume $30.000 más: paga $64.000, no $74.000.
 - **Idempotente:** un código o un nombre de cliente que ya existe se omite; no se pisa el stock ni se
   duplica el saldo. Se puede correr dos veces.
 - **Resumen:** leídos, cargados, omitidos y rechazados con su motivo (sin nombres de clientes: se
