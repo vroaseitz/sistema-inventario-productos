@@ -65,7 +65,13 @@ from pos.dominio.pagos import (
 from pos.dominio.productos import UnidadVenta
 from pos.dominio.usuarios import Rol
 from pos.dominio.value_objects import Dinero
-from pos.dominio.ventas import MOTIVO_OTRO, MOTIVOS_ANULACION, EstadoVenta, Venta
+from pos.dominio.ventas import (
+    MOTIVO_OTRO,
+    MOTIVOS_ANULACION,
+    DestinoDevolucion,
+    EstadoVenta,
+    Venta,
+)
 from pos.interfaz.campo_fecha import CampoFecha
 from pos.interfaz.cobro import DialogoCobro, DialogoDescuento, DialogoEspera
 from pos.interfaz.desplazable import MarcoDesplazable
@@ -1033,13 +1039,19 @@ class VentanaVentas(ttk.Frame):
 
     # ------------------------------------------------------------ Anular venta (HU-VTA-11) --
 
-    def ejecutar_anulacion(self, venta_id: int, motivo: str, detalle: str = "") -> bool:
+    def ejecutar_anulacion(
+        self,
+        venta_id: int,
+        motivo: str,
+        detalle: str = "",
+        destino: DestinoDevolucion | None = None,
+    ) -> bool:
         """Anula la venta con el caso de uso; los errores salen como aviso, sin romper nada."""
         if self._anular_venta is None:
             return False
         quien = self._sesion.nombre or f"usuario {self._sesion.usuario_id}"
         try:
-            self._anular_venta.ejecutar(venta_id, motivo, detalle, quien)
+            self._anular_venta.ejecutar(venta_id, motivo, detalle, quien, destino)
         except ErrorDominio as exc:
             messagebox.showerror("No se pudo anular la venta", str(exc))
             return False
@@ -1118,6 +1130,45 @@ class VentanaVentas(ttk.Frame):
         entrada = ttk.Entry(dialogo, textvariable=detalle_var, width=36, state="disabled")
         entrada.grid(row=3, column=1, padx=12, pady=6, sticky="w")
 
+        # CL-06: que se hace con el dinero del cliente (solo si la venta se pago con dinero).
+        marco_dinero = ttk.LabelFrame(dialogo, text="¿Qué se hace con el dinero del cliente?")
+        marco_dinero.grid(row=4, column=0, columnspan=2, padx=12, pady=6, sticky="ew")
+        destino_var = StringVar(value="")
+        radios = {}
+        for destino, texto in (
+            (DestinoDevolucion.EFECTIVO, "Devolución en efectivo (sale de la caja del día)"),
+            (
+                DestinoDevolucion.SALDO_A_FAVOR,
+                "Saldo a favor del cliente (solo si la venta tiene cliente)",
+            ),
+            (DestinoDevolucion.CAMBIO, "Cambio por otro producto (se abre una venta nueva)"),
+        ):
+            radios[destino] = ttk.Radiobutton(
+                marco_dinero, text=texto, value=destino.value, variable=destino_var
+            )
+            radios[destino].pack(anchor="w", padx=8, pady=1)
+        aviso_dinero = ttk.Label(marco_dinero, text="", foreground="#666")
+        aviso_dinero.pack(anchor="w", padx=8, pady=(2, 4))
+
+        def al_elegir_venta(_evento: object = None) -> None:
+            seleccion = tabla.selection()
+            venta_elegida = self._repo_ventas.obtener(int(seleccion[0])) if seleccion else None
+            opciones = (
+                self._anular_venta.opciones_de_devolucion(venta_elegida) if venta_elegida else []
+            )
+            for destino_i, radio in radios.items():
+                radio.config(state="normal" if destino_i in opciones else "disabled")
+            destino_var.set(opciones[0].value if opciones else "")
+            aviso_dinero.config(
+                text=""
+                if opciones
+                else "No hay dinero que devolver por caja (pago a crédito, "
+                "tarjeta o transferencia)."
+            )
+
+        tabla.bind("<<TreeviewSelect>>", al_elegir_venta)
+        al_elegir_venta()
+
         def al_cambiar_motivo(_evento: object = None) -> None:
             otro = motivo_var.get() == MOTIVO_OTRO
             entrada.config(state="normal" if otro else "disabled")
@@ -1145,15 +1196,26 @@ class VentanaVentas(ttk.Frame):
                 parent=dialogo,
             ):
                 return
-            if self.ejecutar_anulacion(venta_id, motivo_var.get(), detalle_var.get()):
+            elegido = DestinoDevolucion(destino_var.get()) if destino_var.get() else None
+            if self.ejecutar_anulacion(venta_id, motivo_var.get(), detalle_var.get(), elegido):
                 dialogo.destroy()
                 messagebox.showinfo("Venta anulada", f"La venta N° {venta_id} quedó anulada.")
+                if elegido is DestinoDevolucion.CAMBIO:
+                    self._abrir_venta_de_cambio(venta_id)
 
         botones = ttk.Frame(dialogo)
-        botones.grid(row=4, column=0, columnspan=2, pady=10)
+        botones.grid(row=5, column=0, columnspan=2, pady=10)
         ttk.Button(botones, text="Anular venta", command=confirmar).pack(side="left", padx=6)
         ttk.Button(botones, text="Cancelar", command=dialogo.destroy).pack(side="left", padx=6)
         dialogo.bind("<Escape>", lambda _e: dialogo.destroy())
+
+    def _abrir_venta_de_cambio(self, venta_id: int) -> None:
+        """CL-06: tras anular por «cambio», se abre una venta nueva para el reemplazo."""
+        self._nueva_venta(forzar=True)
+        if self._venta is not None:
+            self._venta.nota = f"Cambio de la venta N° {venta_id}"
+        self._refrescar_ticket()
+        self._entrada_codigo.focus_set()
 
     def _movimiento_ui(self) -> None:
         # E-03: un solo dialogo con tipo, motivo de una lista, observacion y monto,

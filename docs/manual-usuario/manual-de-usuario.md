@@ -102,8 +102,17 @@ Antes de la primera venta del día hay que abrir la jornada:
 ### 3.7 Anular una venta (solo administradora)
 
 1. F1 → **Caja y corte** → **Anular venta**.
-2. Elegir la venta, escribir el **motivo** y confirmar.
-3. La venta no se borra: queda marcada como anulada, el stock vuelve, y si era a crédito se descuenta de
+2. Elegir la venta y escribir el **motivo**.
+3. Si la venta se pagó con dinero, elegir **qué se hace con el dinero del cliente**:
+   - **Devolución en efectivo:** el dinero sale de la caja del día y queda anotado como retiro
+     «Devolución» con el número de la venta. El corte lo descuenta una sola vez.
+   - **Saldo a favor del cliente** (solo si la venta tiene cliente): el dinero se queda en la caja y en
+     la cuenta del cliente aparece «A favor $X», que se descuenta de su próxima compra.
+   - **Cambio por otro producto:** se anula, el efectivo sale igual que en la devolución y se abre una
+     venta nueva, ya anotada como «Cambio de la venta N° …», para cobrar el producto de reemplazo.
+   Si la venta fue a crédito, tarjeta o transferencia y no hay dinero en la caja que devolver, el sistema
+   no ofrece opciones: la anulación revierte el crédito, o la tarjeta se reversa en el terminal.
+4. La venta no se borra: queda marcada como anulada, el stock vuelve, y si era a crédito se descuenta de
    la cuenta del cliente. El corte la muestra aparte. Solo se pueden anular ventas de la jornada abierta.
 
 ## 4. Catálogo de productos (F2)

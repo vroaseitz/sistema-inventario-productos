@@ -84,3 +84,33 @@ def test_un_error_inesperado_nunca_rompe_el_cierre():
             raise RuntimeError("base bloqueada")
 
     assert SincronizarAlCierre(ColaRota(), PublicadorQueAcepta()).ejecutar() is None
+
+
+def test_al_cierre_se_envia_solo_lo_que_alcanza_en_el_tiempo_dado(cola):
+    """Tras una migracion hay miles de pendientes: el cierre no se queda esperando minutos."""
+    tiempo = [0.0]
+
+    class Lento(PublicadorQueAcepta):
+        def publicar(self, operacion: dict) -> None:
+            tiempo[0] += 1.0  # cada envio «tarda» 1 segundo
+            super().publicar(operacion)
+
+    publicador = Lento()
+    mensaje = SincronizarAlCierre(
+        cola, publicador, limite_segundos=2.0, reloj=lambda: tiempo[0]
+    ).ejecutar()
+    assert len(publicador.publicadas) == 2  # alcanzo para 2 de las 3
+    assert mensaje is not None and "Quedan 1 operaciones sin enviar" in mensaje
+    assert len(cola.pendientes()) == 1  # lo que falta sigue pendiente, sin perderse
+
+
+def test_la_tanda_cierra_la_conexion_del_publicador_al_terminar(cola):
+    class ConConexion(PublicadorQueAcepta):
+        cerrada = 0
+
+        def cerrar(self) -> None:
+            self.cerrada += 1
+
+    publicador = ConConexion()
+    SincronizarAlCierre(cola, publicador).ejecutar()
+    assert publicador.cerrada == 1

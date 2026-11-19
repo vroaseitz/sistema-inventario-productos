@@ -23,6 +23,7 @@ from pos.dominio.inventario import Existencia  # noqa: E402
 from pos.dominio.pagos import MedioPago, Pago  # noqa: E402
 from pos.dominio.productos import Producto  # noqa: E402
 from pos.dominio.value_objects import Dinero  # noqa: E402
+from pos.dominio.ventas import DestinoDevolucion  # noqa: E402
 from pos.interfaz import ventana_principal  # noqa: E402
 
 mensajes: list[tuple[str, str]] = []
@@ -89,6 +90,21 @@ verificar(
     list(combo.cget("values")) == ["Producto en mal estado", "Otro"],
     f"los motivos son los de la PO {combo.cget('values')}",
 )
+radios = {
+    w.cget("text").split(" (")[0]: w
+    for w in next(c for c in dlg.winfo_children() if isinstance(c, ttk.LabelFrame)).winfo_children()
+    if isinstance(w, ttk.Radiobutton)
+}
+verificar(
+    set(radios)
+    == {"Devolución en efectivo", "Saldo a favor del cliente", "Cambio por otro producto"},
+    f"CL-06: el diálogo ofrece las tres opciones {list(radios)}",
+)
+verificar(
+    str(radios["Saldo a favor del cliente"].cget("state")) == "disabled"
+    and str(radios["Devolución en efectivo"].cget("state")) != "disabled",
+    "CL-06: sin cliente no se ofrece el saldo a favor; el efectivo sí",
+)
 dlg.destroy()
 
 # «Otro» sin explicar no se acepta; la venta queda como estaba
@@ -97,7 +113,24 @@ verificar(f1.ejecutar_anulacion(v2.id, "Otro", "") is False, "«Otro» sin texto
 verificar("escribe cuál" in mensajes[-1][1], f"aviso claro {mensajes[-1]}")
 
 # anular de verdad
-verificar(f1.ejecutar_anulacion(v2.id, "Otro", "Cobro equivocado") is True, "la venta se anula")
+verificar(
+    f1.ejecutar_anulacion(v2.id, "Otro", "Cobro equivocado") is False
+    and "Elige qué se hace con el dinero" in mensajes[-1][1],
+    f"CL-06: una venta pagada no se anula sin decir qué pasa con el dinero {mensajes[-1]}",
+)
+verificar(
+    f1.ejecutar_anulacion(v2.id, "Otro", "Cobro equivocado", DestinoDevolucion.EFECTIVO) is True,
+    "la venta se anula con devolución en efectivo",
+)
+verificar(
+    any(
+        m[1] == "Retiro" and "Devolución" in m[3]
+        for m in (
+            f1._tabla_movimientos.item(i, "values") for i in f1._tabla_movimientos.get_children()
+        )
+    ),
+    "CL-06: la devolución queda como retiro «Devolución» en los movimientos del día",
+)
 verificar(existencias.obtener("ARR").cantidad == Decimal("18"), "la existencia vuelve (15 + 3)")
 filas = {i: f1._tabla_ventas_turno.item(i, "values") for i in f1._tabla_ventas_turno.get_children()}
 anulada = filas[str(v2.id)]

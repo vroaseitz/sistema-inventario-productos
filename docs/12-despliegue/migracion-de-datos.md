@@ -59,3 +59,17 @@ Opciones: `--fecha-saldo AAAA-MM-DD` (por defecto, el último día del mes anter
 
 `tests/unitarias/test_migrar_datos_legados.py` (CSV de ejemplo, sin datos reales): categoría, costo,
 carga inicial, saldo anterior, idempotencia, cola de sincronización, filas inválidas, simulacro.
+
+## Antes de implantar (hallazgos del ensayo con los datos reales, 18-11)
+
+- **Supabase debe aceptar precio 0:** 25 productos traen precio $0 y la nube exige `precio_venta > 0`;
+  la cola se detiene en el primer rechazo. Aplicar `database/migraciones/010_permitir_precio_cero.sql`
+  (y la 009) y verificar con `scripts/verificar_supabase.py` antes de la primera sincronización.
+- **Volumen:** la migración deja unas 3.400 operaciones pendientes. Se envían una por una (una
+  conexión por operación): hacer la primera carga con el botón «Sincronizar» y buena conexión, antes
+  de abrir. El cierre de jornada solo envía durante 45 s y deja el resto para el siguiente.
+- **Datos al día:** el importador omite lo que ya existe, así que NO actualiza stock ni deudas al
+  re-ejecutarlo. Importar siempre en una base vacía, con la extracción hecha en el cierre del último
+  día del sistema antiguo.
+- **Dónde corre:** es un script de Python (no va dentro del .exe). Importar en la VM y copiar la base
+  al local junto con el .exe, o empaquetarlo aparte. Borrar los CSV de clientes al terminar.

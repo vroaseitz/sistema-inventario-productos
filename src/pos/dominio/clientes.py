@@ -24,6 +24,10 @@ MEDIO_DESCUENTO = "descuento"
 # HU-VTA-11: anular una venta a credito revierte su consumo con un abono sin plata (medio
 # «anulacion»): baja la deuda, no entra a la caja y no cuenta como un pago del cliente.
 MEDIO_ANULACION = "anulacion"
+# CL-06: al anular una venta pagada con dinero y elegir «saldo a favor», el monto queda en la
+# cuenta del cliente como un abono sin plata: deja el saldo en negativo («A favor $X») y se
+# descuenta de su proxima compra a credito. No es un pago del cliente ni revierte un consumo.
+MEDIO_SALDO_A_FAVOR = "saldo_a_favor"
 
 
 def detalle_descuento(anio: int, mes: int) -> str:
@@ -173,6 +177,6 @@ def abonos_del_ciclo(movimientos: list[MovimientoCliente], anio: int, mes: int) 
         m.monto
         for m in movimientos
         if m.tipo is TipoMovimientoCliente.ABONO
-        and m.medio not in (MEDIO_DESCUENTO, MEDIO_ANULACION)
+        and m.medio not in (MEDIO_DESCUENTO, MEDIO_ANULACION, MEDIO_SALDO_A_FAVOR)
         and en_ciclo(m, anio, mes)
     )

@@ -14,6 +14,7 @@ Notas de conexion (ver docs/08-diseno/adr/0001):
 
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 from pos.infraestructura.supabase.traductor import traducir_operacion
@@ -32,6 +33,9 @@ class AdaptadorSupabase:
         self._db_url = db_url
         # "require" fuerza TLS hacia Supabase; solo las pruebas locales usan "disable".
         self._sslmode = sslmode
+        # Una sola conexion para toda la tanda: abrir una por operacion (TCP + TLS + login) era lo
+        # que hacia lenta la primera sincronizacion tras una migracion (miles de operaciones).
+        self._conexion: Any = None
 
     def _conectar(self) -> Any:
         try:
@@ -44,72 +48,109 @@ class AdaptadorSupabase:
         extra = {} if "sslmode=" in self._db_url else {"sslmode": self._sslmode}
         return psycopg2.connect(self._db_url, connect_timeout=5, **extra)
 
+    def cerrar(self) -> None:
+        """Cierra la conexion reutilizada al terminar la tanda; la proxima abre otra."""
+        conexion, self._conexion = self._conexion, None
+        if conexion is not None:
+            with contextlib.suppress(Exception):  # una conexion rota no debe romper el cierre
+                conexion.close()
+
+    def _conexion_viva(self) -> tuple[Any, bool]:
+        """(conexion, era_reutilizada). Abre una nueva si no hay o si el servidor la cerro."""
+        actual = self._conexion
+        if actual is not None and not actual.closed:
+            return actual, True
+        self._conexion = self._conectar()
+        return self._conexion, False
+
     def publicar(self, operacion: dict) -> None:
         # El mapeo entidad -> sentencias (testeado en test_traductor_supabase) se resuelve
         # antes de abrir la conexion, para fallar rapido ante una entidad no soportada.
         sentencias = traducir_operacion(operacion)
-        conexion = self._conectar()
+        import psycopg2  # noqa: PLC0415 (import perezoso intencional)
+
+        conexion, reutilizada = self._conexion_viva()
         try:
-            # `with conexion` = una transaccion: todas las sentencias o ninguna.
-            with conexion, conexion.cursor() as cur:
-                for sql, params in sentencias:
-                    cur.execute(sql, params)
-                verificar_efecto(cur, operacion)
-        finally:
-            conexion.close()
+            self._aplicar(conexion, sentencias, operacion)
+        except (psycopg2.OperationalError, psycopg2.InterfaceError):
+            # La conexion pudo cortarse mientras estaba inactiva (el servidor la cierra): se
+            # descarta y, si era una reutilizada, se reintenta UNA vez con una nueva.
+            self.cerrar()
+            if not reutilizada:
+                raise
+            conexion, _ = self._conexion_viva()
+            try:
+                self._aplicar(conexion, sentencias, operacion)
+            except Exception:
+                self.cerrar()
+                raise
+        except Exception:
+            self.cerrar()  # tras un rechazo del servidor la siguiente operacion parte limpia
+            raise
+
+    @staticmethod
+    def _aplicar(conexion: Any, sentencias: list, operacion: dict) -> None:
+        # `with conexion` = una transaccion: todas las sentencias o ninguna (y no cierra).
+        with conexion, conexion.cursor() as cur:
+            verificacion = consulta_de_verificacion(operacion)
+            todas = [*sentencias, *([verificacion[:2]] if verificacion else [])]
+            # Las sentencias de la operacion y su verificacion viajan JUNTAS: una sola ida y
+            # vuelta al servidor en vez de una por sentencia (con la nube, ~100 ms cada una).
+            textos = (cur.mogrify(sql, params).decode() for sql, params in todas)
+            cur.execute(";\n".join(textos))
+            if verificacion:
+                comprobar(operacion, cur.fetchone()[0], verificacion[2])
 
 
-def verificar_efecto(cur: Any, operacion: dict) -> None:
-    """Falla si la operacion no dejo su efecto en la base remota.
+def consulta_de_verificacion(operacion: dict) -> tuple[str, tuple, int] | None:
+    """Consulta que comprueba que la operacion dejo su efecto en la base remota, o None.
 
     `ON CONFLICT DO NOTHING` y los `INSERT ... SELECT` terminan sin error aunque no
     inserten nada (p. ej. un turno o un producto que todavia no llego). Si eso pasara,
-    la cola la marcaria como sincronizada y el dato se perderia en silencio: aqui se
-    convierte en un error para que quede pendiente y se reintente en orden.
+    la cola la marcaria como sincronizada y el dato se perderia en silencio: la comprobacion
+    lo convierte en un error para que quede pendiente y se reintente en orden.
+    Devuelve (sql, parametros, filas_esperadas).
     """
     entidad, d = operacion["entidad"], operacion["datos"]
 
     if entidad == "producto":
-        cur.execute("SELECT count(*) FROM pos.producto WHERE codigo = %s", (d["codigo"],))
-        esperado = 1
-    elif entidad == "existencia":
-        cur.execute(
+        return ("SELECT count(*) FROM pos.producto WHERE codigo = %s", (d["codigo"],), 1)
+    if entidad == "existencia":
+        return (
             "SELECT count(*) FROM pos.existencia e JOIN pos.producto p ON p.id = e.producto_id "
             "WHERE p.codigo = %s",
             (d["codigo_producto"],),
+            1,
         )
-        esperado = 1
-    elif entidad == "lote":
-        cur.execute("SELECT count(*) FROM pos.lote WHERE id_cliente = %s", (d["uuid"],))
-        esperado = 1
-    elif entidad == "turno_abrir":
-        cur.execute("SELECT count(*) FROM pos.turno_caja WHERE id_cliente = %s", (d["uuid"],))
-        esperado = 1
-    elif entidad == "turno_cerrar":
-        cur.execute(
+    if entidad == "lote":
+        return ("SELECT count(*) FROM pos.lote WHERE id_cliente = %s", (d["uuid"],), 1)
+    if entidad == "turno_abrir":
+        return ("SELECT count(*) FROM pos.turno_caja WHERE id_cliente = %s", (d["uuid"],), 1)
+    if entidad == "turno_cerrar":
+        return (
             "SELECT count(*) FROM pos.turno_caja WHERE id_cliente = %s AND cerrado_en IS NOT NULL",
             (d["uuid"],),
+            1,
         )
-        esperado = 1
-    elif entidad == "movimiento_caja":
-        cur.execute(
+    if entidad == "movimiento_caja":
+        return (
             "SELECT count(*) FROM pos.movimiento_caja WHERE id_cliente = %s",
             (operacion["id_cliente"],),
+            1,
         )
-        esperado = 1
-    elif entidad == "venta":
-        cur.execute(
+    if entidad == "venta":
+        return (
             "SELECT count(*) FROM pos.venta_detalle d JOIN pos.venta v ON v.id = d.venta_id "
             "WHERE v.id_cliente = %s",
             (d["uuid"],),
+            len(d["detalles"]),
         )
-        esperado = len(d["detalles"])
-    else:
-        return
+    return None
 
-    (encontrado,) = cur.fetchone()
+
+def comprobar(operacion: dict, encontrado: int, esperado: int) -> None:
     if encontrado != esperado:
         raise RuntimeError(
-            f"La operacion {entidad} no quedo completa en el destino "
+            f"La operacion {operacion['entidad']} no quedo completa en el destino "
             f"(esperado {esperado}, encontrado {encontrado}); queda pendiente"
         )

@@ -8,6 +8,8 @@ sincronizacion reanudable y segura frente a cortes de energia o de red.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from pos.aplicacion.puertos import ColaSincronizacion, PublicadorRemoto
@@ -17,16 +19,31 @@ from pos.aplicacion.puertos import ColaSincronizacion, PublicadorRemoto
 class ResultadoSincronizacion:
     sincronizadas: int
     fallo_en: str | None = None
+    incompleto: bool = False  # se acabo el tiempo dado; lo que falta sigue pendiente
 
 
 @dataclass
 class SincronizarPendientes:
     cola: ColaSincronizacion
     publicador: PublicadorRemoto
+    reloj: Callable[[], float] = time.monotonic
 
-    def ejecutar(self) -> ResultadoSincronizacion:
+    def ejecutar(self, limite_segundos: float | None = None) -> ResultadoSincronizacion:
+        """Publica lo pendiente en orden. Con `limite_segundos` se detiene al pasarse (el resto
+        queda pendiente, sin perderse), para no dejar la pantalla esperando minutos."""
+        try:
+            return self._publicar_todo(limite_segundos)
+        finally:
+            cerrar = getattr(self.publicador, "cerrar", None)
+            if callable(cerrar):
+                cerrar()  # suelta la conexion reutilizada al terminar la tanda
+
+    def _publicar_todo(self, limite_segundos: float | None) -> ResultadoSincronizacion:
+        inicio = self.reloj()
         sincronizadas = 0
         for operacion in self.cola.pendientes():
+            if limite_segundos is not None and self.reloj() - inicio >= limite_segundos:
+                return ResultadoSincronizacion(sincronizadas=sincronizadas, incompleto=True)
             try:
                 self.publicador.publicar(operacion)
             except Exception:
@@ -59,13 +76,19 @@ class SincronizarAlCierre:
 
     cola: ColaSincronizacion | None
     publicador: PublicadorRemoto | None
+    # Tras una migracion hay miles de operaciones pendientes: al cierre se envia lo que alcance en
+    # este tiempo y el resto sale en el cierre siguiente o con el boton «Sincronizar».
+    limite_segundos: float = 45.0
+    reloj: Callable[[], float] = time.monotonic
 
     def ejecutar(self) -> str | None:
         """Texto para la usuaria, o None si no hay nada que informar (sin Supabase)."""
         if self.cola is None or self.publicador is None:
             return None
         try:
-            SincronizarPendientes(self.cola, self.publicador).ejecutar()
+            SincronizarPendientes(self.cola, self.publicador, self.reloj).ejecutar(
+                self.limite_segundos
+            )
             quedan = len(self.cola.pendientes())
         except Exception:  # la sincronizacion jamas debe romper el cierre
             return None

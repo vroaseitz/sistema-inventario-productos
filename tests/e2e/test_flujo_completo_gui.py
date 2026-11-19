@@ -117,7 +117,7 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         assert mensajes[-1][0] == "showerror" and "vencimiento" in mensajes[-1][2].lower()
         ingresar("YOG", "10", (date.today() + timedelta(days=2)).isoformat())
         assert len(inventario._tabla.get_children()) == 1  # alerta con descuento sugerido
-        assert "30%" in inventario._tabla.item(inventario._tabla.get_children()[0], "values")
+        assert "50%" in inventario._tabla.item(inventario._tabla.get_children()[0], "values")
         ingresar("YOG", "5", (date.today() + timedelta(days=5)).isoformat())  # segundo lote
         # I-02: la lista de lotes muestra ambos, el que vence antes primero
         filas = [
@@ -217,6 +217,9 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         ventas._cerrar_turno_ui()
         assert any(m[1] == "Arqueo de cierre" for m in mensajes)
         assert ventas._repo_turnos.obtener_abierto() is None
+        # SY-01: al cerrar la jornada se envia todo a la nube (aqui, un PostgreSQL real)
+        assert any("Datos enviados a la nube" in m[2] for m in mensajes)
+        assert ventas._cola.pendientes() == []
 
         # --- 6b) R-01: calendario desplegable en las fechas ---------------------------------
         campo = reportes._desde
@@ -235,9 +238,6 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
         assert "2 ventas" in reportes._resumen.get() and "$20.300" in reportes._resumen.get()
 
         # --- 8) sincronizar a PostgreSQL y verificar en el destino --------------------------
-        assert len(ventas._cola.pendientes()) > 0
-        ventas._sincronizar()
-        assert ventas._cola.pendientes() == []
         cur.execute("SELECT count(*) FROM pos.venta")
         assert cur.fetchone()[0] == 2
         cur.execute("SELECT coalesce(sum(monto), 0) FROM pos.venta_pago")

@@ -21,6 +21,7 @@ from pos.aplicacion.puertos import RepositorioClientes
 from pos.dominio.clientes import (
     MEDIO_ANULACION,
     MEDIO_DESCUENTO,
+    MEDIO_SALDO_A_FAVOR,
     PORCENTAJE_DESCUENTO_CREDITO,
     Cliente,
     TipoMovimientoCliente,
@@ -496,7 +497,11 @@ class VentanaClientes(ttk.Frame):
                     else (
                         "Descuento"
                         if m.medio == MEDIO_DESCUENTO
-                        else ("Anulación" if m.medio == MEDIO_ANULACION else "Abono")
+                        else (
+                            "Anulación"
+                            if m.medio == MEDIO_ANULACION
+                            else ("Saldo a favor" if m.medio == MEDIO_SALDO_A_FAVOR else "Abono")
+                        )
                     ),
                     m.detalle,
                     formatear_clp(m.monto) if es_consumo else "",

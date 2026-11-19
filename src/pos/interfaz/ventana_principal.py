@@ -518,6 +518,7 @@ def construir_aplicacion(con_login: bool = False) -> VentanaPrincipal:
                     repositorio_clientes=repo_clientes,
                     movimientos=movimientos,
                     auditor=auditor,
+                    registrar_movimiento_caja=RegistrarMovimientoCaja(repo_turnos, cola=cola),
                 ),
                 repo_tickets=RepositorioTicketsEsperaSQLite(conexion),
                 auditoria=repo_auditoria,
