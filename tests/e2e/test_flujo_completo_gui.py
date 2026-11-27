@@ -12,7 +12,7 @@ Requiere POS_TEST_PG_URL (ver test_sync_postgres.py); crea y borra el schema `po
 
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -125,7 +125,10 @@ def test_flujo_completo_de_la_aplicacion(tmp_path, monkeypatch):
             for f in inventario._tabla_lotes.get_children()
         ]
         assert [(f[1], str(f[3])) for f in filas] == [("Yogurt", "10"), ("Yogurt", "5")]
-        assert filas[0][2] < filas[1][2]
+        # Las fechas se muestran como dd-mm-aaaa: se comparan como fechas, no como texto (el texto
+        # falla cuando los dos vencimientos caen en meses distintos, p. ej. 28-11 y 01-12).
+        vence_1, vence_2 = (datetime.strptime(f[2], "%d-%m-%Y") for f in filas)
+        assert vence_1 < vence_2
 
         # --- 4) F1: abrir turno y vender (efectivo parcial + tarjeta) ----------------------
         ventas._abrir_turno_ui()
